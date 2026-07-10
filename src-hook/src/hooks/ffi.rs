@@ -3,16 +3,27 @@ use std::ffi::CString;
 #[derive(Debug)]
 #[repr(C)]
 pub struct DamageInstance {
-    padding_00: [u8; 0xD0],   // 0x00 - 0xD0
-    pub damage: i32,          // 0xD0
-    pub attack_rate: f32,     // 0xD4
-    pub flags: u64,           // 0xD8
-    padding_e0: [u8; 0x08],   // 0xE0
-    pub stun_value: f32,      // 0xE8
-    padding_ec: [u8; 0x68],   // 0xEC - 0x154
-    pub action_id: u32,       // 0x154
-    padding_158: [u8; 0x10C], // 0x158 - 0x264
-    pub damage_cap: i32,      // 0x264
+    padding_00: [u8; 0xD4],   // 0x000 - 0x0D4
+    pub damage: i32,          // 0x0D4
+    padding_d8: [u8; 0x10],   // 0x0D8 - 0x0E8
+    pub flags: u64,           // 0x0E8
+    padding_f0: [u8; 0x5C],   // 0x0F0 - 0x14C
+    pub action_id: u32,       // 0x14C
+    padding_150: [u8; 0x16C], // 0x150 - 0x2BC
+    pub damage_cap: i32,      // 0x2BC
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DamageInstance;
+
+    #[test]
+    fn damage_instance_matches_game_2_layout() {
+        assert_eq!(std::mem::offset_of!(DamageInstance, damage), 0xD4);
+        assert_eq!(std::mem::offset_of!(DamageInstance, flags), 0xE8);
+        assert_eq!(std::mem::offset_of!(DamageInstance, action_id), 0x14C);
+        assert_eq!(std::mem::offset_of!(DamageInstance, damage_cap), 0x2BC);
+    }
 }
 
 #[derive(Debug)]

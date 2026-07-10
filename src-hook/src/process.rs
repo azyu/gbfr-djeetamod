@@ -110,6 +110,27 @@ impl Process {
         ))
     }
 
+    /// Searches and returns the address where the signature itself begins.
+    ///
+    /// `search_address` resolves a captured call target, while this is intended for
+    /// signatures that identify a function prologue directly.
+    pub fn search_match_address(&self, signature_pattern: &str) -> anyhow::Result<usize> {
+        let view = unsafe { PeView::module(self.module_handle.0 as *const u8) };
+        let scanner = view.scanner();
+        let pattern = pattern::parse(signature_pattern)?;
+        let mut addrs = [0; 8];
+        let mut matches = scanner.matches_code(&pattern);
+
+        if matches.next(&mut addrs) {
+            Ok(self.base_address + addrs[0] as usize)
+        } else {
+            Err(anyhow!(
+                "Could not find match for pattern: {}",
+                signature_pattern
+            ))
+        }
+    }
+
     /// Searches and returns the value of the type `T` that matches the given signature pattern.
     pub fn search_slice<T>(&self, signature_pattern: &str) -> anyhow::Result<T> {
         let view = unsafe { PeView::module(self.module_handle.0 as *const u8) };

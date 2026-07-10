@@ -220,4 +220,7 @@ pub enum Message {
     OnContinueSBAChain(OnContinueSBAChainEvent),
     PlayerLoadEvent(PlayerLoadEvent),
     OnDeathEvent(OnDeathEvent),
+    /// The game has entered its quest result UI. This intentionally carries no
+    /// quest-memory metadata so it remains safe across game layout updates.
+    OnBattleEnd,
 }

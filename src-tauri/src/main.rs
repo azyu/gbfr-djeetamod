@@ -458,48 +458,66 @@ fn connect_and_run_parser(app: AppHandle) {
 
                     let decoder = tokio_util::codec::LengthDelimitedCodec::new();
                     let mut reader = FramedRead::new(stream, decoder);
+                    let mut inactivity_check =
+                        tokio::time::interval(std::time::Duration::from_secs(1));
+                    inactivity_check
+                        .set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-                    while let Some(Ok(msg)) = reader.next().await {
-                        // Handle EOF when the game closes.
-                        if msg.is_empty() {
-                            break;
-                        }
+                    loop {
+                        tokio::select! {
+                            message = reader.next() => {
+                                let Some(Ok(msg)) = message else {
+                                    break;
+                                };
 
-                        let debug_mode = app.state::<DebugMode>().0.load(Ordering::Relaxed);
+                                // Handle EOF when the game closes.
+                                if msg.is_empty() {
+                                    break;
+                                }
 
-                        if let Ok(msg) = protocol::bincode::deserialize::<protocol::Message>(&msg) {
-                            if debug_mode {
-                                let _ = logs_window.emit("debug-event", &msg);
+                                let debug_mode = app.state::<DebugMode>().0.load(Ordering::Relaxed);
+
+                                if let Ok(msg) = protocol::bincode::deserialize::<protocol::Message>(&msg) {
+                                    if debug_mode {
+                                        let _ = logs_window.emit("debug-event", &msg);
+                                    }
+
+                                    match msg {
+                                        protocol::Message::DamageEvent(event) => {
+                                            state.on_damage_event(event);
+                                        }
+                                        protocol::Message::OnAreaEnter(event) => {
+                                            state.on_area_enter_event(event);
+                                        }
+                                        protocol::Message::PlayerLoadEvent(event) => {
+                                            state.on_player_load_event(event);
+                                        }
+                                        protocol::Message::OnQuestComplete(event) => {
+                                            state.on_quest_complete_event(event);
+                                        }
+                                        protocol::Message::OnUpdateSBA(event) => {
+                                            state.on_sba_update(event);
+                                        }
+                                        protocol::Message::OnAttemptSBA(event) => {
+                                            state.on_sba_attempt(event);
+                                        }
+                                        protocol::Message::OnPerformSBA(event) => {
+                                            state.on_sba_perform(event);
+                                        }
+                                        protocol::Message::OnContinueSBAChain(event) => {
+                                            state.on_continue_sba_chain(event);
+                                        }
+                                        protocol::Message::OnDeathEvent(event) => {
+                                            state.on_death_event(event);
+                                        }
+                                        protocol::Message::OnBattleEnd => {
+                                            state.on_battle_end_event();
+                                        }
+                                    }
+                                }
                             }
-
-                            match msg {
-                                protocol::Message::DamageEvent(event) => {
-                                    state.on_damage_event(event);
-                                }
-                                protocol::Message::OnAreaEnter(event) => {
-                                    state.on_area_enter_event(event);
-                                }
-                                protocol::Message::PlayerLoadEvent(event) => {
-                                    state.on_player_load_event(event);
-                                }
-                                protocol::Message::OnQuestComplete(event) => {
-                                    state.on_quest_complete_event(event);
-                                }
-                                protocol::Message::OnUpdateSBA(event) => {
-                                    state.on_sba_update(event);
-                                }
-                                protocol::Message::OnAttemptSBA(event) => {
-                                    state.on_sba_attempt(event);
-                                }
-                                protocol::Message::OnPerformSBA(event) => {
-                                    state.on_sba_perform(event);
-                                }
-                                protocol::Message::OnContinueSBAChain(event) => {
-                                    state.on_continue_sba_chain(event);
-                                }
-                                protocol::Message::OnDeathEvent(event) => {
-                                    state.on_death_event(event);
-                                }
+                            _ = inactivity_check.tick() => {
+                                state.auto_save_if_inactive(chrono::Utc::now().timestamp_millis());
                             }
                         }
                     }
