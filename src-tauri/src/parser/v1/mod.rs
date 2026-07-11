@@ -4,7 +4,7 @@ use anyhow::Result;
 use chrono::Utc;
 use protocol::{
     AreaEnterEvent, DamageEvent, Message, OnAttemptSBAEvent, OnContinueSBAChainEvent, OnDeathEvent,
-    OnPerformSBAEvent, OnUpdateSBAEvent, PlayerLoadEvent, QuestCompleteEvent,
+    OnPerformSBAEvent, OnUpdateSBAEvent, PlayerIdentityEvent, PlayerLoadEvent, QuestCompleteEvent,
 };
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -779,8 +779,46 @@ impl Parser {
             player_stats: Some(event.player_stats.into()),
         };
 
+        self.insert_player_data(player_data, event.party_index);
+    }
+
+    pub fn on_player_identity_event(&mut self, event: PlayerIdentityEvent) {
+        let character_type = CharacterType::from_hash(event.character_type);
+
+        if character_type == CharacterType::Pl2000 {
+            return;
+        }
+
+        let mut player_data = self
+            .encounter
+            .player_data
+            .iter()
+            .flatten()
+            .find(|player| player.actor_index == event.actor_index)
+            .cloned()
+            .unwrap_or(PlayerData {
+                actor_index: event.actor_index,
+                display_name: String::new(),
+                character_name: String::new(),
+                character_type,
+                sigils: Vec::new(),
+                is_online: event.is_online,
+                weapon_info: None,
+                overmastery_info: None,
+                player_stats: None,
+            });
+
+        player_data.display_name = event.display_name.to_string_lossy().to_string();
+        player_data.character_name = event.character_name.to_string_lossy().to_string();
+        player_data.character_type = character_type;
+        player_data.is_online = event.is_online;
+
+        self.insert_player_data(player_data, event.party_index);
+    }
+
+    fn insert_player_data(&mut self, player_data: PlayerData, party_index: u8) {
         // Insert into encounter player data array, using actor_index.
-        if !player_data.is_online && event.party_index == 0 {
+        if !player_data.is_online && party_index == 0 {
             self.encounter.player_data[0] = Some(player_data.clone());
         } else {
             for i in 1..=3 {
@@ -1011,6 +1049,8 @@ impl From<v0::Parser> for Parser {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::CString;
+
     use protocol::{ActionType, Actor};
 
     use super::*;
@@ -1112,6 +1152,36 @@ mod tests {
         }
 
         assert_eq!(parser.derived_state.party.len(), 2);
+    }
+
+    #[test]
+    fn same_character_players_keep_distinct_online_names() {
+        let mut parser = Parser::default();
+
+        for (actor_index, party_index, display_name) in [(10, 1, "Player A"), (11, 2, "Player B")] {
+            parser.on_player_identity_event(PlayerIdentityEvent {
+                character_name: CString::new(display_name).unwrap(),
+                display_name: CString::new(display_name).unwrap(),
+                character_type: 0x48ADDA36,
+                party_index,
+                actor_index,
+                is_online: true,
+            });
+        }
+
+        let players = parser
+            .encounter
+            .player_data
+            .iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+        assert_eq!(players.len(), 2);
+        assert_eq!(players[0].display_name, "Player A");
+        assert_eq!(players[1].display_name, "Player B");
+        assert_ne!(players[0].actor_index, players[1].actor_index);
+        assert_eq!(players[0].character_type, CharacterType::Pl2800);
+        assert_eq!(players[1].character_type, CharacterType::Pl2800);
     }
 
     #[test]

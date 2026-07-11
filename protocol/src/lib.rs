@@ -166,6 +166,19 @@ pub struct PlayerLoadEvent {
     pub player_stats: PlayerStats,
 }
 
+/// Minimal player metadata used when game updates move the equipment layouts.
+/// Keeping identity separate lets the meter display online names without
+/// manufacturing empty sigil, weapon, or stat data.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PlayerIdentityEvent {
+    pub character_name: CString,
+    pub display_name: CString,
+    pub character_type: u32,
+    pub party_index: u8,
+    pub actor_index: u32,
+    pub is_online: bool,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AreaEnterEvent {
     /// Quest ID, last known. Could be stale if no other quest was ran while changing areas. 0 if no quest.
@@ -223,4 +236,6 @@ pub enum Message {
     /// The game has entered its quest result UI. This intentionally carries no
     /// quest-memory metadata so it remains safe across game layout updates.
     OnBattleEnd,
+    /// Player name and actor mapping without version-sensitive equipment data.
+    PlayerIdentityEvent(PlayerIdentityEvent),
 }

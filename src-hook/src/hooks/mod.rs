@@ -8,7 +8,7 @@ use log::{info, warn};
 
 use crate::{event, process::Process};
 
-use self::{damage::OnProcessDamageHook, quest::OnBattleEndHook};
+use self::{damage::OnProcessDamageHook, player::OnLoadPlayerIdentityHook, quest::OnBattleEndHook};
 
 mod area;
 mod damage;
@@ -38,6 +38,11 @@ pub fn setup_hooks(tx: event::Tx) -> Result<()> {
     // Core DPS tracking. The main damage signature is still stable in game 2.0.2.
     OnProcessDamageHook::new(tx.clone()).setup(&process)?;
 
+    // Game 2.0.2 still keeps player names in the per-actor identity snapshot, but
+    // the function that refreshes it moved. This hook deliberately reads only the
+    // stable identity fields; equipment remains disabled until its layout is known.
+    OnLoadPlayerIdentityHook::new(tx.clone()).setup(&process)?;
+
     // This action was verified against game 2.0.2. If it moves in a later update,
     // retain core tracking and let the inactivity fallback finish the encounter.
     match OnBattleEndHook::new(tx).setup(&process) {
@@ -48,7 +53,7 @@ pub fn setup_hooks(tx: event::Tx) -> Result<()> {
     // The 2.0 update changed the layouts and signatures used by the auxiliary hooks.
     // Keep them disabled until each one has been independently verified; installing a
     // stale hook is much worse than temporarily omitting encounter metadata.
-    warn!("Running in game 2.0 compatibility mode: auxiliary hooks are disabled");
+    warn!("Running in game 2.0 compatibility mode: equipment and auxiliary hooks are disabled");
 
     Ok(())
 }

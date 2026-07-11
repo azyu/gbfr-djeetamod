@@ -1,186 +1,167 @@
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 
 use anyhow::{anyhow, Result};
-use protocol::Message;
+use protocol::{Message, PlayerIdentityEvent};
 use retour::static_detour;
 
 use crate::{
     event,
-    hooks::{
-        actor_type_id,
-        ffi::{Overmasteries, PlayerStats, SigilList, VBuffer, WeaponInfo},
-        globals::{OVERMASTERY_OFFSET, PLAYER_DATA_OFFSET, SIGIL_OFFSET, WEAPON_OFFSET},
-    },
+    hooks::{actor_idx, actor_type_id},
     process::Process,
 };
 
-type OnLoadPlayerFunc = unsafe extern "system" fn(*const usize) -> usize;
+type RefreshPlayerIdentityFunc = unsafe extern "system" fn(*const usize);
 
 static_detour! {
-    static OnLoadPlayer: unsafe extern "system" fn(*const usize) -> usize;
+    static RefreshPlayerIdentity: unsafe extern "system" fn(*const usize);
 }
 
+/// Offset of the 0x250-byte player identity snapshot in a game 2.0.2 player
+/// specified-instance. The snapshot retains the name fields used by game 1.x.
+const PLAYER_IDENTITY_OFFSET: usize = 0x5E60;
+const IS_ONLINE_OFFSET: usize = 0x1C8;
+const CHARACTER_NAME_OFFSET: usize = 0x1E8;
+const DISPLAY_NAME_OFFSET: usize = 0x208;
+const PARTY_INDEX_OFFSET: usize = 0x22C;
+const VBUFFER_INLINE_CAPACITY: usize = 0x0F;
+const MAX_PLAYER_NAME_BYTES: usize = 0x100;
+
+/// Unique game 2.0.2 prologue for the function that rebuilds the player
+/// identity snapshot. Hooking the refresh gives us names before the first hit.
+const REFRESH_PLAYER_IDENTITY_SIG: &str =
+    "55 41 57 41 56 41 54 56 57 53 48 83 ec 70 48 8d 6c 24 70 48 c7 45 f8 fe ff ff ff 80 b9 bc 5e 00 00 00";
+
 #[derive(Clone)]
-pub struct OnLoadPlayerHook {
+pub struct OnLoadPlayerIdentityHook {
     tx: event::Tx,
 }
 
-impl OnLoadPlayerHook {
+impl OnLoadPlayerIdentityHook {
     pub fn new(tx: event::Tx) -> Self {
-        OnLoadPlayerHook { tx }
+        Self { tx }
     }
 
     pub fn setup(&self, process: &Process) -> Result<()> {
+        let refresh_player_identity = process
+            .search_match_address(REFRESH_PLAYER_IDENTITY_SIG)
+            .map_err(|_| anyhow!("Could not find refresh_player_identity"))?;
         let cloned_self = self.clone();
 
-        if let Ok(on_load_player_original) =
-            process.search_address("49 89 ce e8 $ { ' } 31 ff 85 c0 ? ? ? ? ? ? 49 8b 46 28")
-        {
-            #[cfg(feature = "console")]
-            println!("Found on load player");
-
-            unsafe {
-                let func: OnLoadPlayerFunc = std::mem::transmute(on_load_player_original);
-                OnLoadPlayer.initialize(func, move |a1| cloned_self.run(a1))?;
-                OnLoadPlayer.enable()?;
-            }
-        } else {
-            return Err(anyhow!("Could not find on_load_player"));
+        unsafe {
+            let func: RefreshPlayerIdentityFunc = std::mem::transmute(refresh_player_identity);
+            RefreshPlayerIdentity.initialize(func, move |player| cloned_self.run(player))?;
+            RefreshPlayerIdentity.enable()?;
         }
 
         Ok(())
     }
 
-    fn run(&self, a1: *const usize) -> usize {
-        #[cfg(feature = "console")]
-        println!("on load player: {:p}", a1);
+    fn run(&self, player: *const usize) {
+        unsafe { RefreshPlayerIdentity.call(player) };
 
-        let ret = unsafe { OnLoadPlayer.call(a1) };
-
-        let player_idx = unsafe { a1.byte_add(0x170).read() } as u32;
-
-        let player_offset = PLAYER_DATA_OFFSET.load(std::sync::atomic::Ordering::Relaxed);
-        let weapon_offset = WEAPON_OFFSET.load(std::sync::atomic::Ordering::Relaxed);
-        let overmastery_offset = OVERMASTERY_OFFSET.load(std::sync::atomic::Ordering::Relaxed);
-        let sigil_offset = SIGIL_OFFSET.load(std::sync::atomic::Ordering::Relaxed);
-
-        let raw_player_stats = std::ptr::NonNull::new(
-            unsafe { a1.byte_add(player_offset as usize) } as *mut PlayerStats,
-        );
-
-        let raw_weapon_info = std::ptr::NonNull::new(
-            unsafe { a1.byte_add(weapon_offset as usize) } as *mut WeaponInfo,
-        );
-
-        let raw_overmastery_info =
-            std::ptr::NonNull::new(
-                unsafe { a1.byte_add(overmastery_offset as usize) } as *mut Overmasteries
-            );
-
-        let sigil_list = std::ptr::NonNull::new(
-            unsafe { a1.byte_add(sigil_offset as usize).read() } as *mut SigilList,
-        );
-
-        if let (
-            Some(raw_player_stats),
-            Some(weapon_info),
-            Some(overmastery_info),
-            Some(sigil_list),
-        ) = (
-            raw_player_stats,
-            raw_weapon_info,
-            raw_overmastery_info,
-            sigil_list,
-        ) {
-            let character_type = actor_type_id(a1);
-            let player_stats = unsafe { raw_player_stats.as_ref() };
-            let weapon_info = unsafe { weapon_info.as_ref() };
-            let overmastery_info = unsafe { overmastery_info.as_ref() };
-            let sigil_list = unsafe { sigil_list.as_ref() };
-
-            if (sigil_list.party_index as u8) == 0xFF && sigil_list.is_online == 0 {
-                return ret;
-            }
-
-            let sigils = sigil_list
-                .sigils
-                .iter()
-                .map(|sigil| protocol::Sigil {
-                    first_trait_id: sigil.first_trait_id,
-                    first_trait_level: sigil.first_trait_level,
-                    second_trait_id: sigil.second_trait_id,
-                    second_trait_level: sigil.second_trait_level,
-                    sigil_id: sigil.sigil_id,
-                    equipped_character: sigil.equipped_character,
-                    sigil_level: sigil.sigil_level,
-                    acquisition_count: sigil.acquisition_count,
-                    notification_enum: sigil.notification_enum,
-                })
-                .collect();
-
-            let character_name = CStr::from_bytes_until_nul(&sigil_list.character_name)
-                .ok()
-                .map(|cstr| cstr.to_owned())
-                .unwrap_or(CString::new("").unwrap());
-
-            let display_name =
-                VBuffer(std::ptr::addr_of!(sigil_list.display_name) as *const usize).raw();
-
-            let weapon_info = protocol::WeaponInfo {
-                weapon_id: weapon_info.weapon_id,
-                star_level: weapon_info.star_level,
-                plus_marks: weapon_info.plus_marks,
-                awakening_level: weapon_info.awakening_level,
-                trait_1_id: weapon_info.trait_1_id,
-                trait_1_level: weapon_info.trait_1_level,
-                trait_2_id: weapon_info.trait_2_id,
-                trait_2_level: weapon_info.trait_2_level,
-                trait_3_id: weapon_info.trait_3_id,
-                trait_3_level: weapon_info.trait_3_level,
-                wrightstone_id: weapon_info.wrightstone_id,
-                weapon_level: weapon_info.weapon_level,
-                weapon_hp: weapon_info.weapon_hp,
-                weapon_attack: weapon_info.weapon_attack,
-            };
-
-            let overmastery_info = protocol::OvermasteryInfo {
-                overmasteries: overmastery_info
-                    .stats
-                    .iter()
-                    .map(|overmastery| protocol::Overmastery {
-                        id: overmastery.id,
-                        flags: overmastery.flags,
-                        value: overmastery.value,
-                    })
-                    .collect(),
-            };
-
-            let payload = Message::PlayerLoadEvent(protocol::PlayerLoadEvent {
-                sigils,
-                character_name,
-                display_name,
-                actor_index: player_idx,
-                is_online: sigil_list.is_online != 0,
-                party_index: sigil_list.party_index as u8,
-                player_stats: protocol::PlayerStats {
-                    level: player_stats.level,
-                    total_hp: player_stats.total_health,
-                    total_attack: player_stats.total_attack,
-                    stun_power: player_stats.stun_power,
-                    critical_rate: player_stats.critical_rate,
-                    total_power: player_stats.total_power,
-                },
-                character_type,
-                weapon_info,
-                overmastery_info,
-            });
-
-            #[cfg(feature = "console")]
-            println!("sending player load event: {:?}", payload);
-
-            let _ = self.tx.send(payload);
+        if player.is_null() {
+            return;
         }
 
-        ret
+        let snapshot = unsafe {
+            (player.byte_add(PLAYER_IDENTITY_OFFSET) as *const *const u8).read_unaligned()
+        };
+
+        let Some(event) = (unsafe { player_identity_event(player, snapshot) }) else {
+            return;
+        };
+
+        let _ = self.tx.send(Message::PlayerIdentityEvent(event));
+    }
+}
+
+unsafe fn player_identity_event(
+    player: *const usize,
+    snapshot: *const u8,
+) -> Option<PlayerIdentityEvent> {
+    if snapshot.is_null() {
+        return None;
+    }
+
+    let is_online = snapshot
+        .byte_add(IS_ONLINE_OFFSET)
+        .cast::<u32>()
+        .read_unaligned();
+    let party_index = snapshot
+        .byte_add(PARTY_INDEX_OFFSET)
+        .cast::<u32>()
+        .read_unaligned();
+
+    if is_online > 1 || (party_index > 3 && party_index != u32::MAX) {
+        return None;
+    }
+
+    let display_name = read_vbuffer(snapshot.byte_add(DISPLAY_NAME_OFFSET))?;
+
+    // NPC snapshots have no display name. They already fall back to their
+    // character type in the meter and do not need an identity event.
+    if display_name.as_bytes().is_empty() {
+        return None;
+    }
+
+    let character_name = read_vbuffer(snapshot.byte_add(CHARACTER_NAME_OFFSET))
+        .unwrap_or_else(|| CString::new("").expect("empty CString is valid"));
+
+    Some(PlayerIdentityEvent {
+        character_name,
+        display_name,
+        character_type: actor_type_id(player),
+        party_index: party_index as u8,
+        actor_index: actor_idx(player),
+        is_online: is_online != 0,
+    })
+}
+
+unsafe fn read_vbuffer(buffer: *const u8) -> Option<CString> {
+    let used_size = buffer.byte_add(0x10).cast::<usize>().read_unaligned();
+    let max_size = buffer.byte_add(0x18).cast::<usize>().read_unaligned();
+
+    if used_size > MAX_PLAYER_NAME_BYTES || max_size < used_size || max_size > 0x1000 {
+        return None;
+    }
+
+    let bytes_ptr = if max_size > VBUFFER_INLINE_CAPACITY {
+        buffer.cast::<*const u8>().read_unaligned()
+    } else {
+        buffer
+    };
+
+    if bytes_ptr.is_null() {
+        return None;
+    }
+
+    let bytes = std::slice::from_raw_parts(bytes_ptr, used_size);
+    std::str::from_utf8(bytes).ok()?;
+    CString::new(bytes).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_vbuffer;
+
+    #[test]
+    fn reads_inline_utf8_player_name() {
+        let mut buffer = [0u8; 0x20];
+        let name = "芙劳玩家".as_bytes();
+        buffer[..name.len()].copy_from_slice(name);
+        buffer[0x10..0x18].copy_from_slice(&name.len().to_ne_bytes());
+        buffer[0x18..0x20].copy_from_slice(&0x0Fusize.to_ne_bytes());
+
+        let value = unsafe { read_vbuffer(buffer.as_ptr()) }.expect("valid VBuffer");
+        assert_eq!(value.to_str().unwrap(), "芙劳玩家");
+    }
+
+    #[test]
+    fn rejects_unreasonably_large_player_name() {
+        let mut buffer = [0u8; 0x20];
+        buffer[0x10..0x18].copy_from_slice(&0x101usize.to_ne_bytes());
+        buffer[0x18..0x20].copy_from_slice(&0x101usize.to_ne_bytes());
+
+        assert!(unsafe { read_vbuffer(buffer.as_ptr()) }.is_none());
     }
 }
