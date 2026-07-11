@@ -93,9 +93,9 @@ fn initialize_logger() -> anyhow::Result<()> {
     let mut log_file = PathBuf::new();
 
     log_file.push(application_data_dir);
-    log_file.push("gbfr-logs");
+    log_file.push("gbfr-logs-awa");
     std::fs::create_dir_all(log_file.as_path())?;
-    log_file.push("gbfr-logs.txt");
+    log_file.push("gbfr-logs-awa.txt");
 
     fern::Dispatch::new()
         .format(|out, message, record| {

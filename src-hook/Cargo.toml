@@ -11,8 +11,8 @@ console = []
 
 [package.metadata.winres]
 OriginalFilename = "hook.dll"
-CompanyName = "False Spring"
-LegalCopyright = "Copyright (C) False Spring"
+CompanyName = "onelittlechildawa"
+LegalCopyright = "Copyright (C) 2026 onelittlechildawa; based on GBFR Logs by False Spring"
 
 [dependencies]
 anyhow = "1.0"
