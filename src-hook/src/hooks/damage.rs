@@ -95,6 +95,14 @@ impl OnProcessDamageHook {
         let source_type_id = actor_type_id(source_specified_instance_ptr as *const usize);
         let source_idx = actor_idx(source_specified_instance_ptr as *const usize);
 
+        if let Some(identity) = super::player::identity_event_for_actor(
+            source_specified_instance_ptr as *const usize,
+            source_type_id,
+            source_idx,
+        ) {
+            let _ = self.tx.send(Message::PlayerIdentityEvent(identity));
+        }
+
         // Parent layouts are character-specific and changed in the 2.0 update. Keep the
         // source attributed to the concrete actor until those optional offsets are verified.
         let (source_parent_type_id, source_parent_idx) = (source_type_id, source_idx);
