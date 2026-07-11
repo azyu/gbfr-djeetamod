@@ -1,9 +1,6 @@
 # gbfr-logs
 
-[![GitHub Release](https://img.shields.io/github/v/release/false-spring/gbfr-logs)](https://github.com/false-spring/gbfr-logs/releases)
-[![GitHub Downloads](https://img.shields.io/github/downloads/false-spring/gbfr-logs/total)](https://github.com/false-spring/gbfr-logs/releases)
-[![Discord](https://img.shields.io/discord/1218833963032776774?style=flat&label=discord&color=7289da)](https://discord.gg/GR4r9zrqJj)
-[![GitHub License](https://img.shields.io/github/license/false-spring/gbfr-logs)](./LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/onelittlechildawa/gbfr-logs)](https://github.com/onelittlechildawa/gbfr-logs/releases)
 
 <a href="https://www.buymeacoffee.com/false.spring" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
@@ -11,7 +8,7 @@ Overlay DPS parser/meter for Granblue Fantasy: Relink, based initially on the re
 
 ## How to install
 
-- Go to [Releases](https://github.com/false-spring/gbfr-logs/releases)
+- Go to [Releases](https://github.com/onelittlechildawa/gbfr-logs/releases/)
 - Download the latest .msi installer and run it.
 - Open GBFR Logs after the game is already running.
 
@@ -127,7 +124,7 @@ This project would not have been possible without the following folks:
 
 - [nyaoouo/GBFR-ACT](https://github.com/nyaoouo/GBFR-ACT) for the original reverse engineering work.
 - [Harkain](https://github.com/Harkains) for their work on formatting and translating skills to friendly English names.
-
+- [false-spring/gbfr-logs](https://github.com/false-spring/gbfr-logs)
 ## Disclaimer
 
 Please keep in mind that this tool is meant to improve the experience that Cygames has provided us and is not meant to cause them or anyone other players damage. GBFR Logs modifies your running game client and is not guaranteed to work after game patches, in which case you may experience instability or crashes.
