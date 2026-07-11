@@ -7,9 +7,9 @@ pub struct DamageInstance {
     pub damage: i32,          // 0x0D4
     padding_d8: [u8; 0x10],   // 0x0D8 - 0x0E8
     pub flags: u64,           // 0x0E8
-    padding_f0: [u8; 0x5C],   // 0x0F0 - 0x14C
-    pub action_id: u32,       // 0x14C
-    padding_150: [u8; 0x16C], // 0x150 - 0x2BC
+    padding_f0: [u8; 0x7C],   // 0x0F0 - 0x16C
+    pub action_id: u32,       // 0x16C
+    padding_170: [u8; 0x14C], // 0x170 - 0x2BC
     pub damage_cap: i32,      // 0x2BC
 }
 
@@ -21,7 +21,7 @@ mod tests {
     fn damage_instance_matches_game_2_layout() {
         assert_eq!(std::mem::offset_of!(DamageInstance, damage), 0xD4);
         assert_eq!(std::mem::offset_of!(DamageInstance, flags), 0xE8);
-        assert_eq!(std::mem::offset_of!(DamageInstance, action_id), 0x14C);
+        assert_eq!(std::mem::offset_of!(DamageInstance, action_id), 0x16C);
         assert_eq!(std::mem::offset_of!(DamageInstance, damage_cap), 0x2BC);
     }
 }

@@ -20,6 +20,25 @@ import { useEffect, useRef } from "react";
 
 export const EMPTY_ID = 2289754288;
 
+const GAME_2_CHARACTER_TYPES = new Set(["Pl2400", "Pl2500", "Pl2600", "Pl2700", "Pl2800", "Pl2900"]);
+
+export const getSkillTranslationKeys = (characterType: CharacterType, skillID: number) => {
+  if (typeof characterType !== "string") return [];
+
+  const keys = [`skills.${characterType}.${skillID}`];
+
+  // Damage variants often add a small suffix to the equipped ability's base ID
+  // (for example, 1510 is a projectile spawned by ability 1500). The six 2.0
+  // characters use the same 1000..1800 ability slots, so fall back to the slot
+  // name when a variant has no dedicated translation.
+  if (GAME_2_CHARACTER_TYPES.has(characterType) && skillID >= 1000 && skillID < 1900) {
+    const abilitySlotID = Math.floor(skillID / 100) * 100;
+    if (abilitySlotID !== skillID) keys.push(`skills.${characterType}.${abilitySlotID}`);
+  }
+
+  return keys;
+};
+
 export const formatInPartyOrder = (party: Record<string, PlayerState>): ComputedPlayerState[] => {
   const players = Object.keys(party).map((key) => {
     return party[key];
@@ -66,8 +85,8 @@ export const getSkillName = (characterType: CharacterType, skill: SkillState) =>
 
       return t(
         [
-          `skills.${skill.childCharacterType}.${skillID}`,
-          `skills.${characterType}.${skillID}`,
+          ...getSkillTranslationKeys(skill.childCharacterType, skillID),
+          ...getSkillTranslationKeys(characterType, skillID),
           `skills.default.${skillID}`,
           `skills.default.unknown-skill`,
         ],
