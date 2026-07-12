@@ -43,10 +43,10 @@ pub fn setup_hooks(tx: event::Tx) -> Result<()> {
     // stable identity fields; equipment remains disabled until its layout is known.
     OnLoadPlayerIdentityHook::new(tx.clone()).setup(&process)?;
 
-    // This action was verified against game 2.0.2. If it moves in a later update,
-    // retain core tracking and let the inactivity fallback finish the encounter.
+    // This hooks the actual reward/result setup rather than the generic result
+    // input operation, which is also reused by fall recovery and boss mechanics.
     match OnBattleEndHook::new(tx).setup(&process) {
-        Ok(()) => info!("Game 2.0.2 battle-end hook enabled"),
+        Ok(()) => info!("Game 2.0.2 result reward hook enabled"),
         Err(error) => warn!("Battle-end hook unavailable; using inactivity fallback: {error}"),
     }
 

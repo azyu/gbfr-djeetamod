@@ -1,7 +1,7 @@
 use std::ptr::NonNull;
 
 use anyhow::{anyhow, Result};
-use protocol::{ActionType, Actor, DamageEvent, Message};
+use protocol::{ActionType, Actor, DamageEvent, Message, PlayerIdentityEvent};
 use retour::static_detour;
 
 use crate::{event, hooks::ffi::DamageInstance, process::Process};
@@ -24,6 +24,50 @@ pub struct OnProcessDamageHook {
 }
 
 const PROCESS_DAMAGE_EVENT_SIG: &str = "e8 $ { ' } 66 83 bc 24 ? ? ? ? ?";
+
+const ID_HUMAN_TYPE: u32 = 0x8056ABCD;
+const ID_DRAGON_TYPE: u32 = 0xF5755C0E;
+const PLAYER_ACTOR_ID_BASE: u32 = 0xFFFF_FF00;
+
+fn stable_player_actor_id(party_index: u8) -> u32 {
+    PLAYER_ACTOR_ID_BASE | u32::from(party_index)
+}
+
+fn canonical_player_type(character_type: u32) -> u32 {
+    if character_type == ID_DRAGON_TYPE {
+        ID_HUMAN_TYPE
+    } else {
+        character_type
+    }
+}
+
+/// Converts concrete player actors into a party-slot identity. Concrete actor
+/// type/index remain on DamageEvent::source so transformed skills still retain
+/// their own breakdown, while parent identity remains stable across forms.
+fn normalize_player_identities(
+    identities: Vec<PlayerIdentityEvent>,
+    source_index: u32,
+) -> (Vec<PlayerIdentityEvent>, Option<(u32, u32)>) {
+    let mut source_parent = None;
+    let identities = identities
+        .into_iter()
+        .map(|mut identity| {
+            let concrete_actor_index = identity.actor_index;
+            let parent_actor_type = canonical_player_type(identity.character_type);
+            let parent_index = stable_player_actor_id(identity.party_index);
+
+            if concrete_actor_index == source_index {
+                source_parent = Some((parent_actor_type, parent_index));
+            }
+
+            identity.character_type = parent_actor_type;
+            identity.actor_index = parent_index;
+            identity
+        })
+        .collect();
+
+    (identities, source_parent)
+}
 
 impl OnProcessDamageHook {
     pub fn new(tx: event::Tx) -> Self {
@@ -95,17 +139,23 @@ impl OnProcessDamageHook {
         let source_type_id = actor_type_id(source_specified_instance_ptr as *const usize);
         let source_idx = actor_idx(source_specified_instance_ptr as *const usize);
 
-        if let Some(identity) = super::player::identity_event_for_actor(
+        let identities = super::player::identity_events_for_actor(
             source_specified_instance_ptr as *const usize,
             source_type_id,
             source_idx,
-        ) {
+        );
+        let (identities, stable_source_parent) =
+            normalize_player_identities(identities, source_idx);
+
+        for identity in identities {
             let _ = self.tx.send(Message::PlayerIdentityEvent(identity));
         }
 
-        // Parent layouts are character-specific and changed in the 2.0 update. Keep the
-        // source attributed to the concrete actor until those optional offsets are verified.
-        let (source_parent_type_id, source_parent_idx) = (source_type_id, source_idx);
+        // Parent layouts are character-specific and changed in the 2.0 update.
+        // Player identity snapshots expose a safe party slot, so use that as a
+        // stable parent without dereferencing the old form-specific offsets.
+        let (source_parent_type_id, source_parent_idx) =
+            stable_source_parent.unwrap_or((source_type_id, source_idx));
 
         let target_type_id: u32 = actor_type_id(target_specified_instance_ptr as *const usize);
         let target_idx = actor_idx(target_specified_instance_ptr as *const usize);
@@ -196,11 +246,22 @@ impl OnProcessDotHook {
         let source_idx = actor_idx(source);
         let source_type_id = actor_type_id(source);
 
+        let identities =
+            super::player::identity_events_for_actor(source, source_type_id, source_idx);
+        let (identities, stable_source_parent) =
+            normalize_player_identities(identities, source_idx);
+
+        for identity in identities {
+            let _ = self.tx.send(Message::PlayerIdentityEvent(identity));
+        }
+
         let target_idx = actor_idx(target);
         let target_type_id = actor_type_id(target);
 
         let (source_parent_type_id, source_parent_idx) =
-            get_source_parent(source_type_id, source).unwrap_or((source_type_id, source_idx));
+            stable_source_parent.unwrap_or_else(|| {
+                get_source_parent(source_type_id, source).unwrap_or((source_type_id, source_idx))
+            });
 
         let event = Message::DamageEvent(DamageEvent {
             source: Actor {
@@ -226,5 +287,43 @@ impl OnProcessDotHook {
         let _ = self.tx.send(event);
 
         original_value
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::CString;
+
+    use protocol::PlayerIdentityEvent;
+
+    use super::{
+        normalize_player_identities, stable_player_actor_id, ID_DRAGON_TYPE, ID_HUMAN_TYPE,
+    };
+
+    fn identity(character_type: u32, actor_index: u32, party_index: u8) -> PlayerIdentityEvent {
+        PlayerIdentityEvent {
+            character_name: CString::new("Id").unwrap(),
+            display_name: CString::new("Player").unwrap(),
+            character_type,
+            party_index,
+            actor_index,
+            is_online: true,
+        }
+    }
+
+    #[test]
+    fn id_forms_share_a_stable_player_parent() {
+        let (human_identities, human_parent) =
+            normalize_player_identities(vec![identity(ID_HUMAN_TYPE, 10, 2)], 10);
+        let (dragon_identities, dragon_parent) =
+            normalize_player_identities(vec![identity(ID_DRAGON_TYPE, 11, 2)], 11);
+
+        let expected_parent = (ID_HUMAN_TYPE, stable_player_actor_id(2));
+        assert_eq!(human_parent, Some(expected_parent));
+        assert_eq!(dragon_parent, Some(expected_parent));
+        assert_eq!(human_identities[0].character_type, ID_HUMAN_TYPE);
+        assert_eq!(dragon_identities[0].character_type, ID_HUMAN_TYPE);
+        assert_eq!(human_identities[0].actor_index, expected_parent.1);
+        assert_eq!(dragon_identities[0].actor_index, expected_parent.1);
     }
 }

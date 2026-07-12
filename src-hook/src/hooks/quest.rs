@@ -25,10 +25,13 @@ const ON_LOAD_QUEST_STATE: &str =
 const ON_SHOW_RESULT_SCREEN_SIG: &str =
     "e8 $ { ' } b8 ? ? ? ? 23 87 ? ? 00 00 3d 00 00 60 00 0f 94 c0";
 
-/// Game 2.0.2 `ui::action::fsm::ResultEnableInputOperation::execute`.
-/// This result-screen action has a unique signature and requires no quest-state reads.
+/// Game 2.0.2 `ui::action::fsm::ResultRewardSetup::execute`.
+///
+/// Unlike ResultEnableInputOperation, this operation belongs to the actual quest
+/// reward/result flow and is not reused by fall recovery or boss-mechanic UI.
+/// The signature is unique in the 2.0.2 executable and requires no quest-state reads.
 const ON_BATTLE_END_SIG: &str =
-    "41 56 56 57 53 48 83 ec 38 48 89 ce 48 8b 0d ? ? ? ? 48 8d 54 24 30 41 b8 ab 4e f1 51 e8 ? ? ? ? 48 8b 44 24 30 48 85 c0 74 ? 48 8b 58 18 4c 8b 70 20 4c 39 f3 74 ? 48 8d 7c 24 2c";
+    "41 56 56 57 53 48 83 ec 38 48 89 ce 48 8b 0d ? ? ? ? 48 8d 54 24 30 41 b8 ab 4e f1 51 e8 ? ? ? ? 48 8b 44 24 30 48 85 c0 0f 84 ? ? ? ? 48 8b 58 18 4c 8b 70 20 4c 39 f3 0f 84 ? ? ? ? 48 8d 7c 24 2c";
 
 /// Called once the quest result screen is ready for input.
 #[derive(Clone)]
@@ -45,10 +48,10 @@ impl OnBattleEndHook {
         let cloned_self = self.clone();
         let on_battle_end = process
             .search_match_address(ON_BATTLE_END_SIG)
-            .map_err(|_| anyhow!("Could not find game 2.0.2 battle-end action"))?;
+            .map_err(|_| anyhow!("Could not find game 2.0.2 result reward setup"))?;
 
         #[cfg(feature = "console")]
-        println!("Found game 2.0.2 battle-end action");
+        println!("Found game 2.0.2 result reward setup");
 
         unsafe {
             let func: OnBattleEndFunc = std::mem::transmute(on_battle_end);

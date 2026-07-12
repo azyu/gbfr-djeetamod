@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     ffi::{c_void, CString},
     sync::{Mutex, OnceLock},
 };
@@ -40,7 +40,7 @@ const ACTOR_PLAYER_KEY_OFFSET: usize = 0x1AB40;
 const REFRESH_PLAYER_IDENTITY_SIG: &str =
     "55 41 57 41 56 41 54 56 57 53 48 83 ec 70 48 8d 6c 24 70 48 c7 45 f8 fe ff ff ff 80 b9 bc 5e 00 00 00";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct StoredPlayerIdentity {
     character_name: CString,
     display_name: CString,
@@ -48,27 +48,55 @@ struct StoredPlayerIdentity {
     is_online: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct StoredPartyIdentity {
+    player_key: u32,
+    identity: StoredPlayerIdentity,
+}
+
 #[derive(Default)]
 struct IdentityStore {
-    by_key: HashMap<u32, StoredPlayerIdentity>,
-    active_key_by_party: HashMap<u8, u32>,
+    by_party: HashMap<u8, StoredPartyIdentity>,
 }
 
 impl IdentityStore {
     fn insert(&mut self, player_key: u32, identity: StoredPlayerIdentity) -> bool {
         let party_index = identity.party_index;
-        let previous_key = self.active_key_by_party.insert(party_index, player_key);
-        if let Some(previous_key) = previous_key.filter(|key| *key != player_key) {
-            self.by_key.remove(&previous_key);
-        }
-        self.by_key.insert(player_key, identity);
+        let value = StoredPartyIdentity {
+            player_key,
+            identity,
+        };
 
-        previous_key != Some(player_key)
+        if self.by_party.get(&party_index) == Some(&value) {
+            return false;
+        }
+
+        self.by_party.insert(party_index, value);
+        true
     }
+
+    fn identities_for_key(&self, player_key: u32) -> Vec<StoredPlayerIdentity> {
+        let mut identities = self
+            .by_party
+            .values()
+            .filter(|value| value.player_key == player_key)
+            .map(|value| value.identity.clone())
+            .collect::<Vec<_>>();
+        identities.sort_by_key(|identity| identity.party_index);
+        identities
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct StoredActor {
+    address: usize,
+    actor_index: u32,
+    character_type: u32,
 }
 
 static IDENTITIES: OnceLock<Mutex<IdentityStore>> = OnceLock::new();
 static ACTOR_KEYS: OnceLock<Mutex<HashMap<usize, u32>>> = OnceLock::new();
+static ACTORS: OnceLock<Mutex<HashMap<(u32, u32), BTreeMap<u32, StoredActor>>>> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct OnLoadPlayerIdentityHook {
@@ -152,6 +180,11 @@ impl OnLoadPlayerIdentityHook {
                 .lock()
                 .expect("actor identity map lock poisoned")
                 .clear();
+            ACTORS
+                .get_or_init(|| Mutex::new(HashMap::new()))
+                .lock()
+                .expect("actor map lock poisoned")
+                .clear();
         }
     }
 }
@@ -163,13 +196,13 @@ fn should_cache_identity(identity: &StoredPlayerIdentity) -> bool {
 /// Resolves a cached identity against the concrete actor used by the damage
 /// hook. ReadProcessMemory turns an invalid or short actor range into a failed
 /// read instead of an in-process access violation.
-pub fn identity_event_for_actor(
+pub fn identity_events_for_actor(
     actor: *const usize,
     character_type: u32,
     actor_index: u32,
-) -> Option<PlayerIdentityEvent> {
+) -> Vec<PlayerIdentityEvent> {
     if actor.is_null() {
-        return None;
+        return Vec::new();
     }
 
     let actor_address = actor as usize;
@@ -180,29 +213,12 @@ pub fn identity_event_for_actor(
         .get(&actor_address)
         .copied();
 
-    let (player_key, identity) = if let Some(player_key) = cached_key {
-        let identity = IDENTITIES
-            .get_or_init(|| Mutex::new(IdentityStore::default()))
-            .lock()
-            .expect("player identity map lock poisoned")
-            .by_key
-            .get(&player_key)
-            .cloned()?;
-        (player_key, identity)
+    let player_key = if let Some(player_key) = cached_key {
+        player_key
     } else {
-        let player_key = read_actor_player_key(actor)?;
-        let identity = IDENTITIES
-            .get_or_init(|| Mutex::new(IdentityStore::default()))
-            .lock()
-            .expect("player identity map lock poisoned")
-            .by_key
-            .get(&player_key)
-            .cloned()?;
-
-        info!(
-            "Player actor matched: actor={actor:p}, type={character_type:#010x}, key={player_key:#010x}, offset={ACTOR_PLAYER_KEY_OFFSET:#x}, name={}",
-            identity.display_name.to_string_lossy()
-        );
+        let Some(player_key) = read_actor_player_key(actor) else {
+            return Vec::new();
+        };
 
         ACTOR_KEYS
             .get_or_init(|| Mutex::new(HashMap::new()))
@@ -210,19 +226,86 @@ pub fn identity_event_for_actor(
             .expect("actor identity map lock poisoned")
             .insert(actor_address, player_key);
 
-        (player_key, identity)
+        player_key
     };
 
-    let _ = player_key;
+    let identities = IDENTITIES
+        .get_or_init(|| Mutex::new(IdentityStore::default()))
+        .lock()
+        .expect("player identity map lock poisoned")
+        .identities_for_key(player_key);
+    if identities.is_empty() {
+        return Vec::new();
+    }
 
-    Some(PlayerIdentityEvent {
-        character_name: identity.character_name,
-        display_name: identity.display_name,
-        character_type,
-        party_index: identity.party_index,
-        actor_index,
-        is_online: identity.is_online,
-    })
+    let (actors, actor_was_added) = {
+        let mut actors = ACTORS
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .expect("actor map lock poisoned");
+        let actors_for_character = actors.entry((player_key, character_type)).or_default();
+        let actor_was_added = actors_for_character
+            .insert(
+                actor_index,
+                StoredActor {
+                    address: actor_address,
+                    actor_index,
+                    character_type,
+                },
+            )
+            .is_none();
+
+        (
+            actors_for_character.values().copied().collect::<Vec<_>>(),
+            actor_was_added,
+        )
+    };
+
+    let events = pair_actors_with_identities(actors, identities)
+        .into_iter()
+        .map(|(actor, identity)| {
+            if actor_was_added {
+                info!(
+                    "Player actor matched: actor={:#x}, actor_index={}, type={:#010x}, key={player_key:#010x}, party={}, offset={ACTOR_PLAYER_KEY_OFFSET:#x}, name={}",
+                    actor.address,
+                    actor.actor_index,
+                    actor.character_type,
+                    identity.party_index,
+                    identity.display_name.to_string_lossy()
+                );
+            }
+
+            PlayerIdentityEvent {
+                character_name: identity.character_name,
+                display_name: identity.display_name,
+                character_type: actor.character_type,
+                party_index: identity.party_index,
+                actor_index: actor.actor_index,
+                is_online: identity.is_online,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    // When another same-character actor appears, emit every pairing so a
+    // provisional first-hit assignment is corrected immediately. Otherwise
+    // only refresh the actor that produced this damage event.
+    if actor_was_added {
+        events
+    } else {
+        events
+            .into_iter()
+            .filter(|event| event.actor_index == actor_index)
+            .collect()
+    }
+}
+
+fn pair_actors_with_identities(
+    mut actors: Vec<StoredActor>,
+    mut identities: Vec<StoredPlayerIdentity>,
+) -> Vec<(StoredActor, StoredPlayerIdentity)> {
+    actors.sort_by_key(|actor| actor.actor_index);
+    identities.sort_by_key(|identity| identity.party_index);
+    actors.into_iter().zip(identities).collect()
 }
 
 fn read_actor_player_key(actor: *const usize) -> Option<u32> {
@@ -312,8 +395,8 @@ mod tests {
     use std::ffi::CString;
 
     use super::{
-        read_vbuffer, should_cache_identity, IdentityStore, StoredPlayerIdentity,
-        ACTOR_PLAYER_KEY_OFFSET,
+        pair_actors_with_identities, read_vbuffer, should_cache_identity, IdentityStore,
+        StoredActor, StoredPlayerIdentity, ACTOR_PLAYER_KEY_OFFSET,
     };
 
     fn identity(name: &str, party_index: u8, is_online: bool) -> StoredPlayerIdentity {
@@ -364,10 +447,38 @@ mod tests {
         assert!(identities.insert(0x1111, identity("Placeholder", 2, true)));
         assert!(identities.insert(0x2222, identity("Remote Player", 2, true)));
 
-        assert!(!identities.by_key.contains_key(&0x1111));
+        assert!(identities.identities_for_key(0x1111).is_empty());
         assert_eq!(
-            identities.by_key[&0x2222].display_name.to_str().unwrap(),
+            identities.identities_for_key(0x2222)[0]
+                .display_name
+                .to_str()
+                .unwrap(),
             "Remote Player"
         );
+    }
+
+    #[test]
+    fn same_key_players_pair_by_actor_and_party_order() {
+        let actors = vec![
+            StoredActor {
+                address: 0x2000,
+                actor_index: 20,
+                character_type: 0x48ADDA36,
+            },
+            StoredActor {
+                address: 0x1000,
+                actor_index: 10,
+                character_type: 0x48ADDA36,
+            },
+        ];
+        let identities = vec![identity("Party 3", 3, true), identity("Party 1", 1, true)];
+
+        let pairs = pair_actors_with_identities(actors, identities);
+        assert_eq!(pairs[0].0.actor_index, 10);
+        assert_eq!(pairs[0].1.party_index, 1);
+        assert_eq!(pairs[0].1.display_name.to_str().unwrap(), "Party 1");
+        assert_eq!(pairs[1].0.actor_index, 20);
+        assert_eq!(pairs[1].1.party_index, 3);
+        assert_eq!(pairs[1].1.display_name.to_str().unwrap(), "Party 3");
     }
 }

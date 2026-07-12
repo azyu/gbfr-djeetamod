@@ -294,7 +294,7 @@ enum ParserStatus {
 
 /// Game 2.0 compatibility mode does not currently receive area/quest end events.
 /// Treat a sustained absence of damage as the end of a battle for log persistence.
-const AUTO_SAVE_INACTIVITY_MS: i64 = 60_000;
+const AUTO_SAVE_INACTIVITY_MS: i64 = 120_000;
 
 /// The state of the encounter after processing all damage events (or all known events for now)
 /// Used for parsing the encounter into a calculated format that can be consumed by the front-end.
@@ -782,6 +782,29 @@ impl Parser {
         self.insert_player_data(player_data, event.party_index);
     }
 
+    fn insert_player_identity_data(&mut self, player_data: PlayerData, party_index: u8) {
+        let party_index = usize::from(party_index);
+        if party_index >= self.encounter.player_data.len() {
+            return;
+        }
+
+        // Identity events contain the verified in-game party slot. Remove a
+        // provisional copy of this actor from any other slot, then keep the
+        // nickname anchored to its real slot instead of actor arrival order.
+        for (index, slot) in self.encounter.player_data.iter_mut().enumerate() {
+            if index != party_index
+                && slot
+                    .as_ref()
+                    .is_some_and(|player| player.actor_index == player_data.actor_index)
+            {
+                *slot = None;
+            }
+        }
+        self.encounter.player_data[party_index] = Some(player_data);
+
+        self.emit_party_update();
+    }
+
     pub fn on_player_identity_event(&mut self, event: PlayerIdentityEvent) {
         let character_type = CharacterType::from_hash(event.character_type);
 
@@ -813,7 +836,7 @@ impl Parser {
         player_data.character_type = character_type;
         player_data.is_online = event.is_online;
 
-        self.insert_player_data(player_data, event.party_index);
+        self.insert_player_identity_data(player_data, event.party_index);
     }
 
     fn insert_player_data(&mut self, player_data: PlayerData, party_index: u8) {
@@ -843,6 +866,10 @@ impl Parser {
             }
         }
 
+        self.emit_party_update();
+    }
+
+    fn emit_party_update(&self) {
         if let Some(window) = &self.window_handle {
             let _ = window.emit("encounter-party-update", &self.encounter.player_data);
         }
@@ -1090,6 +1117,7 @@ mod tests {
         parser.on_damage_event(event);
         let last_damage_at = parser.derived_state.end_time;
 
+        assert!(!parser.auto_save_if_inactive(last_damage_at + 60_000));
         assert!(parser.auto_save_if_inactive(last_damage_at + AUTO_SAVE_INACTIVITY_MS));
         assert_eq!(parser.status, ParserStatus::Stopped);
         assert!(!parser.auto_save_if_inactive(last_damage_at + AUTO_SAVE_INACTIVITY_MS * 2));
@@ -1155,10 +1183,55 @@ mod tests {
     }
 
     #[test]
+    fn id_human_and_dragon_forms_share_one_player_row() {
+        let mut parser = Parser::default();
+        let stable_party_actor = 0xFFFF_FF02;
+
+        for (actor_index, actor_type, action_id) in [(10, 0x8056ABCD, 1), (11, 0xF5755C0E, 2)] {
+            parser.on_damage_event(DamageEvent {
+                source: Actor {
+                    index: actor_index,
+                    actor_type,
+                    parent_actor_type: 0x8056ABCD,
+                    parent_index: stable_party_actor,
+                },
+                target: Actor {
+                    index: 2,
+                    actor_type: 0x12345678,
+                    parent_actor_type: 0x12345678,
+                    parent_index: 2,
+                },
+                damage: 100,
+                flags: 0,
+                action_id: ActionType::Normal(action_id),
+                attack_rate: None,
+                stun_value: None,
+                damage_cap: None,
+            });
+        }
+
+        assert_eq!(parser.derived_state.party.len(), 1);
+        let player = &parser.derived_state.party[&stable_party_actor];
+        assert_eq!(player.character_type, CharacterType::Pl1900);
+        assert_eq!(player.total_damage, 200);
+        assert_eq!(player.skill_breakdown.len(), 2);
+        assert_eq!(
+            player.skill_breakdown[0].child_character_type,
+            CharacterType::Pl1900
+        );
+        assert_eq!(
+            player.skill_breakdown[1].child_character_type,
+            CharacterType::Pl2000
+        );
+    }
+
+    #[test]
     fn same_character_players_keep_distinct_online_names() {
         let mut parser = Parser::default();
 
-        for (actor_index, party_index, display_name) in [(10, 1, "Player A"), (11, 2, "Player B")] {
+        // Actor IDs intentionally run opposite to party order. Nicknames must
+        // stay in their real party slots instead of being sorted by actor ID.
+        for (actor_index, party_index, display_name) in [(20, 1, "Player A"), (10, 2, "Player B")] {
             parser.on_player_identity_event(PlayerIdentityEvent {
                 character_name: CString::new(display_name).unwrap(),
                 display_name: CString::new(display_name).unwrap(),
@@ -1179,6 +1252,20 @@ mod tests {
         assert_eq!(players.len(), 2);
         assert_eq!(players[0].display_name, "Player A");
         assert_eq!(players[1].display_name, "Player B");
+        assert_eq!(
+            parser.encounter.player_data[1]
+                .as_ref()
+                .unwrap()
+                .actor_index,
+            20
+        );
+        assert_eq!(
+            parser.encounter.player_data[2]
+                .as_ref()
+                .unwrap()
+                .actor_index,
+            10
+        );
         assert_ne!(players[0].actor_index, players[1].actor_index);
         assert_eq!(players[0].character_type, CharacterType::Pl2800);
         assert_eq!(players[1].character_type, CharacterType::Pl2800);
