@@ -8,6 +8,7 @@ crate-type = ["cdylib"]
 
 [features]
 console = []
+damage-debug = []
 
 [package.metadata.winres]
 OriginalFilename = "hook.dll"

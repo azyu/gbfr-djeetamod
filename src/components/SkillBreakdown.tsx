@@ -1,6 +1,7 @@
 import { CharacterType, ComputedPlayerState, ComputedSkillGroup, ComputedSkillState } from "@/types";
 
 import { getSkillName } from "@/utils";
+import { useTranslation } from "react-i18next";
 import { SkillGroupRow } from "./SkillGroupRow";
 import { SkillRow } from "./SkillRow";
 import { useSkillBreakdown } from "./useSkillBreakdown";
@@ -43,6 +44,7 @@ const renderSkillRow = (
 };
 
 export const SkillBreakdown = ({ player, color }: SkillBreakdownProps) => {
+  const { t } = useTranslation();
   const { skills } = useSkillBreakdown(player);
 
   return (
@@ -58,6 +60,7 @@ export const SkillBreakdown = ({ player, color }: SkillBreakdownProps) => {
               <th className="header-column text-center">Max</th>
               <th className="header-column text-center">Avg</th>
               <th className="header-column text-center">%</th>
+              <th className="header-column text-center">{t("ui.damage-details.short")}</th>
             </tr>
           </thead>
           <tbody className="transparent-bg">

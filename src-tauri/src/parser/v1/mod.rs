@@ -1112,6 +1112,7 @@ mod tests {
             attack_rate: None,
             stun_value: None,
             damage_cap: None,
+            details: None,
         };
 
         parser.on_damage_event(event);
@@ -1145,6 +1146,7 @@ mod tests {
             attack_rate: None,
             stun_value: None,
             damage_cap: None,
+            details: None,
         });
 
         assert!(parser.on_battle_end_event());
@@ -1176,6 +1178,7 @@ mod tests {
                 attack_rate: None,
                 stun_value: None,
                 damage_cap: None,
+                details: None,
             });
         }
 
@@ -1185,7 +1188,7 @@ mod tests {
     #[test]
     fn id_human_and_dragon_forms_share_one_player_row() {
         let mut parser = Parser::default();
-        let stable_party_actor = 0xFFFF_FF02;
+        let human_actor = 10;
 
         for (actor_index, actor_type, action_id) in [(10, 0x8056ABCD, 1), (11, 0xF5755C0E, 2)] {
             parser.on_damage_event(DamageEvent {
@@ -1193,7 +1196,7 @@ mod tests {
                     index: actor_index,
                     actor_type,
                     parent_actor_type: 0x8056ABCD,
-                    parent_index: stable_party_actor,
+                    parent_index: human_actor,
                 },
                 target: Actor {
                     index: 2,
@@ -1207,11 +1210,12 @@ mod tests {
                 attack_rate: None,
                 stun_value: None,
                 damage_cap: None,
+                details: None,
             });
         }
 
         assert_eq!(parser.derived_state.party.len(), 1);
-        let player = &parser.derived_state.party[&stable_party_actor];
+        let player = &parser.derived_state.party[&human_actor];
         assert_eq!(player.character_type, CharacterType::Pl1900);
         assert_eq!(player.total_damage, 200);
         assert_eq!(player.skill_breakdown.len(), 2);
@@ -1295,6 +1299,7 @@ mod tests {
                 attack_rate: None,
                 stun_value: None,
                 damage_cap: None,
+                details: None,
             };
 
             assert!(!Parser::should_ignore_damage_event(&event));
@@ -1326,6 +1331,7 @@ mod tests {
                 attack_rate: None,
                 stun_value: None,
                 damage_cap: None,
+                details: None,
             }),
         ));
 
@@ -1357,6 +1363,7 @@ mod tests {
                 attack_rate: None,
                 stun_value: None,
                 damage_cap: None,
+                details: None,
             }),
         ));
 
@@ -1381,6 +1388,7 @@ mod tests {
                 attack_rate: None,
                 stun_value: None,
                 damage_cap: None,
+                details: None,
             }),
         ));
 

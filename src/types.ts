@@ -30,10 +30,37 @@ export type EnemyType = string | { Unknown: number };
 export type ActionType =
   | "LinkAttack"
   | "SBA"
-  | { SupplementaryAttack: number }
+  | { SupplementaryDamage: number }
   | { DamageOverTime: number }
   | { Normal: number }
   | { Group: string };
+
+export type DamageModifierKind = "Attack" | "Defense" | "DamageLimit" | "BonusAttack" | "Amplify";
+
+export type DamageStatusContribution = {
+  statusName: string;
+  kind: DamageModifierKind;
+  category: number;
+  averageValue: number;
+  activeHits: number;
+};
+
+export type AverageDamageDetails = {
+  hits: number;
+  totalDamage: number;
+  elementalMultiplier: number;
+  amplifyMultiplier: number;
+  defenseMultiplier: number;
+  attackMultiplier: number;
+  supplementaryMultiplier: number;
+  formulaMultiplier: number;
+  observedMultiplier: number;
+  attackRate: number;
+  uncappedDamage: number;
+  damageCap: number;
+  damageLimitMultiplier: number;
+  statuses: DamageStatusContribution[];
+};
 
 export type SkillState = {
   /** ActionType of the skill */
@@ -52,6 +79,8 @@ export type SkillState = {
   totalStunValue: number;
   /** Maximum recorded stun value of the skill */
   maxStunValue: number;
+  /** Damage modifiers averaged across captured hits for this skill */
+  damageDetails: AverageDamageDetails | null;
 };
 
 export type ComputedSkillState = SkillState & {
@@ -80,6 +109,8 @@ export type ComputedSkillGroup = {
   totalStunValue: number;
   /** Maximum recorded stun value of the skill */
   maxStunValue: number;
+  /** Groups do not expose a combined damage-detail average. */
+  damageDetails: null;
 };
 
 export type PlayerState = {

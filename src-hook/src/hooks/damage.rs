@@ -1,12 +1,12 @@
 use std::ptr::NonNull;
 
 use anyhow::{anyhow, Result};
-use protocol::{ActionType, Actor, DamageEvent, Message, PlayerIdentityEvent};
+use protocol::{ActionType, Actor, DamageEvent, Message};
 use retour::static_detour;
 
 use crate::{event, hooks::ffi::DamageInstance, process::Process};
 
-use super::{actor_idx, actor_type_id, get_source_parent};
+use super::{actor_idx, actor_type_id, get_source_parent, read_process_value};
 
 type ProcessDamageEventFunc =
     unsafe extern "system" fn(*const usize, *const usize, *const usize, u8) -> usize;
@@ -24,49 +24,48 @@ pub struct OnProcessDamageHook {
 }
 
 const PROCESS_DAMAGE_EVENT_SIG: &str = "e8 $ { ' } 66 83 bc 24 ? ? ? ? ?";
+const APPLIED_STUN_VALUE_OFFSET: usize = 0xB90;
 
-const ID_HUMAN_TYPE: u32 = 0x8056ABCD;
-const ID_DRAGON_TYPE: u32 = 0xF5755C0E;
-const PLAYER_ACTOR_ID_BASE: u32 = 0xFFFF_FF00;
-
-fn stable_player_actor_id(party_index: u8) -> u32 {
-    PLAYER_ACTOR_ID_BASE | u32::from(party_index)
+#[inline(always)]
+fn read_applied_stun_value(target: *const usize) -> Option<f32> {
+    read_process_value::<f32>(target.wrapping_byte_add(APPLIED_STUN_VALUE_OFFSET).cast())
+        .filter(|value| value.is_finite())
 }
 
-fn canonical_player_type(character_type: u32) -> u32 {
-    if character_type == ID_DRAGON_TYPE {
-        ID_HUMAN_TYPE
-    } else {
-        character_type
+#[inline(always)]
+fn applied_stun_delta(before: Option<f32>, after: Option<f32>) -> Option<f32> {
+    match (before, after) {
+        (Some(before), Some(after)) if before.is_finite() && after.is_finite() => {
+            Some((after - before).max(0.0))
+        }
+        _ => None,
     }
 }
 
-/// Converts concrete player actors into a party-slot identity. Concrete actor
-/// type/index remain on DamageEvent::source so transformed skills still retain
-/// their own breakdown, while parent identity remains stable across forms.
-fn normalize_player_identities(
-    identities: Vec<PlayerIdentityEvent>,
-    source_index: u32,
-) -> (Vec<PlayerIdentityEvent>, Option<(u32, u32)>) {
-    let mut source_parent = None;
-    let identities = identities
-        .into_iter()
-        .map(|mut identity| {
-            let concrete_actor_index = identity.actor_index;
-            let parent_actor_type = canonical_player_type(identity.character_type);
-            let parent_index = stable_player_actor_id(identity.party_index);
+#[inline(always)]
+fn stun_value_for_event(
+    action_type: &ActionType,
+    before: Option<f32>,
+    after: Option<f32>,
+) -> Option<f32> {
+    if matches!(action_type, ActionType::SupplementaryDamage(_)) {
+        None
+    } else {
+        applied_stun_delta(before, after)
+    }
+}
 
-            if concrete_actor_index == source_index {
-                source_parent = Some((parent_actor_type, parent_index));
-            }
-
-            identity.character_type = parent_actor_type;
-            identity.actor_index = parent_index;
-            identity
-        })
-        .collect();
-
-    (identities, source_parent)
+#[inline(always)]
+fn resolve_source_parent<F>(
+    source_type_id: u32,
+    source_idx: u32,
+    source: *const usize,
+    resolver: F,
+) -> (u32, u32)
+where
+    F: FnOnce(u32, *const usize) -> Option<(u32, u32)>,
+{
+    resolver(source_type_id, source).unwrap_or((source_type_id, source_idx))
 }
 
 impl OnProcessDamageHook {
@@ -100,8 +99,16 @@ impl OnProcessDamageHook {
         // Target is the instance of the actor being damaged.
         // For example: Instance of the Em2700 class.
         let target_specified_instance_ptr: usize = unsafe { *(*a1.byte_add(0x08) as *const usize) };
+        let previous_stun_value =
+            read_applied_stun_value(target_specified_instance_ptr as *const usize);
+
+        super::damage_details::begin_damage(a2);
 
         let original_value = unsafe { ProcessDamageEvent.call(a1, a2, a3, a4) };
+        let current_stun_value =
+            read_applied_stun_value(target_specified_instance_ptr as *const usize);
+
+        let damage_details = super::damage_details::finish_damage(a2, original_value);
 
         // This points to the first Entity instance in the 'a2' entity list.
         let source_entity_ptr = unsafe { (a2.byte_add(0x18) as *const *const usize).read() };
@@ -144,21 +151,26 @@ impl OnProcessDamageHook {
             source_type_id,
             source_idx,
         );
-        let (identities, stable_source_parent) =
-            normalize_player_identities(identities, source_idx);
-
         for identity in identities {
             let _ = self.tx.send(Message::PlayerIdentityEvent(identity));
         }
 
-        // Parent layouts are character-specific and changed in the 2.0 update.
-        // Player identity snapshots expose a safe party slot, so use that as a
-        // stable parent without dereferencing the old form-specific offsets.
-        let (source_parent_type_id, source_parent_idx) =
-            stable_source_parent.unwrap_or((source_type_id, source_idx));
+        // Resolve known child actors (Ferry's pets, Id's dragon form, summons,
+        // etc.) back to their concrete owning player instance. `actor_idx`
+        // keys the parent pointer itself, so two players using the same
+        // character remain distinct. Version-fragile parent reads fail closed
+        // and keep the child actor separate instead of crashing the game.
+        let (source_parent_type_id, source_parent_idx) = resolve_source_parent(
+            source_type_id,
+            source_idx,
+            source_specified_instance_ptr as *const usize,
+            get_source_parent,
+        );
 
         let target_type_id: u32 = actor_type_id(target_specified_instance_ptr as *const usize);
         let target_idx = actor_idx(target_specified_instance_ptr as *const usize);
+        let stun_value =
+            stun_value_for_event(&action_type, previous_stun_value, current_stun_value);
 
         let event = Message::DamageEvent(DamageEvent {
             source: Actor {
@@ -178,7 +190,8 @@ impl OnProcessDamageHook {
             action_id: action_type,
             attack_rate: None,
             damage_cap: Some(damage_instance.damage_cap),
-            stun_value: None,
+            stun_value,
+            details: damage_details,
         });
 
         let _ = self.tx.send(event);
@@ -248,9 +261,6 @@ impl OnProcessDotHook {
 
         let identities =
             super::player::identity_events_for_actor(source, source_type_id, source_idx);
-        let (identities, stable_source_parent) =
-            normalize_player_identities(identities, source_idx);
-
         for identity in identities {
             let _ = self.tx.send(Message::PlayerIdentityEvent(identity));
         }
@@ -259,9 +269,7 @@ impl OnProcessDotHook {
         let target_type_id = actor_type_id(target);
 
         let (source_parent_type_id, source_parent_idx) =
-            stable_source_parent.unwrap_or_else(|| {
-                get_source_parent(source_type_id, source).unwrap_or((source_type_id, source_idx))
-            });
+            get_source_parent(source_type_id, source).unwrap_or((source_type_id, source_idx));
 
         let event = Message::DamageEvent(DamageEvent {
             source: Actor {
@@ -282,6 +290,7 @@ impl OnProcessDotHook {
             attack_rate: None,
             stun_value: None,
             damage_cap: None,
+            details: None,
         });
 
         let _ = self.tx.send(event);
@@ -292,38 +301,62 @@ impl OnProcessDotHook {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::CString;
+    use super::{applied_stun_delta, resolve_source_parent, stun_value_for_event};
+    use protocol::ActionType;
 
-    use protocol::PlayerIdentityEvent;
+    const FERRY_GHOST_TYPE: u32 = 0x2AF678E8;
+    const FERRY_TYPE: u32 = 0x4C714F77;
 
-    use super::{
-        normalize_player_identities, stable_player_actor_id, ID_DRAGON_TYPE, ID_HUMAN_TYPE,
-    };
+    #[test]
+    fn ferry_pet_uses_the_resolved_owner() {
+        let source = 1usize as *const usize;
+        let mut requested_type = None;
 
-    fn identity(character_type: u32, actor_index: u32, party_index: u8) -> PlayerIdentityEvent {
-        PlayerIdentityEvent {
-            character_name: CString::new("Id").unwrap(),
-            display_name: CString::new("Player").unwrap(),
-            character_type,
-            party_index,
-            actor_index,
-            is_online: true,
-        }
+        let parent = resolve_source_parent(FERRY_GHOST_TYPE, 41, source, |actor_type, ptr| {
+            requested_type = Some(actor_type);
+            assert_eq!(ptr, source);
+            Some((FERRY_TYPE, 7))
+        });
+
+        assert_eq!(requested_type, Some(FERRY_GHOST_TYPE));
+        assert_eq!(parent, (FERRY_TYPE, 7));
     }
 
     #[test]
-    fn id_forms_share_a_stable_player_parent() {
-        let (human_identities, human_parent) =
-            normalize_player_identities(vec![identity(ID_HUMAN_TYPE, 10, 2)], 10);
-        let (dragon_identities, dragon_parent) =
-            normalize_player_identities(vec![identity(ID_DRAGON_TYPE, 11, 2)], 11);
+    fn unresolved_actor_keeps_its_concrete_identity() {
+        let parent = resolve_source_parent(0xDEADBEEF, 41, std::ptr::null(), |_, _| None);
 
-        let expected_parent = (ID_HUMAN_TYPE, stable_player_actor_id(2));
-        assert_eq!(human_parent, Some(expected_parent));
-        assert_eq!(dragon_parent, Some(expected_parent));
-        assert_eq!(human_identities[0].character_type, ID_HUMAN_TYPE);
-        assert_eq!(dragon_identities[0].character_type, ID_HUMAN_TYPE);
-        assert_eq!(human_identities[0].actor_index, expected_parent.1);
-        assert_eq!(dragon_identities[0].actor_index, expected_parent.1);
+        assert_eq!(parent, (0xDEADBEEF, 41));
+    }
+
+    #[test]
+    fn applied_stun_uses_the_positive_cumulative_delta() {
+        let delta = applied_stun_delta(Some(23.03), Some(39.48)).unwrap();
+        assert!((delta - 16.45).abs() < 0.001);
+    }
+
+    #[test]
+    fn applied_stun_does_not_go_negative_when_the_counter_resets() {
+        assert_eq!(applied_stun_delta(Some(131.6), Some(0.0)), Some(0.0));
+    }
+
+    #[test]
+    fn applied_stun_requires_two_finite_reads() {
+        assert_eq!(applied_stun_delta(None, Some(10.0)), None);
+        assert_eq!(applied_stun_delta(Some(10.0), None), None);
+        assert_eq!(applied_stun_delta(Some(f32::NAN), Some(10.0)), None);
+        assert_eq!(applied_stun_delta(Some(10.0), Some(f32::INFINITY)), None);
+    }
+
+    #[test]
+    fn supplementary_damage_never_claims_stun() {
+        assert_eq!(
+            stun_value_for_event(
+                &ActionType::SupplementaryDamage(101),
+                Some(23.03),
+                Some(39.48),
+            ),
+            None
+        );
     }
 }

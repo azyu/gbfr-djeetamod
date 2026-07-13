@@ -175,6 +175,7 @@ mod tests {
             attack_rate: None,
             stun_value: None,
             damage_cap: None,
+            details: None,
         };
 
         player_state.update_from_damage_event(&AdjustedDamageInstance::from_damage_event(
@@ -220,6 +221,7 @@ mod tests {
             attack_rate: None,
             stun_value: None,
             damage_cap: None,
+            details: None,
         };
 
         player_state.update_from_damage_event(&AdjustedDamageInstance::from_damage_event(
@@ -273,6 +275,7 @@ mod tests {
             attack_rate: None,
             stun_value: None,
             damage_cap: None,
+            details: None,
         };
 
         let skill_two = DamageEvent {
@@ -294,6 +297,7 @@ mod tests {
             attack_rate: None,
             stun_value: None,
             damage_cap: None,
+            details: None,
         };
 
         player_state
@@ -342,6 +346,7 @@ mod tests {
             attack_rate: None,
             stun_value: None,
             damage_cap: None,
+            details: None,
         };
 
         let child_skill = DamageEvent {
@@ -363,6 +368,7 @@ mod tests {
             attack_rate: None,
             stun_value: None,
             damage_cap: None,
+            details: None,
         };
 
         player_state.update_from_damage_event(&AdjustedDamageInstance::from_damage_event(
@@ -417,6 +423,7 @@ mod tests {
             attack_rate: None,
             stun_value: Some(5.0),
             damage_cap: None,
+            details: None,
         };
 
         let player_data = PlayerData {
@@ -479,6 +486,7 @@ mod tests {
             attack_rate: None,
             stun_value: Some(5.0),
             damage_cap: None,
+            details: None,
         };
 
         player_state.update_from_damage_event(&AdjustedDamageInstance::from_damage_event(

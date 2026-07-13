@@ -79,6 +79,46 @@ pub struct DamageEvent {
     pub attack_rate: Option<f32>,
     pub stun_value: Option<f32>,
     pub damage_cap: Option<i32>,
+    /// Detailed damage modifiers captured from the game 2.0 calculation path.
+    /// Older saved encounters omit this field, so it must remain optional.
+    #[serde(default)]
+    pub details: Option<DamageDetails>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DamageModifierKind {
+    Attack,
+    Defense,
+    DamageLimit,
+    BonusAttack,
+    Amplify,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DamageStatusContribution {
+    pub status_name: String,
+    pub kind: DamageModifierKind,
+    pub category: i32,
+    pub value: f32,
+}
+
+/// The resolved factors for one damage event.
+///
+/// `formula_multiplier` follows the requested community formula:
+/// `(elemental * amplify + (defense * attack - 1) / 2) * supplementary`.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DamageDetails {
+    pub elemental_multiplier: f32,
+    pub amplify_multiplier: f32,
+    pub defense_multiplier: f32,
+    pub attack_multiplier: f32,
+    pub supplementary_multiplier: f32,
+    pub formula_multiplier: f32,
+    pub attack_rate: f32,
+    pub uncapped_damage: f32,
+    pub damage_cap: i32,
+    pub damage_limit_multiplier: f32,
+    pub statuses: Vec<DamageStatusContribution>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
