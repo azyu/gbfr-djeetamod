@@ -6,7 +6,7 @@ use retour::static_detour;
 
 use crate::{event, hooks::ffi::DamageInstance, process::Process};
 
-use super::{actor_idx, actor_type_id, get_source_parent, read_process_value};
+use super::{actor_idx, actor_type_id, get_source_parent_instance, read_process_value};
 
 type ProcessDamageEventFunc =
     unsafe extern "system" fn(*const usize, *const usize, *const usize, u8) -> usize;
@@ -56,6 +56,7 @@ fn stun_value_for_event(
 }
 
 #[inline(always)]
+#[cfg(test)]
 fn resolve_source_parent<F>(
     source_type_id: u32,
     source_idx: u32,
@@ -146,26 +147,32 @@ impl OnProcessDamageHook {
         let source_type_id = actor_type_id(source_specified_instance_ptr as *const usize);
         let source_idx = actor_idx(source_specified_instance_ptr as *const usize);
 
+        // Resolve known child actors (Ferry's pets, Id's dragon form, summons,
+        // etc.) back to their concrete owning player instance. The exact
+        // parent actor is also where game 2.0.2 stores the authoritative party
+        // identity snapshot used for nickname assignment.
+        let (source_parent_type_id, source_parent_idx, identity_actor) =
+            if let Some((parent_type, parent_actor)) = get_source_parent_instance(
+                source_type_id,
+                source_specified_instance_ptr as *const usize,
+            ) {
+                (parent_type, actor_idx(parent_actor), parent_actor)
+            } else {
+                (
+                    source_type_id,
+                    source_idx,
+                    source_specified_instance_ptr as *const usize,
+                )
+            };
+
         let identities = super::player::identity_events_for_actor(
-            source_specified_instance_ptr as *const usize,
-            source_type_id,
-            source_idx,
+            identity_actor,
+            source_parent_type_id,
+            source_parent_idx,
         );
         for identity in identities {
             let _ = self.tx.send(Message::PlayerIdentityEvent(identity));
         }
-
-        // Resolve known child actors (Ferry's pets, Id's dragon form, summons,
-        // etc.) back to their concrete owning player instance. `actor_idx`
-        // keys the parent pointer itself, so two players using the same
-        // character remain distinct. Version-fragile parent reads fail closed
-        // and keep the child actor separate instead of crashing the game.
-        let (source_parent_type_id, source_parent_idx) = resolve_source_parent(
-            source_type_id,
-            source_idx,
-            source_specified_instance_ptr as *const usize,
-            get_source_parent,
-        );
 
         let target_type_id: u32 = actor_type_id(target_specified_instance_ptr as *const usize);
         let target_idx = actor_idx(target_specified_instance_ptr as *const usize);
@@ -259,17 +266,26 @@ impl OnProcessDotHook {
         let source_idx = actor_idx(source);
         let source_type_id = actor_type_id(source);
 
-        let identities =
-            super::player::identity_events_for_actor(source, source_type_id, source_idx);
+        let (source_parent_type_id, source_parent_idx, identity_actor) =
+            if let Some((parent_type, parent_actor)) =
+                get_source_parent_instance(source_type_id, source)
+            {
+                (parent_type, actor_idx(parent_actor), parent_actor)
+            } else {
+                (source_type_id, source_idx, source)
+            };
+
+        let identities = super::player::identity_events_for_actor(
+            identity_actor,
+            source_parent_type_id,
+            source_parent_idx,
+        );
         for identity in identities {
             let _ = self.tx.send(Message::PlayerIdentityEvent(identity));
         }
 
         let target_idx = actor_idx(target);
         let target_type_id = actor_type_id(target);
-
-        let (source_parent_type_id, source_parent_idx) =
-            get_source_parent(source_type_id, source).unwrap_or((source_type_id, source_idx));
 
         let event = Message::DamageEvent(DamageEvent {
             source: Actor {

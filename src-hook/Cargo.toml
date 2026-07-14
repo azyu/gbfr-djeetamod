@@ -1,6 +1,6 @@
 [package]
 name = "hook"
-version = "0.1.0"
+version = "1.8.6"
 edition = "2021"
 
 [lib]
@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 [features]
 console = []
 damage-debug = []
+identity-debug = []
 
 [package.metadata.winres]
 OriginalFilename = "hook.dll"

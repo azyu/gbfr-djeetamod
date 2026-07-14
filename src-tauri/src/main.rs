@@ -13,7 +13,7 @@ use anyhow::Context;
 use db::logs::LogEntry;
 use dll_syringe::{process::OwnedProcess, Syringe};
 use interprocess::os::windows::named_pipe::tokio::RecvPipeStream;
-use log::{info, LevelFilter};
+use log::{info, warn, LevelFilter};
 use parser::{
     constants::{CharacterType, EnemyType},
     v1::{self, PlayerData},
@@ -428,8 +428,21 @@ async fn check_and_perform_hook(app: AppHandle) {
 
                 info!("Found game process, injecting DLL: {:?}", dll_path);
 
-                let _ = syringe.inject(dll_path);
-                let _ = app.emit_all("success-alert", "Found game..");
+                match syringe.inject(dll_path) {
+                    Ok(_) => {
+                        let _ = app.emit_all("success-alert", "Found game..");
+                    }
+                    Err(error) => {
+                        // An older Hook may already be loaded in a game that
+                        // stayed open during an app upgrade. Still try its pipe;
+                        // the compatibility decoder below can consume it.
+                        warn!("Could not inject Hook {:?}: {:?}", dll_path, error);
+                        let _ = app.emit_all(
+                            "error-alert",
+                            "Hook injection failed; trying the existing game connection.",
+                        );
+                    }
+                }
 
                 connect_and_run_parser(app);
 
@@ -479,12 +492,13 @@ fn connect_and_run_parser(app: AppHandle) {
 
                                 let debug_mode = app.state::<DebugMode>().0.load(Ordering::Relaxed);
 
-                                if let Ok(msg) = protocol::bincode::deserialize::<protocol::Message>(&msg) {
-                                    if debug_mode {
-                                        let _ = logs_window.emit("debug-event", &msg);
-                                    }
+                                match protocol::deserialize_message(&msg) {
+                                    Ok(msg) => {
+                                        if debug_mode {
+                                            let _ = logs_window.emit("debug-event", &msg);
+                                        }
 
-                                    match msg {
+                                        match msg {
                                         protocol::Message::DamageEvent(event) => {
                                             state.on_damage_event(event);
                                         }
@@ -518,6 +532,14 @@ fn connect_and_run_parser(app: AppHandle) {
                                         protocol::Message::OnBattleEnd => {
                                             state.on_battle_end_event();
                                         }
+                                        }
+                                    }
+                                    Err(error) => {
+                                        warn!(
+                                            "Could not decode Hook message ({} bytes): {:?}",
+                                            msg.len(),
+                                            error
+                                        );
                                     }
                                 }
                             }

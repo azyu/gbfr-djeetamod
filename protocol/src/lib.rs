@@ -279,3 +279,82 @@ pub enum Message {
     /// Player name and actor mapping without version-sensitive equipment data.
     PlayerIdentityEvent(PlayerIdentityEvent),
 }
+
+/// Damage event layout used through Awa Edition 1.8.4.
+///
+/// Bincode encodes structs as fixed field sequences, so adding an optional
+/// field is not backward-compatible even when it has `#[serde(default)]`.
+#[derive(Deserialize)]
+struct LegacyDamageEvent {
+    source: Actor,
+    target: Actor,
+    damage: i32,
+    flags: u64,
+    action_id: ActionType,
+    attack_rate: Option<f32>,
+    stun_value: Option<f32>,
+    damage_cap: Option<i32>,
+}
+
+/// Message layout used through Awa Edition 1.8.4. Variant order must remain
+/// identical to the historical wire format.
+#[derive(Deserialize)]
+enum LegacyMessage {
+    OnAreaEnter(AreaEnterEvent),
+    OnQuestComplete(QuestCompleteEvent),
+    DamageEvent(LegacyDamageEvent),
+    OnUpdateSBA(OnUpdateSBAEvent),
+    OnAttemptSBA(OnAttemptSBAEvent),
+    OnPerformSBA(OnPerformSBAEvent),
+    OnContinueSBAChain(OnContinueSBAChainEvent),
+    PlayerLoadEvent(PlayerLoadEvent),
+    OnDeathEvent(OnDeathEvent),
+    OnBattleEnd,
+    PlayerIdentityEvent(PlayerIdentityEvent),
+}
+
+impl From<LegacyDamageEvent> for DamageEvent {
+    fn from(event: LegacyDamageEvent) -> Self {
+        Self {
+            source: event.source,
+            target: event.target,
+            damage: event.damage,
+            flags: event.flags,
+            action_id: event.action_id,
+            attack_rate: event.attack_rate,
+            stun_value: event.stun_value,
+            damage_cap: event.damage_cap,
+            details: None,
+        }
+    }
+}
+
+impl From<LegacyMessage> for Message {
+    fn from(message: LegacyMessage) -> Self {
+        match message {
+            LegacyMessage::OnAreaEnter(event) => Self::OnAreaEnter(event),
+            LegacyMessage::OnQuestComplete(event) => Self::OnQuestComplete(event),
+            LegacyMessage::DamageEvent(event) => Self::DamageEvent(event.into()),
+            LegacyMessage::OnUpdateSBA(event) => Self::OnUpdateSBA(event),
+            LegacyMessage::OnAttemptSBA(event) => Self::OnAttemptSBA(event),
+            LegacyMessage::OnPerformSBA(event) => Self::OnPerformSBA(event),
+            LegacyMessage::OnContinueSBAChain(event) => Self::OnContinueSBAChain(event),
+            LegacyMessage::PlayerLoadEvent(event) => Self::PlayerLoadEvent(event),
+            LegacyMessage::OnDeathEvent(event) => Self::OnDeathEvent(event),
+            LegacyMessage::OnBattleEnd => Self::OnBattleEnd,
+            LegacyMessage::PlayerIdentityEvent(event) => Self::PlayerIdentityEvent(event),
+        }
+    }
+}
+
+/// Decodes both the current wire format and the 1.8.4 damage-event layout.
+/// This allows an updated desktop app to keep receiving data from a Hook that
+/// was already loaded in a running game before the app was upgraded.
+pub fn deserialize_message(bytes: &[u8]) -> bincode::Result<Message> {
+    match bincode::deserialize::<Message>(bytes) {
+        Ok(message) => Ok(message),
+        Err(current_error) => bincode::deserialize::<LegacyMessage>(bytes)
+            .map(Message::from)
+            .map_err(|_| current_error),
+    }
+}

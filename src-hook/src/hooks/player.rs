@@ -1,6 +1,6 @@
 use std::{
-    collections::{BTreeMap, HashMap},
-    ffi::{c_void, CString},
+    collections::HashMap,
+    ffi::CString,
     sync::{Mutex, OnceLock},
 };
 
@@ -8,7 +8,6 @@ use anyhow::{anyhow, Result};
 use log::info;
 use protocol::PlayerIdentityEvent;
 use retour::static_detour;
-use windows::Win32::{Foundation::HANDLE, System::Diagnostics::Debug::ReadProcessMemory};
 
 use crate::{event, process::Process};
 
@@ -29,10 +28,13 @@ const PARTY_INDEX_OFFSET: usize = 0x22C;
 const VBUFFER_INLINE_CAPACITY: usize = 0x0F;
 const MAX_PLAYER_NAME_BYTES: usize = 0x100;
 const INVALID_PLAYER_KEY: u32 = 0x887A_E0B0;
+/// Concrete game 2.0.2 player actors retain the exact identity snapshot used
+/// by the party UI. Its party index is therefore authoritative even when two,
+/// three, or four players use the same character and attack in any order.
+const ACTOR_IDENTITY_SNAPSHOT_OFFSET: usize = 0x1AE90;
 /// The owning player's key inside a concrete game 2.0.2 player actor.
-/// This offset was identical for every local and online actor observed in
-/// combat. Reading only this field avoids matching party-wide keys that also
-/// occur elsewhere in the actor allocation.
+/// This is only a compatibility fallback: same-character players deliberately
+/// share this key, so it must never be used to guess between multiple names.
 const ACTOR_PLAYER_KEY_OFFSET: usize = 0x1AB40;
 
 /// Unique game 2.0.2 prologue for the function that rebuilds the player
@@ -85,18 +87,36 @@ impl IdentityStore {
         identities.sort_by_key(|identity| identity.party_index);
         identities
     }
-}
 
-#[derive(Clone, Copy, Debug)]
-struct StoredActor {
-    address: usize,
-    actor_index: u32,
-    character_type: u32,
+    fn clear(&mut self) {
+        self.by_party.clear();
+    }
 }
 
 static IDENTITIES: OnceLock<Mutex<IdentityStore>> = OnceLock::new();
 static ACTOR_KEYS: OnceLock<Mutex<HashMap<usize, u32>>> = OnceLock::new();
-static ACTORS: OnceLock<Mutex<HashMap<(u32, u32), BTreeMap<u32, StoredActor>>>> = OnceLock::new();
+static ACTOR_IDENTITIES: OnceLock<Mutex<HashMap<usize, StoredPlayerIdentity>>> = OnceLock::new();
+
+pub(super) fn reset_battle_identity_state() {
+    if let Some(identities) = IDENTITIES.get() {
+        identities
+            .lock()
+            .expect("player identity map lock poisoned")
+            .clear();
+    }
+    if let Some(actor_keys) = ACTOR_KEYS.get() {
+        actor_keys
+            .lock()
+            .expect("actor identity map lock poisoned")
+            .clear();
+    }
+    if let Some(actor_identities) = ACTOR_IDENTITIES.get() {
+        actor_identities
+            .lock()
+            .expect("actor identity cache lock poisoned")
+            .clear();
+    }
+}
 
 #[derive(Clone)]
 pub struct OnLoadPlayerIdentityHook {
@@ -131,23 +151,42 @@ impl OnLoadPlayerIdentityHook {
             return;
         }
 
-        let snapshot = unsafe {
-            (record.byte_add(PLAYER_IDENTITY_OFFSET) as *const *const u8).read_unaligned()
-        };
-        let player_key = unsafe {
+        let Some(snapshot) = super::read_process_value::<*const u8>(
             record
-                .byte_add(PLAYER_KEY_OFFSET)
-                .cast::<u32>()
-                .read_unaligned()
+                .wrapping_byte_add(PLAYER_IDENTITY_OFFSET)
+                .cast::<*const u8>(),
+        ) else {
+            return;
+        };
+        let Some(player_key) = super::read_process_value::<u32>(
+            record.wrapping_byte_add(PLAYER_KEY_OFFSET).cast::<u32>(),
+        ) else {
+            return;
         };
 
         if player_key == 0 || player_key == INVALID_PLAYER_KEY {
             return;
         }
 
-        let Some(identity) = (unsafe { read_player_identity(snapshot) }) else {
+        let Some(identity) = read_player_identity(snapshot) else {
             return;
         };
+
+        #[cfg(feature = "identity-debug")]
+        {
+            let owner = super::read_process_value::<usize>(
+                record.wrapping_byte_add(0x5DC8).cast::<usize>(),
+            )
+            .unwrap_or_default();
+            info!(
+                "Identity probe: record={:#x}, snapshot={:#x}, owner={owner:#x}, key={player_key:#010x}, party={}, online={}, name={}",
+                record as usize,
+                snapshot as usize,
+                identity.party_index,
+                identity.is_online,
+                identity.display_name.to_string_lossy()
+            );
+        }
 
         // Before an online party is fully populated, the game creates
         // placeholder records for slots 1-3 using the local profile name.
@@ -180,10 +219,10 @@ impl OnLoadPlayerIdentityHook {
                 .lock()
                 .expect("actor identity map lock poisoned")
                 .clear();
-            ACTORS
+            ACTOR_IDENTITIES
                 .get_or_init(|| Mutex::new(HashMap::new()))
                 .lock()
-                .expect("actor map lock poisoned")
+                .expect("actor identity cache lock poisoned")
                 .clear();
         }
     }
@@ -193,9 +232,10 @@ fn should_cache_identity(identity: &StoredPlayerIdentity) -> bool {
     identity.party_index == 0 || identity.is_online
 }
 
-/// Resolves a cached identity against the concrete actor used by the damage
-/// hook. ReadProcessMemory turns an invalid or short actor range into a failed
-/// read instead of an in-process access violation.
+/// Resolves an identity from the concrete player actor itself, matching the
+/// original meter's actor-to-party mapping. Character keys are used only when
+/// exactly one cached identity owns the key; ambiguous same-character keys are
+/// intentionally rejected instead of assigning the wrong nickname.
 pub fn identity_events_for_actor(
     actor: *const usize,
     character_type: u32,
@@ -206,6 +246,33 @@ pub fn identity_events_for_actor(
     }
 
     let actor_address = actor as usize;
+
+    if let Some(identity) = ACTOR_IDENTITIES
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("actor identity cache lock poisoned")
+        .get(&actor_address)
+        .cloned()
+    {
+        return vec![identity_event(identity, character_type, actor_index)];
+    }
+
+    if let Some(identity) = read_actor_identity(actor) {
+        info!(
+            "Player actor matched directly: actor={actor_address:#x}, actor_index={actor_index}, type={character_type:#010x}, party={}, snapshot_offset={ACTOR_IDENTITY_SNAPSHOT_OFFSET:#x}, name={}",
+            identity.party_index,
+            identity.display_name.to_string_lossy()
+        );
+
+        ACTOR_IDENTITIES
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .expect("actor identity cache lock poisoned")
+            .insert(actor_address, identity.clone());
+
+        return vec![identity_event(identity, character_type, actor_index)];
+    }
+
     let cached_key = ACTOR_KEYS
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
@@ -229,134 +296,110 @@ pub fn identity_events_for_actor(
         player_key
     };
 
-    let identities = IDENTITIES
+    #[cfg(feature = "identity-debug")]
+    {
+        let secondary_key = super::read_process_value::<u32>(
+            actor
+                .wrapping_byte_add(ACTOR_PLAYER_KEY_OFFSET + 4)
+                .cast::<u32>(),
+        )
+        .unwrap_or_default();
+        let player_flags =
+            super::read_process_value::<u32>(actor.wrapping_byte_add(0x1AB64).cast::<u32>())
+                .unwrap_or_default();
+        info!(
+            "Actor identity probe: actor={actor_address:#x}, actor_index={actor_index}, type={character_type:#010x}, key={player_key:#010x}, secondary={secondary_key:#010x}, flags={player_flags:#010x}"
+        );
+    }
+
+    let mut identities = IDENTITIES
         .get_or_init(|| Mutex::new(IdentityStore::default()))
         .lock()
         .expect("player identity map lock poisoned")
         .identities_for_key(player_key);
-    if identities.is_empty() {
+    if identities.len() != 1 {
+        if identities.len() > 1 {
+            info!(
+                "Ambiguous player key ignored: actor={actor_address:#x}, actor_index={actor_index}, type={character_type:#010x}, key={player_key:#010x}, candidates={}",
+                identities.len()
+            );
+        }
         return Vec::new();
     }
 
-    let (actors, actor_was_added) = {
-        let mut actors = ACTORS
-            .get_or_init(|| Mutex::new(HashMap::new()))
-            .lock()
-            .expect("actor map lock poisoned");
-        let actors_for_character = actors.entry((player_key, character_type)).or_default();
-        let actor_was_added = actors_for_character
-            .insert(
-                actor_index,
-                StoredActor {
-                    address: actor_address,
-                    actor_index,
-                    character_type,
-                },
-            )
-            .is_none();
+    let identity = identities.pop().expect("identity count checked above");
+    info!(
+        "Player actor matched by unique key fallback: actor={actor_address:#x}, actor_index={actor_index}, type={character_type:#010x}, key={player_key:#010x}, party={}, key_offset={ACTOR_PLAYER_KEY_OFFSET:#x}, name={}",
+        identity.party_index,
+        identity.display_name.to_string_lossy()
+    );
 
-        (
-            actors_for_character.values().copied().collect::<Vec<_>>(),
-            actor_was_added,
-        )
-    };
+    ACTOR_IDENTITIES
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("actor identity cache lock poisoned")
+        .insert(actor_address, identity.clone());
 
-    let events = pair_actors_with_identities(actors, identities)
-        .into_iter()
-        .map(|(actor, identity)| {
-            if actor_was_added {
-                info!(
-                    "Player actor matched: actor={:#x}, actor_index={}, type={:#010x}, key={player_key:#010x}, party={}, offset={ACTOR_PLAYER_KEY_OFFSET:#x}, name={}",
-                    actor.address,
-                    actor.actor_index,
-                    actor.character_type,
-                    identity.party_index,
-                    identity.display_name.to_string_lossy()
-                );
-            }
-
-            PlayerIdentityEvent {
-                character_name: identity.character_name,
-                display_name: identity.display_name,
-                character_type: actor.character_type,
-                party_index: identity.party_index,
-                actor_index: actor.actor_index,
-                is_online: identity.is_online,
-            }
-        })
-        .collect::<Vec<_>>();
-
-    // When another same-character actor appears, emit every pairing so a
-    // provisional first-hit assignment is corrected immediately. Otherwise
-    // only refresh the actor that produced this damage event.
-    if actor_was_added {
-        events
-    } else {
-        events
-            .into_iter()
-            .filter(|event| event.actor_index == actor_index)
-            .collect()
-    }
+    vec![identity_event(identity, character_type, actor_index)]
 }
 
-fn pair_actors_with_identities(
-    mut actors: Vec<StoredActor>,
-    mut identities: Vec<StoredPlayerIdentity>,
-) -> Vec<(StoredActor, StoredPlayerIdentity)> {
-    actors.sort_by_key(|actor| actor.actor_index);
-    identities.sort_by_key(|identity| identity.party_index);
-    actors.into_iter().zip(identities).collect()
+fn identity_event(
+    identity: StoredPlayerIdentity,
+    character_type: u32,
+    actor_index: u32,
+) -> PlayerIdentityEvent {
+    PlayerIdentityEvent {
+        character_name: identity.character_name,
+        display_name: identity.display_name,
+        character_type,
+        party_index: identity.party_index,
+        actor_index,
+        is_online: identity.is_online,
+    }
 }
 
 fn read_actor_player_key(actor: *const usize) -> Option<u32> {
-    let mut player_key = 0u32;
-    let mut bytes_read = 0usize;
-    let result = unsafe {
-        ReadProcessMemory(
-            HANDLE(-1),
-            actor.byte_add(ACTOR_PLAYER_KEY_OFFSET).cast::<c_void>(),
-            (&mut player_key as *mut u32).cast::<c_void>(),
-            std::mem::size_of::<u32>(),
-            Some(&mut bytes_read),
-        )
-    };
-
-    if result.is_err()
-        || bytes_read != std::mem::size_of::<u32>()
-        || player_key == 0
-        || player_key == INVALID_PLAYER_KEY
-    {
-        return None;
-    }
-
-    Some(player_key)
+    super::read_process_value::<u32>(
+        actor
+            .wrapping_byte_add(ACTOR_PLAYER_KEY_OFFSET)
+            .cast::<u32>(),
+    )
+    .filter(|player_key| *player_key != 0 && *player_key != INVALID_PLAYER_KEY)
 }
 
-unsafe fn read_player_identity(snapshot: *const u8) -> Option<StoredPlayerIdentity> {
+fn read_actor_identity(actor: *const usize) -> Option<StoredPlayerIdentity> {
+    let snapshot = super::read_process_value::<*const u8>(
+        actor
+            .wrapping_byte_add(ACTOR_IDENTITY_SNAPSHOT_OFFSET)
+            .cast::<*const u8>(),
+    )?;
+    let identity = read_player_identity(snapshot)?;
+    should_cache_identity(&identity).then_some(identity)
+}
+
+fn read_player_identity(snapshot: *const u8) -> Option<StoredPlayerIdentity> {
     if snapshot.is_null() {
         return None;
     }
 
-    let is_online = snapshot
-        .byte_add(IS_ONLINE_OFFSET)
-        .cast::<u32>()
-        .read_unaligned();
-    let party_index = snapshot
-        .byte_add(PARTY_INDEX_OFFSET)
-        .cast::<u32>()
-        .read_unaligned();
+    let is_online = super::read_process_value::<u32>(
+        snapshot.wrapping_byte_add(IS_ONLINE_OFFSET).cast::<u32>(),
+    )?;
+    let party_index = super::read_process_value::<u32>(
+        snapshot.wrapping_byte_add(PARTY_INDEX_OFFSET).cast::<u32>(),
+    )?;
 
     if is_online > 1 || party_index > 3 {
         return None;
     }
 
-    let display_name = read_vbuffer(snapshot.byte_add(DISPLAY_NAME_OFFSET))?;
+    let display_name = read_vbuffer(snapshot.wrapping_byte_add(DISPLAY_NAME_OFFSET))?;
 
     if display_name.as_bytes().is_empty() {
         return None;
     }
 
-    let character_name = read_vbuffer(snapshot.byte_add(CHARACTER_NAME_OFFSET))
+    let character_name = read_vbuffer(snapshot.wrapping_byte_add(CHARACTER_NAME_OFFSET))
         .unwrap_or_else(|| CString::new("").expect("empty CString is valid"));
 
     Some(StoredPlayerIdentity {
@@ -367,16 +410,18 @@ unsafe fn read_player_identity(snapshot: *const u8) -> Option<StoredPlayerIdenti
     })
 }
 
-unsafe fn read_vbuffer(buffer: *const u8) -> Option<CString> {
-    let used_size = buffer.byte_add(0x10).cast::<usize>().read_unaligned();
-    let max_size = buffer.byte_add(0x18).cast::<usize>().read_unaligned();
+fn read_vbuffer(buffer: *const u8) -> Option<CString> {
+    let used_size =
+        super::read_process_value::<usize>(buffer.wrapping_byte_add(0x10).cast::<usize>())?;
+    let max_size =
+        super::read_process_value::<usize>(buffer.wrapping_byte_add(0x18).cast::<usize>())?;
 
     if used_size > MAX_PLAYER_NAME_BYTES || max_size < used_size || max_size > 0x1000 {
         return None;
     }
 
     let bytes_ptr = if max_size > VBUFFER_INLINE_CAPACITY {
-        buffer.cast::<*const u8>().read_unaligned()
+        super::read_process_value::<*const u8>(buffer.cast::<*const u8>())?
     } else {
         buffer
     };
@@ -385,8 +430,8 @@ unsafe fn read_vbuffer(buffer: *const u8) -> Option<CString> {
         return None;
     }
 
-    let bytes = std::slice::from_raw_parts(bytes_ptr, used_size);
-    std::str::from_utf8(bytes).ok()?;
+    let bytes = super::read_process_bytes(bytes_ptr, used_size)?;
+    std::str::from_utf8(&bytes).ok()?;
     CString::new(bytes).ok()
 }
 
@@ -395,8 +440,9 @@ mod tests {
     use std::ffi::CString;
 
     use super::{
-        pair_actors_with_identities, read_vbuffer, should_cache_identity, IdentityStore,
-        StoredActor, StoredPlayerIdentity, ACTOR_PLAYER_KEY_OFFSET,
+        identity_events_for_actor, read_vbuffer, should_cache_identity, IdentityStore,
+        StoredPlayerIdentity, ACTOR_IDENTITY_SNAPSHOT_OFFSET, ACTOR_PLAYER_KEY_OFFSET,
+        DISPLAY_NAME_OFFSET, IS_ONLINE_OFFSET, PARTY_INDEX_OFFSET,
     };
 
     fn identity(name: &str, party_index: u8, is_online: bool) -> StoredPlayerIdentity {
@@ -408,6 +454,29 @@ mod tests {
         }
     }
 
+    fn write_inline_vbuffer(buffer: &mut [u8], offset: usize, value: &str) {
+        let bytes = value.as_bytes();
+        assert!(bytes.len() <= 0x0F);
+        buffer[offset..offset + bytes.len()].copy_from_slice(bytes);
+        buffer[offset + 0x10..offset + 0x18].copy_from_slice(&bytes.len().to_ne_bytes());
+        buffer[offset + 0x18..offset + 0x20].copy_from_slice(&0x0Fusize.to_ne_bytes());
+    }
+
+    fn actor_with_identity(name: &str, party_index: u8) -> (Vec<u8>, Vec<u8>) {
+        let mut snapshot = vec![0u8; 0x250];
+        snapshot[IS_ONLINE_OFFSET..IS_ONLINE_OFFSET + 4].copy_from_slice(&1u32.to_ne_bytes());
+        snapshot[PARTY_INDEX_OFFSET..PARTY_INDEX_OFFSET + 4]
+            .copy_from_slice(&u32::from(party_index).to_ne_bytes());
+        write_inline_vbuffer(&mut snapshot, DISPLAY_NAME_OFFSET, name);
+
+        let mut actor = vec![0u8; ACTOR_IDENTITY_SNAPSHOT_OFFSET + std::mem::size_of::<usize>()];
+        actor[ACTOR_IDENTITY_SNAPSHOT_OFFSET
+            ..ACTOR_IDENTITY_SNAPSHOT_OFFSET + std::mem::size_of::<usize>()]
+            .copy_from_slice(&(snapshot.as_ptr() as usize).to_ne_bytes());
+
+        (actor, snapshot)
+    }
+
     #[test]
     fn reads_inline_utf8_player_name() {
         let mut buffer = [0u8; 0x20];
@@ -416,8 +485,22 @@ mod tests {
         buffer[0x10..0x18].copy_from_slice(&name.len().to_ne_bytes());
         buffer[0x18..0x20].copy_from_slice(&0x0Fusize.to_ne_bytes());
 
-        let value = unsafe { read_vbuffer(buffer.as_ptr()) }.expect("valid VBuffer");
+        let value = read_vbuffer(buffer.as_ptr()).expect("valid VBuffer");
         assert_eq!(value.to_str().unwrap(), "芙劳玩家");
+    }
+
+    #[test]
+    fn reads_heap_utf8_player_name() {
+        let name = "世界第一公主殿下".as_bytes().to_vec();
+        assert!(name.len() > 0x0F);
+        let mut buffer = [0u8; 0x20];
+        buffer[..std::mem::size_of::<usize>()]
+            .copy_from_slice(&(name.as_ptr() as usize).to_ne_bytes());
+        buffer[0x10..0x18].copy_from_slice(&name.len().to_ne_bytes());
+        buffer[0x18..0x20].copy_from_slice(&name.len().to_ne_bytes());
+
+        let value = read_vbuffer(buffer.as_ptr()).expect("valid heap VBuffer");
+        assert_eq!(value.to_str().unwrap(), "世界第一公主殿下");
     }
 
     #[test]
@@ -426,12 +509,13 @@ mod tests {
         buffer[0x10..0x18].copy_from_slice(&0x101usize.to_ne_bytes());
         buffer[0x18..0x20].copy_from_slice(&0x101usize.to_ne_bytes());
 
-        assert!(unsafe { read_vbuffer(buffer.as_ptr()) }.is_none());
+        assert!(read_vbuffer(buffer.as_ptr()).is_none());
     }
 
     #[test]
     fn uses_verified_actor_player_key_offset() {
         assert_eq!(ACTOR_PLAYER_KEY_OFFSET, 0x1AB40);
+        assert_eq!(ACTOR_IDENTITY_SNAPSHOT_OFFSET, 0x1AE90);
     }
 
     #[test]
@@ -458,27 +542,39 @@ mod tests {
     }
 
     #[test]
-    fn same_key_players_pair_by_actor_and_party_order() {
-        let actors = vec![
-            StoredActor {
-                address: 0x2000,
-                actor_index: 20,
-                character_type: 0x48ADDA36,
-            },
-            StoredActor {
-                address: 0x1000,
-                actor_index: 10,
-                character_type: 0x48ADDA36,
-            },
-        ];
-        let identities = vec![identity("Party 3", 3, true), identity("Party 1", 1, true)];
+    fn clearing_identities_removes_every_previous_party_slot() {
+        let mut identities = IdentityStore::default();
+        assert!(identities.insert(0x1111, identity("Player A", 1, true)));
+        assert!(identities.insert(0x2222, identity("Player B", 2, true)));
 
-        let pairs = pair_actors_with_identities(actors, identities);
-        assert_eq!(pairs[0].0.actor_index, 10);
-        assert_eq!(pairs[0].1.party_index, 1);
-        assert_eq!(pairs[0].1.display_name.to_str().unwrap(), "Party 1");
-        assert_eq!(pairs[1].0.actor_index, 20);
-        assert_eq!(pairs[1].1.party_index, 3);
-        assert_eq!(pairs[1].1.display_name.to_str().unwrap(), "Party 3");
+        identities.clear();
+
+        assert!(identities.identities_for_key(0x1111).is_empty());
+        assert!(identities.identities_for_key(0x2222).is_empty());
+    }
+
+    #[test]
+    fn three_same_character_players_keep_direct_party_identity() {
+        let character_type = 0x48ADDA36;
+        let cases = [("Party 3", 3, 0), ("Party 1", 1, 1), ("Party 2", 2, 2)];
+        let actors = cases
+            .iter()
+            .map(|(name, party_index, _)| actor_with_identity(name, *party_index))
+            .collect::<Vec<_>>();
+
+        for ((expected_name, expected_party, actor_index), (actor, _snapshot)) in
+            cases.iter().zip(actors.iter())
+        {
+            let events = identity_events_for_actor(
+                actor.as_ptr().cast::<usize>(),
+                character_type,
+                *actor_index,
+            );
+
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].actor_index, *actor_index);
+            assert_eq!(events[0].party_index, *expected_party);
+            assert_eq!(events[0].display_name.to_str().unwrap(), *expected_name);
+        }
     }
 }

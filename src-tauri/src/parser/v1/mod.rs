@@ -709,7 +709,16 @@ impl Parser {
             return false;
         }
 
-        self.finish_and_save_encounter()
+        let finished = self.finish_and_save_encounter();
+        if finished {
+            // "Play Again" does not emit the disabled area-enter hook. Drop
+            // the completed encounter's actor-to-party snapshot here, before
+            // the next battle's identity events arrive.
+            self.encounter.reset_player_data();
+            self.emit_party_update();
+        }
+
+        finished
     }
 
     fn finish_and_save_encounter(&mut self) -> bool {
@@ -1127,6 +1136,14 @@ mod tests {
     #[test]
     fn battle_end_event_stops_and_saves_once() {
         let mut parser = Parser::default();
+        parser.on_player_identity_event(PlayerIdentityEvent {
+            character_name: CString::new("First Character").unwrap(),
+            display_name: CString::new("First Player").unwrap(),
+            character_type: 0x4C714F77,
+            party_index: 0,
+            actor_index: 1,
+            is_online: false,
+        });
         parser.on_damage_event(DamageEvent {
             source: Actor {
                 index: 1,
@@ -1151,7 +1168,44 @@ mod tests {
 
         assert!(parser.on_battle_end_event());
         assert_eq!(parser.status, ParserStatus::Stopped);
+        assert!(parser.encounter.player_data.iter().all(Option::is_none));
         assert!(!parser.on_battle_end_event());
+
+        // The next battle's identities may arrive before its first hit. The
+        // first-hit reset must preserve this fresh mapping.
+        parser.on_player_identity_event(PlayerIdentityEvent {
+            character_name: CString::new("Second Character").unwrap(),
+            display_name: CString::new("Second Player").unwrap(),
+            character_type: 0xC3155079,
+            party_index: 0,
+            actor_index: 7,
+            is_online: false,
+        });
+        parser.on_damage_event(DamageEvent {
+            source: Actor {
+                index: 7,
+                actor_type: 0xC3155079,
+                parent_actor_type: 0xC3155079,
+                parent_index: 7,
+            },
+            target: Actor {
+                index: 2,
+                actor_type: 0x12345678,
+                parent_actor_type: 0x12345678,
+                parent_index: 2,
+            },
+            damage: 200,
+            flags: 0,
+            action_id: ActionType::Normal(1),
+            attack_rate: None,
+            stun_value: None,
+            damage_cap: None,
+            details: None,
+        });
+
+        let next_player = parser.encounter.player_data[0].as_ref().unwrap();
+        assert_eq!(next_player.actor_index, 7);
+        assert_eq!(next_player.display_name, "Second Player");
     }
 
     #[test]
@@ -1230,12 +1284,16 @@ mod tests {
     }
 
     #[test]
-    fn same_character_players_keep_distinct_online_names() {
+    fn three_same_character_players_keep_distinct_online_names() {
         let mut parser = Parser::default();
 
-        // Actor IDs intentionally run opposite to party order. Nicknames must
-        // stay in their real party slots instead of being sorted by actor ID.
-        for (actor_index, party_index, display_name) in [(20, 1, "Player A"), (10, 2, "Player B")] {
+        // Events intentionally arrive in party order 3, 1, 2 while actor IDs
+        // run in another order. Nicknames must stay in their verified slots.
+        for (actor_index, party_index, display_name) in [
+            (30, 3, "Player C"),
+            (20, 1, "Player A"),
+            (10, 2, "Player B"),
+        ] {
             parser.on_player_identity_event(PlayerIdentityEvent {
                 character_name: CString::new(display_name).unwrap(),
                 display_name: CString::new(display_name).unwrap(),
@@ -1253,9 +1311,10 @@ mod tests {
             .flatten()
             .collect::<Vec<_>>();
 
-        assert_eq!(players.len(), 2);
+        assert_eq!(players.len(), 3);
         assert_eq!(players[0].display_name, "Player A");
         assert_eq!(players[1].display_name, "Player B");
+        assert_eq!(players[2].display_name, "Player C");
         assert_eq!(
             parser.encounter.player_data[1]
                 .as_ref()
@@ -1270,9 +1329,24 @@ mod tests {
                 .actor_index,
             10
         );
-        assert_ne!(players[0].actor_index, players[1].actor_index);
-        assert_eq!(players[0].character_type, CharacterType::Pl2800);
-        assert_eq!(players[1].character_type, CharacterType::Pl2800);
+        assert_eq!(
+            parser.encounter.player_data[3]
+                .as_ref()
+                .unwrap()
+                .actor_index,
+            30
+        );
+        assert_eq!(
+            players
+                .iter()
+                .map(|player| player.actor_index)
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            3
+        );
+        assert!(players
+            .iter()
+            .all(|player| player.character_type == CharacterType::Pl2800));
     }
 
     #[test]

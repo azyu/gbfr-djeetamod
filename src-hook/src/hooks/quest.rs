@@ -64,6 +64,7 @@ impl OnBattleEndHook {
 
     fn run(&self, a1: *const usize) {
         unsafe { OnBattleEnd.call(a1) };
+        super::reset_battle_identity_state();
         let _ = self.tx.send(Message::OnBattleEnd);
     }
 }

@@ -38,6 +38,24 @@ struct ActorIds {
     next_id: u32,
 }
 
+impl ActorIds {
+    fn id_for(&mut self, instance: usize) -> u32 {
+        if let Some(id) = self.by_instance.get(&instance) {
+            return *id;
+        }
+
+        let id = self.next_id;
+        self.next_id = self.next_id.wrapping_add(1);
+        self.by_instance.insert(instance, id);
+        id
+    }
+
+    fn reset(&mut self) {
+        self.by_instance.clear();
+        self.next_id = 0;
+    }
+}
+
 static ACTOR_IDS: OnceLock<Mutex<ActorIds>> = OnceLock::new();
 
 pub fn setup_hooks(tx: event::Tx) -> Result<()> {
@@ -54,7 +72,12 @@ pub fn setup_hooks(tx: event::Tx) -> Result<()> {
     // Game 2.0.2 still keeps player names in the per-actor identity snapshot, but
     // the function that refreshes it moved. This hook deliberately reads only the
     // stable identity fields; equipment remains disabled until its layout is known.
-    OnLoadPlayerIdentityHook::new(tx.clone()).setup(&process)?;
+    match OnLoadPlayerIdentityHook::new(tx.clone()).setup(&process) {
+        Ok(()) => info!("Player identity refresh hook enabled"),
+        Err(error) => warn!(
+            "Player identity refresh hook unavailable; using direct actor identity reads: {error}"
+        ),
+    }
 
     // This hooks the actual reward/result setup rather than the generic result
     // input operation, which is also reused by fall recovery and boss mechanics.
@@ -94,38 +117,47 @@ pub fn actor_idx(actor_ptr: *const usize) -> u32 {
         .lock()
         .expect("actor ID map lock poisoned");
 
-    let instance = actor_ptr as usize;
-
-    if let Some(id) = actor_ids.by_instance.get(&instance) {
-        return *id;
-    }
-
-    let id = actor_ids.next_id;
-    actor_ids.next_id = actor_ids.next_id.wrapping_add(1);
-    actor_ids.by_instance.insert(instance, id);
-    id
+    actor_ids.id_for(actor_ptr as usize)
 }
 
-// Returns the parent entity of the source entity if necessary.
+/// Actor allocations and player records are reused when selecting "Play Again".
+/// Clear every battle-scoped identity cache at the real result-screen boundary
+/// so the next encounter cannot inherit actor IDs or party assignments.
+pub(super) fn reset_battle_identity_state() {
+    if let Some(actor_ids) = ACTOR_IDS.get() {
+        actor_ids
+            .lock()
+            .expect("actor ID map lock poisoned")
+            .reset();
+    }
+
+    player::reset_battle_identity_state();
+    info!("Battle identity caches reset");
+}
+
+// Returns the concrete parent player actor of a known child/form source.
 #[inline(always)]
-pub fn get_source_parent(source_type_id: u32, source: *const usize) -> Option<(u32, u32)> {
+pub fn get_source_parent_instance(
+    source_type_id: u32,
+    source: *const usize,
+) -> Option<(u32, *const usize)> {
     match source_type_id {
         // Pl0700Ghost -> Pl0700
         0x2AF678E8 => {
             let parent_instance = parent_specified_instance_at(source, 0xE48)?;
 
-            Some((actor_type_id(parent_instance), actor_idx(parent_instance)))
+            Some((actor_type_id(parent_instance), parent_instance))
         }
         // Pl0700GhostSatellite -> Pl0700
         0x8364C8BC => {
             let parent_instance = parent_specified_instance_at(source, 0x508)?;
 
-            Some((actor_type_id(parent_instance), actor_idx(parent_instance)))
+            Some((actor_type_id(parent_instance), parent_instance))
         }
         // Wp1890: Cagliostro's Ouroboros Dragon Sled -> Pl1800
         0xC9F45042 => {
             let parent_instance = parent_specified_instance_at(source, 0x578)?;
-            Some((actor_type_id(parent_instance), actor_idx(parent_instance)))
+            Some((actor_type_id(parent_instance), parent_instance))
         }
         // Pl2000: Id's Dragon Form -> Pl1900
         ID_DRAGON_TYPE => {
@@ -136,20 +168,27 @@ pub fn get_source_parent(source_type_id: u32, source: *const usize) -> Option<(u
             // function through this cross-object pointer: the known concrete
             // parent type plus the safe pointer reads below avoid turning a
             // stale game layout into an access violation inside the hook.
-            Some((ID_HUMAN_TYPE, actor_idx(parent_instance)))
+            Some((ID_HUMAN_TYPE, parent_instance))
         }
         // Wp2290: Seofon's Avatar
         0x5B1AB457 => {
             let parent_instance = parent_specified_instance_at(source, 0x500)?;
-            Some((actor_type_id(parent_instance), actor_idx(parent_instance)))
+            Some((actor_type_id(parent_instance), parent_instance))
         }
         // Pl0600PlantRose
         0x69C0CA71 => {
             let parent_instance = parent_specified_instance_at(source, 0x7E0)?;
-            Some((actor_type_id(parent_instance), actor_idx(parent_instance)))
+            Some((actor_type_id(parent_instance), parent_instance))
         }
         _ => None,
     }
+}
+
+// Returns the parent identity used by damage/SBA aggregation.
+#[inline(always)]
+pub fn get_source_parent(source_type_id: u32, source: *const usize) -> Option<(u32, u32)> {
+    get_source_parent_instance(source_type_id, source)
+        .map(|(parent_type, parent)| (parent_type, actor_idx(parent)))
 }
 
 // Returns the specified instance of the parent entity.
@@ -193,9 +232,37 @@ pub(super) fn read_process_value<T: Copy>(address: *const T) -> Option<T> {
     Some(unsafe { value.assume_init() })
 }
 
+/// Reads a short byte range from game memory without dereferencing a
+/// version-fragile pointer inside the injected DLL.
+pub(super) fn read_process_bytes(address: *const u8, length: usize) -> Option<Vec<u8>> {
+    if address.is_null() || length == 0 {
+        return (length == 0).then(Vec::new);
+    }
+
+    let mut bytes = vec![0u8; length];
+    let mut bytes_read = 0usize;
+    let result = unsafe {
+        ReadProcessMemory(
+            HANDLE(-1),
+            address.cast::<c_void>(),
+            bytes.as_mut_ptr().cast::<c_void>(),
+            length,
+            Some(&mut bytes_read),
+        )
+    };
+
+    if result.is_err() || bytes_read != length {
+        return None;
+    }
+
+    Some(bytes)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{actor_idx, parent_specified_instance_at, ID_DRAGON_PARENT_ENTITY_OFFSET};
+    use super::{
+        actor_idx, parent_specified_instance_at, ActorIds, ID_DRAGON_PARENT_ENTITY_OFFSET,
+    };
 
     #[test]
     fn concrete_actor_instances_receive_distinct_ids() {
@@ -204,6 +271,19 @@ mod tests {
 
         assert_eq!(actor_idx(first), actor_idx(first));
         assert_ne!(actor_idx(first), actor_idx(second));
+    }
+
+    #[test]
+    fn actor_ids_restart_after_a_battle_reset() {
+        let mut actor_ids = ActorIds::default();
+
+        assert_eq!(actor_ids.id_for(0x1000), 0);
+        assert_eq!(actor_ids.id_for(0x2000), 1);
+
+        actor_ids.reset();
+
+        assert_eq!(actor_ids.id_for(0x2000), 0);
+        assert_eq!(actor_ids.id_for(0x1000), 1);
     }
 
     #[test]
