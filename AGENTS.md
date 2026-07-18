@@ -58,6 +58,7 @@ After packaging, require SHA-256 equality between `target/release/hook.dll` and 
 ## Change discipline
 
 - Work on `master` only when the user explicitly requests it.
+- Execute implementation plans inline in the current session by default. Use subagents or a separate worktree only when the user explicitly requests them.
 - Use tests before changing lifecycle, hook, parser, handshake, geometry, or throttling behavior.
 - Append protocol variants; never reorder existing bincode variants.
 - Preserve `LICENSE` and upstream credit for False Spring and onelittlechildawa.
