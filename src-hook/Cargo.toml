@@ -13,8 +13,8 @@ identity-debug = []
 
 [package.metadata.winres]
 OriginalFilename = "hook.dll"
-CompanyName = "GBFR Korean Damage Meter contributors"
-LegalCopyright = "Copyright (C) 2024 False Spring; 2026 onelittlechildawa; 2026 GBFR Korean Damage Meter contributors"
+CompanyName = "Djeeta MOD contributors"
+LegalCopyright = "Copyright (C) 2024 False Spring; 2026 onelittlechildawa; 2026 Djeeta MOD contributors"
 
 [dependencies]
 anyhow = "1.0"

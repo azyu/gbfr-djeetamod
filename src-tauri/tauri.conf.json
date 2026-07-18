@@ -6,7 +6,7 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "GBFR Korean Damage Meter",
+    "productName": "Djeeta MOD",
     "version": "0.1.0"
   },
   "tauri": {
@@ -37,7 +37,7 @@
     },
     "windows": [
       {
-        "title": "GBFR Korean Damage Meter",
+        "title": "Djeeta MOD",
         "label": "main",
         "fullscreen": false,
         "width": 330,
@@ -51,7 +51,7 @@
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu"
       },
       {
-        "title": "GBFR Korean Damage Meter - Logs",
+        "title": "Djeeta MOD - Logs",
         "label": "logs",
         "url": "/logs",
         "fullscreen": false,
@@ -71,9 +71,9 @@
     "bundle": {
       "active": true,
       "targets": ["msi"],
-      "identifier": "com.azyu.gbfr-korean-damage-meter",
-      "longDescription": "Unverified test build of a Korean damage meter targeting Granblue Fantasy: Relink 2.0.2",
-      "shortDescription": "GBFR Korean Damage Meter Test Build",
+      "identifier": "com.azyu.djeeta-mod",
+      "longDescription": "Unverified test build of Djeeta MOD targeting Granblue Fantasy: Relink 2.0.2",
+      "shortDescription": "Djeeta MOD Test Build",
       "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
       "resources": ["hook.dll", "assets/*", "lang/*"],
       "windows": {

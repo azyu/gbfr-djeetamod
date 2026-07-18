@@ -57,7 +57,7 @@ const SettingsPage = () => {
   return (
     <Box>
       <Stack gap={4} mb="md">
-        <Text fw={700}>GBFR Korean Damage Meter</Text>
+        <Text fw={700}>Djeeta MOD</Text>
         <Text size="sm" c="dimmed">
           GBFR Logs와 Awa Edition을 기반으로 제작되었습니다.
         </Text>
