@@ -1,4 +1,4 @@
-# GBFR Korean Damage Meter
+# Djeeta MOD
 
 Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Windows x64 파티 데미지 미터 테스트 빌드입니다. 캐릭터별 누적 피해, 상대 비율 바와 DPS를 한국어 소형 오버레이로 표시합니다.
 
@@ -8,7 +8,7 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 
 1. 릴리스의 MSI를 설치합니다.
 2. 게임을 먼저 실행합니다.
-3. GBFR Korean Damage Meter를 실행합니다.
+3. Djeeta MOD를 실행합니다.
 4. 트레이 메뉴의 클릭 통과를 끄면 화면 창을 이동하거나 크기를 조절할 수 있고, 다시 켜면 입력이 게임으로 전달됩니다.
 
 제거는 Windows의 설치된 앱에서 수행합니다. 사용자 설정과 로그는 `%AppData%` 아래 애플리케이션 데이터 폴더에 남을 수 있습니다.
@@ -21,6 +21,10 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 - 수치는 해당 전투의 보상 화면이 열리기 직전까지 유지됩니다.
 - 게임 2.0.2용 필수 훅을 찾지 못하면 설정 화면에 연결 오류를 표시합니다.
 
+## 성능 영향
+
+Djeeta MOD는 게임의 그래픽 설정이나 렌더링 품질을 변경하지 않습니다. 다만 게임 프로세스의 피해 훅, named pipe 파싱, 별도 투명 WebView 오버레이가 CPU와 메모리를 사용합니다. 오버레이 표시는 250ms 간격으로 갱신되고 WebView GPU 가속은 비활성화되어 있어 예상 GPU 부담은 작지만, 실제 게임 비교 측정 전에는 성능 영향이 전혀 없다고 보증하지 않습니다.
+
 ## 주의
 
 이 도구는 DLL 주입, 게임 메모리 읽기와 런타임 코드 패치를 사용합니다. Cygames가 공식 허용하거나 화이트리스트에 등록한 도구가 아니며, 온라인 사용과 계정 제재 위험이 없다고 보증하지 않습니다. 먼저 오프라인 또는 비공개 환경에서 사용하십시오. 게임 업데이트 뒤에는 호환되지 않거나 충돌할 수 있습니다.
@@ -29,8 +33,8 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 
 ## 0.1.0 빌드 해시
 
-- MSI: `598FEA6D228EEEF9BD9EDE1BA33C99588A3D28ACDB40E8B03C41AA014A92570F`
-- `hook.dll`: `3D5D83B34E7B476D0A107985B8218B72B6F293D8EAA88E5F207F8978FFADD68B`
+- MSI: `9EB3F92E767786C353062BBB0AF2F1F5F6C62933C8718A54BA96E61925E35CB0`
+- `hook.dll`: `2A60CE37EAA947E6361AE032FA2F89DD4F1EFACFBFA6BE856BED7741DB45081F`
 
 ## 소스 빌드
 
