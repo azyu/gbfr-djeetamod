@@ -6,6 +6,7 @@ use protocol::{EquipmentCaptureStatus, LocalEquipmentSnapshotEvent};
 use serde::{Deserialize, Serialize};
 
 use self::analyzer::{analyze_sources, TraitAnalysis};
+use crate::parser::constants::CharacterType;
 
 const TRAIT_CAP_CATALOG: &str = include_str!("../../assets/trait-caps.json");
 
@@ -36,7 +37,7 @@ pub enum CharacterEquipmentStatus {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CharacterEquipmentAnalysis {
-    pub character_type: u32,
+    pub character_type: CharacterType,
     pub status: CharacterEquipmentStatus,
     pub traits: Vec<TraitAnalysis>,
 }
@@ -104,7 +105,7 @@ impl EquipmentState {
                     EquipmentCaptureStatus::Unsupported => None,
                 };
                 CharacterEquipmentAnalysis {
-                    character_type: snapshot.character_type,
+                    character_type: CharacterType::from_hash(snapshot.character_type),
                     status: if analyses.is_some() {
                         CharacterEquipmentStatus::Complete
                     } else {
@@ -114,7 +115,7 @@ impl EquipmentState {
                 }
             })
             .collect::<Vec<_>>();
-        characters.sort_by_key(|character| character.character_type);
+        characters.sort_by_key(|character| character.character_type.to_string());
         EquipmentAnalysisResponse {
             connected: self.connected,
             characters,

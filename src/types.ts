@@ -246,6 +246,45 @@ export type PartyUpdateEvent = {
   payload: Array<PlayerData | null>;
 };
 
+export type EquipmentSourceKind =
+  | "sigilPrimary"
+  | "sigilSecondary"
+  | "weapon"
+  | "wrightstone"
+  | "masterTrait"
+  | "summon";
+
+export type EquippedTraitSource = {
+  kind: EquipmentSourceKind;
+  slot: number;
+  itemId: number;
+  traitId: number;
+  traitLevel: number;
+};
+
+export type TraitAnalysisState = "overflow" | "capped" | "below" | "unknown";
+export type CharacterEquipmentStatus = "complete" | "unsupported";
+
+export type TraitAnalysis = {
+  traitId: number;
+  totalLevel: number;
+  maxLevel: number | null;
+  overflowLevel: number;
+  state: TraitAnalysisState;
+  sources: EquippedTraitSource[];
+};
+
+export type CharacterEquipmentAnalysis = {
+  characterType: CharacterType;
+  status: CharacterEquipmentStatus;
+  traits: TraitAnalysis[];
+};
+
+export type EquipmentAnalysisResponse = {
+  connected: boolean;
+  characters: CharacterEquipmentAnalysis[];
+};
+
 export enum MeterColumns {
   Name = "name",
   DPS = "dps",

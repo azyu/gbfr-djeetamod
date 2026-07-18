@@ -3,13 +3,15 @@ import "./Logs.css";
 
 import { AppShell, Burger, Group, NavLink, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { Gear, House } from "@phosphor-icons/react";
+import { ChartBar, Gear, House } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
 import { Toaster } from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 
 const Layout = () => {
+  const { t } = useTranslation();
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(false);
   const { open_log_on_save } = useMeterSettingsStore((state) => ({ open_log_on_save: state.open_log_on_save }));
@@ -54,6 +56,12 @@ const Layout = () => {
         <AppShell.Navbar p="sm">
           <AppShell.Section grow>
             <NavLink label="Logs" leftSection={<House size="1rem" />} component={Link} to="/logs" />
+            <NavLink
+              label={t("ui.equipment-analysis.title")}
+              leftSection={<ChartBar size="1rem" />}
+              component={Link}
+              to="/logs/equipment"
+            />
           </AppShell.Section>
           <AppShell.Section>
             <NavLink label="Settings" leftSection={<Gear size="1rem" />} component={Link} to="/logs/settings" />

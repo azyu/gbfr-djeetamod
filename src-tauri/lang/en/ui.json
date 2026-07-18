@@ -10,6 +10,29 @@
       "disconnected": "Game disconnected",
       "unsupported": "The game 2.0.2 hook was not found"
     },
+    "equipment-analysis": {
+      "title": "Equipment Trait Analysis",
+      "select-character": "Select character",
+      "trait": "Trait",
+      "level": "Current / Max",
+      "status": "Status",
+      "sources": "Sources",
+      "overflow": "over",
+      "capped": "Max",
+      "below": "Normal",
+      "unknown": "Maximum unverified",
+      "unsupported": "Equipment information unsupported",
+      "waiting-game": "Waiting for game connection",
+      "waiting-equipment": "Waiting for equipment information",
+      "source": {
+        "sigilPrimary": "Sigil primary",
+        "sigilSecondary": "Sigil secondary",
+        "weapon": "Weapon",
+        "wrightstone": "Wrightstone",
+        "masterTrait": "Master Trait",
+        "summon": "Summon"
+      }
+    },
     "successful-save": "Saved encounter to logs",
     "unsuccessful-save": "Failed to save encounter to logs: {{error}}",
     "on-area-enter": "Entered area..",

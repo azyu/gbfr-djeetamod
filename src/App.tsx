@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { Meter } from "./pages/Meter";
 
+import { EquipmentAnalysis } from "./pages/EquipmentAnalysis";
 import Logs from "./pages/Logs";
 import SettingsPage from "./pages/Settings";
 import { IndexPage as LogIndexPage } from "./pages/logs/Index";
@@ -16,6 +17,7 @@ export const App = () => {
         <Route path="/" element={<Meter />} />
         <Route path="/logs" element={<Logs />}>
           <Route index element={<LogIndexPage />} />
+          <Route path="equipment" element={<EquipmentAnalysis />} />
           <Route path=":id" element={<LogViewPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
