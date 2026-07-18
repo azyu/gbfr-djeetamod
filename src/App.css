@@ -1,0 +1,220 @@
+.app {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-content {
+  height: 100vh;
+  margin-top: 30px;
+  overflow: auto;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.app-content:hover {
+  background: rgba(22, 22, 22, 0.8) !important;
+}
+
+.titlebar {
+  height: 30px;
+  user-select: none;
+  display: flex;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.titlebar-left,
+.titlebar-right {
+  display: flex;
+  align-items: center;
+}
+
+.titlebar-left {
+  flex: 2;
+  justify-content: flex-start;
+}
+
+.titlebar-right {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.titlebar-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+}
+
+.titlebar-button:hover {
+  background: var(--mantine-color-blue-light-color);
+}
+
+.titlebar .item {
+  padding-right: 3px;
+}
+
+.version {
+  padding: 0 3px;
+}
+
+.version-number {
+  color: #696969;
+}
+
+.status {
+  flex: 1;
+  text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.status .status-text {
+  padding: 0 6px;
+}
+
+.status .status-icon {
+  display: flex;
+}
+
+.unit {
+  color: #e6e6e6;
+}
+
+.table {
+  table-layout: fixed;
+  text-align: left;
+  border: none;
+  border-spacing: 0;
+  user-select: none;
+}
+
+.table .header-name {
+  width: 100%;
+  padding: 2px 8px;
+  min-width: 50px;
+}
+
+.table .header-column {
+  font-size: 14px;
+  width: 4.5rem;
+}
+.table.full-values .header-column {
+  width: 6rem;
+}
+
+.table .header-name,
+.table .header-column {
+  cursor: pointer;
+}
+
+/* @TODO(false): Abusing TR as Button */
+.table .player-row,
+.table .skill-row {
+  cursor: pointer;
+  position: relative;
+}
+
+.skill-row:hover {
+  background: rgba(51, 51, 51, 0.8);
+}
+
+.skill-row.nested .damage-bar {
+  filter: brightness(0.5);
+}
+
+.skill-row.nested .row-data {
+  color: #cccccc;
+}
+
+.table .player-row:hover {
+  box-shadow:
+    0 5px 3px 0 rgb(0 0 0 / 0.1),
+    0 1px 2px -1px rgb(0 0 0 / 0.1);
+}
+
+.table .player-row,
+.table .skill-row,
+.table .damage-bar {
+  color: white;
+  font-size: 14px;
+  height: 27px;
+}
+
+.table .damage-bar {
+  z-index: 1;
+  position: absolute;
+  left: 0;
+  box-shadow:
+    0 1px 3px 0 rgb(0 0 0 / 0.1),
+    0 1px 2px -1px rgb(0 0 0 / 0.1);
+  transition: width 0.1s ease-in-out;
+}
+
+.skill-row .row-data,
+.player-row .row-data,
+.row-button {
+  z-index: 2;
+  position: inherit;
+  padding: 0 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.skill-row .row-data.nested {
+  padding: 0 6px 0 12px;
+}
+
+.row-button {
+  width: 1em;
+}
+
+.player-table {
+  padding-bottom: 60px;
+  text-shadow: rgba(32, 29, 29, 0.8) 0px 1px 3px;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.transparent-bg {
+  background: rgba(22, 22, 22, 0.8);
+}
+
+.font-sm {
+  font-size: 12px;
+}
+
+.p4 {
+  padding: 4px;
+}
+
+@media only screen and (max-width: 325px) {
+  .encounter-totalDamage,
+  .encounter-totalDps {
+    display: none;
+  }
+
+  .table .header-column {
+    width: 55px;
+  }
+
+  .table .dropdown,
+  .table .row-button {
+    display: none;
+  }
+}
