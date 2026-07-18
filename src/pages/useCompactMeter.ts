@@ -40,16 +40,38 @@ export default function useCompactMeter() {
       listen<EncounterState>("on-area-enter", () => {
         pendingEncounter.current = DEFAULT_ENCOUNTER_STATE;
       }),
-      listen<ConnectionState>("connection-state", (event) => {
-        setConnectionState(event.payload);
-        if (event.payload !== "connected") pendingEncounter.current = DEFAULT_ENCOUNTER_STATE;
-      }),
     ];
     const interval = window.setInterval(() => setEncounterState(pendingEncounter.current), UPDATE_INTERVAL_MS);
 
     return () => {
       window.clearInterval(interval);
       void Promise.all(subscriptions).then((unlisten) => unlisten.forEach((dispose) => dispose()));
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    const updateConnection = (state: ConnectionState) => {
+      setConnectionState(state);
+      if (state !== "connected") pendingEncounter.current = DEFAULT_ENCOUNTER_STATE;
+    };
+
+    void listen<ConnectionState>("connection-state", (event) => updateConnection(event.payload)).then(
+      async (unlisten) => {
+        if (disposed) {
+          unlisten();
+          return;
+        }
+        unsubscribe = unlisten;
+        const currentState = await invoke<ConnectionState>("get_connection_state");
+        if (!disposed) updateConnection(currentState);
+      }
+    );
+
+    return () => {
+      disposed = true;
+      unsubscribe?.();
     };
   }, []);
 

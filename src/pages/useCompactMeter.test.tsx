@@ -17,7 +17,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("@tauri-apps/api", () => ({
-  invoke: vi.fn(async () => undefined),
+  invoke: vi.fn(async (command: string) => (command === "get_connection_state" ? "connected" : undefined)),
 }));
 
 vi.mock("@/stores/useMeterSettingsStore", () => ({
@@ -72,4 +72,10 @@ it("publishes only the newest encounter every 250ms and clears on disconnect", a
   act(() => mocks.listeners.get("connection-state")?.({ payload: "disconnected" }));
   act(() => vi.advanceTimersByTime(250));
   expect(result.current.rows).toEqual([]);
+});
+
+it("reads a connection established before the listeners mount", async () => {
+  const { result } = renderHook(() => useCompactMeter());
+
+  await vi.waitFor(() => expect(result.current.connectionState).toBe("connected"));
 });

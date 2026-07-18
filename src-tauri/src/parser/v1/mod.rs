@@ -696,28 +696,18 @@ impl Parser {
         }
     }
 
-    /// Saves an active encounter after combat has been quiet long enough.
-    ///
-    /// The status changes before the database write, so future timer ticks cannot save
-    /// the same battle more than once.
-    pub fn auto_save_if_inactive(&mut self, now: i64) -> bool {
-        if self.status != ParserStatus::InProgress
-            || !self.has_damage()
-            || now - self.derived_state.end_time < AUTO_SAVE_INACTIVITY_MS
-        {
-            return false;
-        }
-
-        self.finish_and_save_encounter()
+    /// The required reward hook is the only boundary that may finish a live battle.
+    pub fn auto_save_if_inactive(&mut self, _now: i64) -> bool {
+        false
     }
 
     /// Handles the game 2.0 result-screen signal without depending on quest memory.
     pub fn on_battle_end_event(&mut self) -> bool {
-        if self.status != ParserStatus::InProgress || !self.has_damage() {
-            return false;
-        }
-
-        let saved = self.finish_and_save_encounter();
+        let saved = if self.status == ParserStatus::InProgress && self.has_damage() {
+            self.finish_and_save_encounter()
+        } else {
+            false
+        };
 
         // "Play Again" does not emit the disabled area-enter hook. Drop the
         // completed encounter and its actor-to-party snapshot before the next
@@ -1253,7 +1243,7 @@ mod tests {
     }
 
     #[test]
-    fn inactive_encounter_is_saved_once() {
+    fn inactivity_does_not_split_a_live_battle() {
         let mut parser = Parser::default();
         let event = DamageEvent {
             source: Actor {
@@ -1277,13 +1267,36 @@ mod tests {
             details: None,
         };
 
-        parser.on_damage_event(event);
-        let last_damage_at = parser.derived_state.end_time;
+        parser.on_damage_event_at(event.clone(), 1_000);
 
-        assert!(!parser.auto_save_if_inactive(last_damage_at + 60_000));
-        assert!(parser.auto_save_if_inactive(last_damage_at + AUTO_SAVE_INACTIVITY_MS));
-        assert_eq!(parser.status, ParserStatus::Stopped);
-        assert!(!parser.auto_save_if_inactive(last_damage_at + AUTO_SAVE_INACTIVITY_MS * 2));
+        assert!(!parser.auto_save_if_inactive(1_000 + AUTO_SAVE_INACTIVITY_MS));
+
+        let mut later_event = event;
+        later_event.damage = 200;
+        parser.on_damage_event_at(later_event, 1_000 + AUTO_SAVE_INACTIVITY_MS + 1);
+
+        assert_eq!(parser.status, ParserStatus::InProgress);
+        assert_eq!(parser.derived_state.total_damage, 300);
+        assert_eq!(parser.derived_state.start_time, 1_000);
+    }
+
+    #[test]
+    fn reward_clears_stale_identity_even_without_active_damage() {
+        let mut parser = Parser::default();
+        parser.on_player_identity_event(PlayerIdentityEvent {
+            character_name: CString::new("Stale Character").unwrap(),
+            display_name: CString::new("Stale Player").unwrap(),
+            character_type: 0x4C714F77,
+            party_index: 0,
+            actor_index: 1,
+            is_online: false,
+        });
+
+        assert!(!parser.on_battle_end_event());
+        assert_eq!(parser.status, ParserStatus::Waiting);
+        assert!(parser.encounter.player_data.iter().all(Option::is_none));
+        assert!(parser.encounter.raw_event_log.is_empty());
+        assert_eq!(parser.derived_state.total_damage, 0);
     }
 
     #[test]

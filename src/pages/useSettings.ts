@@ -2,6 +2,7 @@ import { SUPPORTED_LANGUAGES } from "@/i18n";
 import { useMeterSettingsStore } from "@/stores/useMeterSettingsStore";
 import { ConnectionState, MeterColumns } from "@/types";
 import { DropResult } from "@hello-pangea/dnd";
+import { invoke } from "@tauri-apps/api";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -47,9 +48,23 @@ export default function useSettings() {
   const { i18n } = useTranslation();
 
   useEffect(() => {
-    const subscription = listen<ConnectionState>("connection-state", (event) => setConnectionState(event.payload));
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    void listen<ConnectionState>("connection-state", (event) => setConnectionState(event.payload)).then(
+      async (unlisten) => {
+        if (disposed) {
+          unlisten();
+          return;
+        }
+        unsubscribe = unlisten;
+        const currentState = await invoke<ConnectionState>("get_connection_state");
+        if (!disposed) setConnectionState(currentState);
+      }
+    );
+
     return () => {
-      void subscription.then((unlisten) => unlisten());
+      disposed = true;
+      unsubscribe?.();
     };
   }, []);
 

@@ -57,9 +57,9 @@ const SettingsPage = () => {
   return (
     <Box>
       <Stack gap={4} mb="md">
-        <Text fw={700}>GBFR Logs Awa Edition</Text>
+        <Text fw={700}>GBFR Korean Damage Meter</Text>
         <Text size="sm" c="dimmed">
-          Maintained and modified by onelittlechildawa. Based on the original open-source GBFR Logs project.
+          GBFR Logs와 Awa Edition을 기반으로 제작되었습니다.
         </Text>
         <Text size="sm" c="dimmed">
           {t(`ui.connection.${connectionState}`)}

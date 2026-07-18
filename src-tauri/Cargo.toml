@@ -1,8 +1,8 @@
 [package]
 name = "gbfr-logs"
-version = "1.8.6"
-description = "GBFR Logs Awa Edition"
-authors = ["onelittlechildawa"]
+version = "0.1.0"
+description = "Korean damage meter for Granblue Fantasy: Relink"
+authors = ["GBFR Korean Damage Meter contributors", "onelittlechildawa", "False Spring"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -1,6 +1,6 @@
 [package]
 name = "hook"
-version = "1.8.6"
+version = "0.1.0"
 edition = "2021"
 
 [lib]
@@ -13,8 +13,8 @@ identity-debug = []
 
 [package.metadata.winres]
 OriginalFilename = "hook.dll"
-CompanyName = "onelittlechildawa"
-LegalCopyright = "Copyright (C) 2026 onelittlechildawa; based on GBFR Logs by False Spring"
+CompanyName = "GBFR Korean Damage Meter contributors"
+LegalCopyright = "Copyright (C) 2024 False Spring; 2026 onelittlechildawa; 2026 GBFR Korean Damage Meter contributors"
 
 [dependencies]
 anyhow = "1.0"

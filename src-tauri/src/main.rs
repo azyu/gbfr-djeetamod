@@ -6,7 +6,10 @@ use std::{
     fs::File,
     io::Write,
     path::Path,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
 };
 
 use anyhow::Context;
@@ -37,14 +40,42 @@ mod parser;
 struct AlwaysOnTop(AtomicBool);
 struct ClickThrough(AtomicBool);
 struct DebugMode(AtomicBool);
+struct ConnectionStatus(Mutex<ConnectionState>);
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 enum ConnectionState {
     Searching,
     Connected,
     Disconnected,
     Unsupported,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum HookHandshakeState {
+    Awaiting,
+    Ready,
+    Unsupported,
+    Legacy,
+}
+
+fn accept_hook_message(state: &mut HookHandshakeState, message: &Message) -> bool {
+    match message {
+        Message::HookStatus(HookStatus::Ready) => {
+            *state = HookHandshakeState::Ready;
+            false
+        }
+        Message::HookStatus(HookStatus::Unsupported) => {
+            *state = HookHandshakeState::Unsupported;
+            false
+        }
+        _ if *state == HookHandshakeState::Unsupported => false,
+        _ if *state == HookHandshakeState::Awaiting => {
+            *state = HookHandshakeState::Legacy;
+            true
+        }
+        _ => true,
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -69,7 +100,13 @@ fn meter_geometry(screen_width: f64, screen_height: f64) -> MeterGeometry {
 }
 
 fn emit_connection_state(app: &AppHandle, state: ConnectionState) {
+    *app.state::<ConnectionStatus>().0.lock().unwrap() = state;
     let _ = app.emit_all("connection-state", state);
+}
+
+#[tauri::command]
+fn get_connection_state(state: State<ConnectionStatus>) -> ConnectionState {
+    *state.0.lock().unwrap()
 }
 
 #[tauri::command]
@@ -532,7 +569,7 @@ fn connect_and_run_parser(app: AppHandle) {
 
                     let decoder = tokio_util::codec::LengthDelimitedCodec::new();
                     let mut reader = FramedRead::new(stream, decoder);
-                    let mut connection_ready = false;
+                    let mut handshake_state = HookHandshakeState::Awaiting;
                     let mut inactivity_check =
                         tokio::time::interval(std::time::Duration::from_secs(1));
                     inactivity_check
@@ -558,10 +595,11 @@ fn connect_and_run_parser(app: AppHandle) {
                                             let _ = logs_window.emit("debug-event", &msg);
                                         }
 
-                                        if !matches!(&msg, protocol::Message::HookStatus(_))
-                                            && !connection_ready
-                                        {
-                                            connection_ready = true;
+                                        let was_awaiting =
+                                            handshake_state == HookHandshakeState::Awaiting;
+                                        let accepted =
+                                            accept_hook_message(&mut handshake_state, &msg);
+                                        if accepted && was_awaiting {
                                             emit_connection_state(
                                                 &app,
                                                 ConnectionState::Connected,
@@ -569,6 +607,23 @@ fn connect_and_run_parser(app: AppHandle) {
                                         }
 
                                         match msg {
+                                        protocol::Message::HookStatus(HookStatus::Ready) => {
+                                            emit_connection_state(
+                                                &app,
+                                                ConnectionState::Connected,
+                                            );
+                                            let _ = app.emit_all(
+                                                "success-alert",
+                                                "Connected to game.",
+                                            );
+                                        }
+                                        protocol::Message::HookStatus(HookStatus::Unsupported) => {
+                                            emit_connection_state(
+                                                &app,
+                                                ConnectionState::Unsupported,
+                                            );
+                                        }
+                                        _ if !accepted => {}
                                         protocol::Message::DamageEvent(event) => {
                                             state.on_damage_event(event);
                                         }
@@ -601,24 +656,6 @@ fn connect_and_run_parser(app: AppHandle) {
                                         }
                                         protocol::Message::OnBattleEnd => {
                                             state.on_battle_end_event();
-                                        }
-                                        protocol::Message::HookStatus(HookStatus::Ready) => {
-                                            connection_ready = true;
-                                            emit_connection_state(
-                                                &app,
-                                                ConnectionState::Connected,
-                                            );
-                                            let _ = app.emit_all(
-                                                "success-alert",
-                                                "Connected to game.",
-                                            );
-                                        }
-                                        protocol::Message::HookStatus(HookStatus::Unsupported) => {
-                                            connection_ready = false;
-                                            emit_connection_state(
-                                                &app,
-                                                ConnectionState::Unsupported,
-                                            );
                                         }
                                         }
                                     }
@@ -658,12 +695,12 @@ fn connect_and_run_parser(app: AppHandle) {
 }
 
 fn system_tray_with_menu() -> SystemTray {
-    let meter = CustomMenuItem::new("open_meter", "Open Meter");
-    let logs = CustomMenuItem::new("open_logs", "Open Logs");
-    let always_on_top = CustomMenuItem::new("always_on_top", "Always on top ✓");
-    let toggle_clickthrough = CustomMenuItem::new("toggle_clickthrough", "Clickthrough");
-    let reset_windows = CustomMenuItem::new("reset_windows", "Reset Windows");
-    let quit = CustomMenuItem::new("quit", "Quit");
+    let meter = CustomMenuItem::new("open_meter", "미터 열기");
+    let logs = CustomMenuItem::new("open_logs", "로그 열기");
+    let always_on_top = CustomMenuItem::new("always_on_top", "항상 위 ✓");
+    let toggle_clickthrough = CustomMenuItem::new("toggle_clickthrough", "클릭 통과 ✓");
+    let reset_windows = CustomMenuItem::new("reset_windows", "창 위치 초기화");
+    let quit = CustomMenuItem::new("quit", "종료");
 
     let menu = SystemTrayMenu::new()
         .add_item(meter)
@@ -704,9 +741,9 @@ fn toggle_always_on_top(window: tauri::Window, state: State<AlwaysOnTop>) {
         .tray_handle()
         .get_item("always_on_top")
         .set_title(if new_state {
-            "Always on top ✓"
+            "항상 위 ✓"
         } else {
-            "Always on top"
+            "항상 위"
         });
 }
 
@@ -722,9 +759,9 @@ fn toggle_clickthrough(window: tauri::Window, state: State<ClickThrough>) {
         .tray_handle()
         .get_item("toggle_clickthrough")
         .set_title(if new_state {
-            "Clickthrough ✓"
+            "클릭 통과 ✓"
         } else {
-            "Clickthrough"
+            "클릭 통과"
         });
 }
 
@@ -802,6 +839,7 @@ fn main() {
         .manage(AlwaysOnTop(AtomicBool::new(true)))
         .manage(ClickThrough(AtomicBool::new(true)))
         .manage(DebugMode(AtomicBool::new(false)))
+        .manage(ConnectionStatus(Mutex::new(ConnectionState::Searching)))
         .system_tray(system_tray_with_menu())
         .on_system_tray_event(menu_tray_handler)
         .on_window_event(|event| {
@@ -819,6 +857,7 @@ fn main() {
             export_damage_log_to_file,
             set_debug_mode,
             reset_meter_geometry,
+            get_connection_state,
         ])
         .setup(|app| {
             if let Some(window) = app.get_window("main") {
@@ -836,7 +875,9 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{meter_geometry, MeterGeometry};
+    use super::{
+        accept_hook_message, meter_geometry, HookHandshakeState, HookStatus, Message, MeterGeometry,
+    };
 
     #[test]
     fn meter_geometry_matches_the_1080p_design() {
@@ -857,5 +898,25 @@ mod tests {
         let geometry = meter_geometry(3840.0, 2160.0);
         assert_eq!(geometry.width, 495.0);
         assert_eq!(geometry.height, 217.5);
+    }
+
+    #[test]
+    fn unsupported_handshake_rejects_later_gameplay() {
+        let mut state = HookHandshakeState::Awaiting;
+
+        assert!(!accept_hook_message(
+            &mut state,
+            &Message::HookStatus(HookStatus::Unsupported)
+        ));
+        assert!(!accept_hook_message(&mut state, &Message::OnBattleEnd));
+        assert_eq!(state, HookHandshakeState::Unsupported);
+    }
+
+    #[test]
+    fn gameplay_before_a_handshake_enables_legacy_compatibility() {
+        let mut state = HookHandshakeState::Awaiting;
+
+        assert!(accept_hook_message(&mut state, &Message::OnBattleEnd));
+        assert_eq!(state, HookHandshakeState::Legacy);
     }
 }

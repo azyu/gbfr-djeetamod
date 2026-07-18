@@ -1,126 +1,51 @@
-# GBFR Logs Awa Edition
+# GBFR Korean Damage Meter
 
-[![GitHub Release](https://img.shields.io/github/v/release/onelittlechildawa/gbfr-logs)](https://github.com/onelittlechildawa/gbfr-logs/releases)
+Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Windows x64 파티 데미지 미터 테스트 빌드입니다. 캐릭터별 누적 피해, 상대 비율 바와 DPS를 한국어 소형 오버레이로 표시합니다.
 
-Community-maintained fork by [onelittlechildawa](https://github.com/onelittlechildawa) for Granblue Fantasy: Relink 2.0.2.
+> 현재 자동 테스트와 MSI 패키징은 완료됐지만, 실제 게임 2.0.2 플레이 체크리스트는 아직 검증되지 않았습니다. 아래 MSI를 호환성이 확정된 정식 릴리스로 간주하지 마십시오.
 
-This edition is based on [false-spring/gbfr-logs](https://github.com/false-spring/gbfr-logs) and retains its MIT license and upstream credits. The Awa Edition adds game 2.0.2 compatibility, the six new playable characters, separate same-character multiplayer tracking, automatic battle-log saving, a repaired battle-end hook, and updated skill-name tracking.
+## 설치와 실행
 
-## How to install
+1. 릴리스의 MSI를 설치합니다.
+2. 게임을 먼저 실행합니다.
+3. GBFR Korean Damage Meter를 실행합니다.
+4. 트레이 메뉴의 클릭 통과를 끄면 화면 창을 이동하거나 크기를 조절할 수 있고, 다시 켜면 입력이 게임으로 전달됩니다.
 
-- Go to [Releases](https://github.com/onelittlechildawa/gbfr-logs/releases/)
-- Download the latest .msi installer and run it.
-- Open GBFR Logs Awa Edition after the game is already running.
+제거는 Windows의 설치된 앱에서 수행합니다. 사용자 설정과 로그는 `%AppData%` 아래 애플리케이션 데이터 폴더에 남을 수 있습니다.
 
-## Screenshots
+## 표시와 동작
 
-### DPS Overlay
+- 기본 언어는 한국어입니다.
+- 1920x1080 기준 크기는 330x145이며 화면 왼쪽의 파티 HUD 아래쪽에 배치됩니다.
+- 전투 첫 피해부터 캐릭터별 누적 피해와 DPS를 표시합니다.
+- 수치는 해당 전투의 보상 화면이 열리기 직전까지 유지됩니다.
+- 게임 2.0.2용 필수 훅을 찾지 못하면 설정 화면에 연결 오류를 표시합니다.
 
-![Meter](./docs/screenshots/meter.png)
+## 주의
 
-### Skill Tracking (with skill grouping)
+이 도구는 DLL 주입, 게임 메모리 읽기와 런타임 코드 패치를 사용합니다. Cygames가 공식 허용하거나 화이트리스트에 등록한 도구가 아니며, 온라인 사용과 계정 제재 위험이 없다고 보증하지 않습니다. 먼저 오프라인 또는 비공개 환경에서 사용하십시오. 게임 업데이트 뒤에는 호환되지 않거나 충돌할 수 있습니다.
 
-![Meter](./docs/screenshots/skill-tracking.png)
+백신 프로그램이 동작 방식 때문에 파일을 오탐할 수 있습니다. 출처와 아래 SHA-256 값을 직접 확인한 뒤 설치 여부를 판단하십시오.
 
-### Historical Logs (with filtering)
+## 0.1.0 빌드 해시
 
-![Logs](./docs/screenshots/log-history.png)
+- MSI: `598FEA6D228EEEF9BD9EDE1BA33C99588A3D28ACDB40E8B03C41AA014A92570F`
+- `hook.dll`: `3D5D83B34E7B476D0A107985B8218B72B6F293D8EAA88E5F207F8978FFADD68B`
 
-### DPS Charts
+## 소스 빌드
 
-![Charts](./docs/screenshots/charting.png)
+Node.js 20, Visual Studio 2022 C++ Build Tools, Windows SDK, WebView2, rustup과 `rust-toolchain.toml`에 지정된 툴체인이 필요합니다.
 
-### SBA Tracking
+```powershell
+npm ci
+cargo build --release --locked --package hook
+cargo test --workspace --all-targets --locked
+npm test -- --run
+npm run tauri build -- --bundles msi
+```
 
-![SBA Tracking](./docs/screenshots/sba-tracking.png)
+실제 게임 검증 항목은 [`docs/testing/game-2.0.2-smoke-test.md`](docs/testing/game-2.0.2-smoke-test.md)를 따릅니다.
 
-### Equipment Tracking
+## 크레딧과 라이선스
 
-![Equipment Loadouts](./docs/screenshots/equipment-tracking.png)
-
-### Multi-language Support
-
-![Simplified Chinese](./docs/screenshots/simplified-chinese.png)
-
-## Settings / Customization
-
-![Settings](./docs/screenshots/settings.png)
-
-## Frequently Asked Questions
-
-> Q: I closed the meter, but it's still running?
-
-When you close the windows, GBFR Logs Awa Edition continues to run in your task tray in the bottom right of your desktop.
-
-This task tray functionality is meant to give you more options for customizing:
-
-- This lets you close the logs window, but be able to reopen it again later.
-- You can toggle clickthrough of the overlay as well.
-
-> Q: The meter isn't updating or displaying anything.
-
-Try running the program after the game has been launched. Be sure to run the program as admin.
-
-> Q: The application is not working / launching.
-
-GBFR Logs Awa Edition uses your built-in Microsoft Edge Webview2 Runtime to run the application. This keeps the app relatively small as we don't have to package in a browser.
-
-However, you may have an out-of-date or missing "Webview2 Runtime":
-
-- Install the latest one from Microsoft: https://developer.microsoft.com/en-us/microsoft-edge/webview2/?form=MA13LH#download (Evergreen Bootstrapper should work here)
-
-> Q: Is this safe? My antivirus is marking the installation as a virus / malware.
-
-As always, this is up to you to trust GBFR Logs Awa Edition. The program can trigger false positive flags. There are reasons why it can give such alerts:
-
-- GBFR Logs Awa Edition does code DLL injection into the running game process which can look like a virus-like program.
-- GBFR Logs Awa Edition reads game memory and modifies game code at runtime in order to receive parser data.
-- I recommend adding an exception / whitelisting for the installation folder so that your anti-virus does not delete it while your game is running, but you may not need to do so if you haven't ran into this issue.
-
-See [how to add an exclusion to Windows Defender](https://support.microsoft.com/en-us/windows/add-an-exclusion-to-windows-security-811816c0-4dfd-af4a-47e4-c301afe13b26).
-
-> Q: How do I update?
-
-Automatic updates are disabled in the Awa Edition so an upstream release cannot overwrite this fork. Download new installers manually from this fork's [Releases](https://github.com/onelittlechildawa/gbfr-logs/releases) page.
-
-> Q: How do I uninstall?
-
-You can uninstall GBFR Logs Awa Edition the normal way through the Control Panel or by running the uninstall script in the folder where you installed it to. You may also want to remove these folders.
-
-- `%AppData%\gbfr-logs-awa`
-
-> Q: How do I add/edit my language?
-
-Read [src-tauri/lang/README.md](./src-tauri/lang/README.md) for more information on how to add/edit language support!
-
-> Q: My issue isn't listed here, or I have a suggestion.
-
-Create a [new GitHub issue](https://github.com/onelittlechildawa/gbfr-logs/issues) in this fork.
-
-## For Developers
-
-- Install nightly Rust ([rustup.rs](https://rustup.rs/)) + [Node.js](https://nodejs.org/en/download).
-- Install NPM dependencies with `npm install`
-- `npm run tauri dev`
-
-## Under the hood
-
-This project is split up into a few subprojects:
-
-- `src-hook/` - Library that is injected into the game that broadcasts essential damage events.
-- `src-tauri/` - The Tauri Rust backend that communicates with the hooked process and does parsing.
-- `protocol/` - Defines the message protocol used by hook + back-end.
-- `src/` - The JS front-end used by the Tauri web app
-
-## Credits
-
-Maintained as the Awa Edition by [onelittlechildawa](https://github.com/onelittlechildawa).
-
-This project would not have been possible without the following folks:
-
-- [nyaoouo/GBFR-ACT](https://github.com/nyaoouo/GBFR-ACT) for the original reverse engineering work.
-- [Harkain](https://github.com/Harkains) for their work on formatting and translating skills to friendly English names.
-- [false-spring/gbfr-logs](https://github.com/false-spring/gbfr-logs), the upstream project this edition is based on.
-## Disclaimer
-
-Please keep in mind that this tool is meant to improve the experience that Cygames has provided us and is not meant to cause them or other players damage. GBFR Logs Awa Edition modifies your running game client and is not guaranteed to work after game patches, in which case you may experience instability or crashes.
+MIT 라이선스의 [`false-spring/gbfr-logs`](https://github.com/false-spring/gbfr-logs)와 [`onelittlechildawa/gbfr-logs`](https://github.com/onelittlechildawa/gbfr-logs) Awa Edition 1.8.6을 기반으로 합니다. 전체 저작권 및 허가문은 [`LICENSE`](LICENSE)를 참조하십시오.
