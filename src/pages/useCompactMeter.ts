@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 
@@ -20,7 +21,16 @@ export default function useCompactMeter() {
   const [encounterState, setEncounterState] = useState(DEFAULT_ENCOUNTER_STATE);
   const [connectionState, setConnectionState] = useState<ConnectionState>("searching");
   const pendingEncounter = useRef(DEFAULT_ENCOUNTER_STATE);
-  const transparency = useMeterSettingsStore((state) => state.transparency);
+  const { transparency, geometry_initialized, setMeterSettings } = useMeterSettingsStore((state) => ({
+    transparency: state.transparency,
+    geometry_initialized: state.geometry_initialized,
+    setMeterSettings: state.set,
+  }));
+
+  useEffect(() => {
+    if (geometry_initialized) return;
+    void invoke("reset_meter_geometry").then(() => setMeterSettings({ geometry_initialized: true }));
+  }, [geometry_initialized, setMeterSettings]);
 
   useEffect(() => {
     const subscriptions = [

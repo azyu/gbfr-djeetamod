@@ -15,7 +15,7 @@ export const SUPPORTED_LANGUAGES: { [key: string]: string } = {
   en: "English",
   "zh-CN": "简体中文",
   "zh-TW": "繁體中文",
-  "ko-KR": "한국어",
+  ko: "한국어",
   jp: "日本語",
   "fr-FR": "Français",
   bp: "Brazillian Portuguese",
@@ -35,10 +35,11 @@ i18n
     })
   )
   .init({
+    lng: localStorage.getItem("i18nextLng") ?? "ko",
     ns: ["ui", "characters", "items", "overmasteries", "sigils", "traits", "weapons", "quests", "enemies"],
     defaultNS: "ui",
     fallbackLng: {
-      default: ["en"],
+      default: ["ko", "en"],
       "zh-TW": ["zh-CN", "en"],
     },
     interpolation: {

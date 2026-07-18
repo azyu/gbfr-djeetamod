@@ -8,6 +8,7 @@ interface MeterSettings {
   color_3: string;
   color_4: string;
   transparency: number;
+  geometry_initialized: boolean;
   show_display_names: boolean;
   streamer_mode: boolean;
   show_full_values: boolean;
@@ -26,6 +27,7 @@ const DEFAULT_METER_SETTINGS: MeterSettings = {
   color_3: "#36B37E",
   color_4: "#00B8D9",
   transparency: 0.2,
+  geometry_initialized: false,
   show_display_names: true,
   streamer_mode: false,
   show_full_values: false,

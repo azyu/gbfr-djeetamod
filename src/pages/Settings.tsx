@@ -26,6 +26,7 @@ const SettingsPage = () => {
   const [debugMode, setDebugMode] = useState(false);
 
   const {
+    connectionState,
     color_1,
     color_2,
     color_3,
@@ -59,6 +60,9 @@ const SettingsPage = () => {
         <Text fw={700}>GBFR Logs Awa Edition</Text>
         <Text size="sm" c="dimmed">
           Maintained and modified by onelittlechildawa. Based on the original open-source GBFR Logs project.
+        </Text>
+        <Text size="sm" c="dimmed">
+          {t(`ui.connection.${connectionState}`)}
         </Text>
       </Stack>
       <Fieldset legend={t("ui.meter-settings")}>

@@ -22,8 +22,9 @@ use protocol::{HookStatus, Message};
 use rusqlite::params_from_iter;
 use serde::{Deserialize, Serialize};
 use tauri::{
-    api::dialog::blocking::FileDialogBuilder, AppHandle, CustomMenuItem, LogicalSize, Manager,
-    Size, State, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem,
+    api::dialog::blocking::FileDialogBuilder, AppHandle, CustomMenuItem, LogicalPosition,
+    LogicalSize, Manager, Position, Size, State, SystemTray, SystemTrayEvent, SystemTrayMenu,
+    SystemTrayMenuItem,
 };
 use tauri_plugin_log::LogTarget;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
@@ -46,8 +47,52 @@ enum ConnectionState {
     Unsupported,
 }
 
+#[derive(Debug, PartialEq)]
+struct MeterGeometry {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+fn meter_geometry(screen_width: f64, screen_height: f64) -> MeterGeometry {
+    let scale = (screen_width / 1920.0)
+        .min(screen_height / 1080.0)
+        .clamp(0.75, 1.5);
+
+    MeterGeometry {
+        x: 45.0 * scale,
+        y: 470.0 * scale,
+        width: 330.0 * scale,
+        height: 145.0 * scale,
+    }
+}
+
 fn emit_connection_state(app: &AppHandle, state: ConnectionState) {
     let _ = app.emit_all("connection-state", state);
+}
+
+#[tauri::command]
+fn reset_meter_geometry(window: tauri::Window) -> Result<(), String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "No monitor available for the meter window".to_string())?;
+    let screen = monitor.size().to_logical::<f64>(monitor.scale_factor());
+    let geometry = meter_geometry(screen.width, screen.height);
+
+    window
+        .set_position(Position::Logical(LogicalPosition {
+            x: geometry.x,
+            y: geometry.y,
+        }))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_size(Size::Logical(LogicalSize {
+            width: geometry.width,
+            height: geometry.height,
+        }))
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -704,10 +749,7 @@ fn menu_tray_handler(handle: &AppHandle, event: SystemTrayEvent) {
                 if let Some(window) = handle.get_window("main") {
                     let _ = window.show();
                     let _ = window.unminimize();
-                    let _ = window.set_size(Size::Logical(LogicalSize {
-                        width: 500.0,
-                        height: 350.0,
-                    }));
+                    let _ = reset_meter_geometry(window);
                 }
 
                 if let Some(window) = handle.get_window("logs") {
@@ -758,7 +800,7 @@ fn main() {
                 .build(),
         )
         .manage(AlwaysOnTop(AtomicBool::new(true)))
-        .manage(ClickThrough(AtomicBool::new(false)))
+        .manage(ClickThrough(AtomicBool::new(true)))
         .manage(DebugMode(AtomicBool::new(false)))
         .system_tray(system_tray_with_menu())
         .on_system_tray_event(menu_tray_handler)
@@ -776,8 +818,13 @@ fn main() {
             toggle_always_on_top,
             export_damage_log_to_file,
             set_debug_mode,
+            reset_meter_geometry,
         ])
         .setup(|app| {
+            if let Some(window) = app.get_window("main") {
+                window.set_ignore_cursor_events(true)?;
+            }
+
             // Perform the game hook check in a separate thread.
             tauri::async_runtime::spawn(check_and_perform_hook(app.handle()));
 
@@ -785,4 +832,30 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{meter_geometry, MeterGeometry};
+
+    #[test]
+    fn meter_geometry_matches_the_1080p_design() {
+        let geometry = meter_geometry(1920.0, 1080.0);
+        assert_eq!(
+            geometry,
+            MeterGeometry {
+                x: 45.0,
+                y: 470.0,
+                width: 330.0,
+                height: 145.0,
+            }
+        );
+    }
+
+    #[test]
+    fn meter_geometry_scales_but_does_not_exceed_one_and_a_half() {
+        let geometry = meter_geometry(3840.0, 2160.0);
+        assert_eq!(geometry.width, 495.0);
+        assert_eq!(geometry.height, 217.5);
+    }
 }

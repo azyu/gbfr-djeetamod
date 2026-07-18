@@ -1,5 +1,15 @@
 {
   "ui": {
+    "compact-meter": {
+      "title": "Party Damage",
+      "unknown-character": "Unknown Character"
+    },
+    "connection": {
+      "searching": "Waiting for the game",
+      "connected": "Game connected",
+      "disconnected": "Game disconnected",
+      "unsupported": "The game 2.0.2 hook was not found"
+    },
     "successful-save": "Saved encounter to logs",
     "unsuccessful-save": "Failed to save encounter to logs: {{error}}",
     "on-area-enter": "Entered area..",

@@ -16,8 +16,14 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
+vi.mock("@tauri-apps/api", () => ({
+  invoke: vi.fn(async () => undefined),
+}));
+
 vi.mock("@/stores/useMeterSettingsStore", () => ({
-  useMeterSettingsStore: (selector: (state: { transparency: number }) => unknown) => selector({ transparency: 0.72 }),
+  useMeterSettingsStore: (
+    selector: (state: { transparency: number; geometry_initialized: boolean; set: ReturnType<typeof vi.fn> }) => unknown
+  ) => selector({ transparency: 0.72, geometry_initialized: true, set: vi.fn() }),
 }));
 
 const activeEncounter: EncounterState = {
