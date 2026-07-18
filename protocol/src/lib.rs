@@ -269,6 +269,7 @@ pub enum HookStatus {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
 pub enum EquipmentSourceKind {
     SigilPrimary,
     SigilSecondary,
@@ -279,6 +280,7 @@ pub enum EquipmentSourceKind {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub enum EquipmentCaptureStatus {
     Complete,
     Unsupported,

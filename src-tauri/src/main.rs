@@ -35,12 +35,14 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::FramedRead;
 
 mod db;
+mod equipment;
 mod parser;
 
 struct AlwaysOnTop(AtomicBool);
 struct ClickThrough(AtomicBool);
 struct DebugMode(AtomicBool);
 struct ConnectionStatus(Mutex<ConnectionState>);
+struct EquipmentStatus(Mutex<equipment::EquipmentState>);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -107,6 +109,25 @@ fn emit_connection_state(app: &AppHandle, state: ConnectionState) {
 #[tauri::command]
 fn get_connection_state(state: State<ConnectionStatus>) -> ConnectionState {
     *state.0.lock().unwrap()
+}
+
+#[tauri::command]
+fn fetch_equipment_analysis(state: State<EquipmentStatus>) -> equipment::EquipmentAnalysisResponse {
+    state.0.lock().unwrap().response()
+}
+
+fn update_equipment_connection(app: &AppHandle, connected: bool) {
+    let response = {
+        let equipment = app.state::<EquipmentStatus>();
+        let mut state = equipment.0.lock().unwrap();
+        if connected {
+            state.connect();
+        } else {
+            state.disconnect();
+        }
+        state.response()
+    };
+    let _ = app.emit_all("equipment-analysis-update", response);
 }
 
 #[tauri::command]
@@ -604,6 +625,7 @@ fn connect_and_run_parser(app: AppHandle) {
                                                 &app,
                                                 ConnectionState::Connected,
                                             );
+                                            update_equipment_connection(&app, true);
                                         }
 
                                         match msg {
@@ -612,12 +634,14 @@ fn connect_and_run_parser(app: AppHandle) {
                                                 &app,
                                                 ConnectionState::Connected,
                                             );
+                                            update_equipment_connection(&app, true);
                                             let _ = app.emit_all(
                                                 "success-alert",
                                                 "Connected to game.",
                                             );
                                         }
                                         protocol::Message::HookStatus(HookStatus::Unsupported) => {
+                                            update_equipment_connection(&app, false);
                                             emit_connection_state(
                                                 &app,
                                                 ConnectionState::Unsupported,
@@ -635,6 +659,18 @@ fn connect_and_run_parser(app: AppHandle) {
                                         }
                                         protocol::Message::PlayerIdentityEvent(event) => {
                                             state.on_player_identity_event(event);
+                                        }
+                                        protocol::Message::LocalEquipmentSnapshot(event) => {
+                                            let response = {
+                                                let equipment = app.state::<EquipmentStatus>();
+                                                let mut equipment = equipment.0.lock().unwrap();
+                                                equipment.apply(event);
+                                                equipment.response()
+                                            };
+                                            let _ = logs_window.emit(
+                                                "equipment-analysis-update",
+                                                response,
+                                            );
                                         }
                                         protocol::Message::OnQuestComplete(event) => {
                                             state.on_quest_complete_event(event);
@@ -678,6 +714,7 @@ fn connect_and_run_parser(app: AppHandle) {
 
                     // The game has closed, so we should go back to waiting for the game to reopen.
                     state.on_connection_lost();
+                    update_equipment_connection(&app, false);
                     emit_connection_state(&app, ConnectionState::Disconnected);
                     let _ = app.emit_all("error-alert", "Game connection closed");
                     break;
@@ -840,6 +877,10 @@ fn main() {
         .manage(ClickThrough(AtomicBool::new(true)))
         .manage(DebugMode(AtomicBool::new(false)))
         .manage(ConnectionStatus(Mutex::new(ConnectionState::Searching)))
+        .manage(EquipmentStatus(Mutex::new(
+            equipment::EquipmentState::from_bundled_catalog()
+                .expect("bundled trait cap catalog must be valid"),
+        )))
         .system_tray(system_tray_with_menu())
         .on_system_tray_event(menu_tray_handler)
         .on_window_event(|event| {
@@ -858,6 +899,7 @@ fn main() {
             set_debug_mode,
             reset_meter_geometry,
             get_connection_state,
+            fetch_equipment_analysis,
         ])
         .setup(|app| {
             if let Some(window) = app.get_window("main") {
