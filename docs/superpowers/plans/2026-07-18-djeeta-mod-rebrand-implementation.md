@@ -88,11 +88,9 @@ Expected: Prettier exits 0.
 - [ ] **Step 4: Re-run the identity and stale-name checks**
 
 ```powershell
-$package = Get-Content -Raw package.json | ConvertFrom-Json
-$lock = Get-Content -Raw package-lock.json | ConvertFrom-Json
 $tauri = Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json
-$rootLockPackage = $lock.packages.PSObject.Properties[''].Value
-if ($package.name -ne 'djeeta-mod' -or $lock.name -ne 'djeeta-mod' -or $rootLockPackage.name -ne 'djeeta-mod') { throw 'npm identity mismatch' }
+node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(p.name!=='djeeta-mod'||l.name!=='djeeta-mod'||l.packages[''].name!=='djeeta-mod') throw new Error('npm identity mismatch')"
+if ($LASTEXITCODE -ne 0) { throw 'npm identity mismatch' }
 if ($tauri.package.productName -ne 'Djeeta MOD') { throw 'Tauri product name mismatch' }
 if ($tauri.tauri.bundle.identifier -ne 'com.azyu.djeeta-mod') { throw 'Tauri identifier mismatch' }
 $stale = rg -n 'GBFR Korean Damage Meter|gbfr-korean-damage-meter|com\.azyu\.gbfr-korean-damage-meter' package.json package-lock.json src-tauri src-hook src
