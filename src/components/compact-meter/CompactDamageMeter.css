@@ -1,0 +1,50 @@
+.compact-meter {
+  width: 100%;
+  color: #f7fbff;
+  background: rgba(10, 20, 34, var(--meter-opacity));
+  border: 1px solid rgba(180, 220, 255, 0.35);
+  border-radius: 5px;
+  overflow: hidden;
+  text-shadow: 0 1px 2px #000;
+}
+
+.compact-meter__header {
+  height: 25px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compact-meter__row {
+  position: relative;
+  height: 29px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.compact-meter__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(47, 118, 183, 0.84), rgba(105, 177, 231, 0.48));
+  transition: width 150ms linear;
+}
+
+.compact-meter__content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) auto auto;
+  align-items: center;
+  height: 100%;
+  gap: 7px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.compact-meter__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}

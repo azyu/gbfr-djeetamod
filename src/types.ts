@@ -152,6 +152,8 @@ export type EnemyState = {
 
 export type EncounterStatus = "Waiting" | "InProgress" | "Stopped";
 
+export type ConnectionState = "searching" | "connected" | "disconnected" | "unsupported";
+
 export type EncounterState = {
   /** Total damage dealt in the whole encounter */
   totalDamage: number;
