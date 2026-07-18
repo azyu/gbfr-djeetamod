@@ -7,6 +7,7 @@ import "./styles.css";
 
 import { ModalsProvider } from "@mantine/modals";
 import { App } from "./App";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
 
 const theme = createTheme({
   fontFamily: '"Noto Sans Variable", Inter, Avenir, Helvetica, Arial, sans-serif',
@@ -22,7 +23,9 @@ const theme = createTheme({
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <MantineProvider theme={theme} defaultColorScheme="dark">
     <ModalsProvider>
-      <App />
+      <AppErrorBoundary>
+        <App />
+      </AppErrorBoundary>
     </ModalsProvider>
   </MantineProvider>
 );
