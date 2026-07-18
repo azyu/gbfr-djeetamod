@@ -28,7 +28,7 @@
 - The overlay shows at most four rows: Korean character name, cumulative damage/bar, and DPS.
 - Presentation publishes every 250ms and bars transition over 150ms.
 - 1920x1080 reset geometry is 330x145 at x45/y470.
-- Normal mode is click-through.
+- The compact meter stays always-on-top, is omitted from the taskbar, and starts with click-through disabled so its header can be dragged.
 
 ## Toolchain
 

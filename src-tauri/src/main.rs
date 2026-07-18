@@ -903,6 +903,8 @@ fn main() {
         ])
         .setup(|app| {
             if let Some(window) = app.get_window("main") {
+                window.set_skip_taskbar(true)?;
+                window.set_always_on_top(true)?;
                 window.set_ignore_cursor_events(DEFAULT_CLICK_THROUGH)?;
             }
 
