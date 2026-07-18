@@ -11,6 +11,8 @@
     "tsc": "tsc",
     "format": "prettier --write --ignore-unknown --ext js,jsx,ts,tsx src ./src",
     "format-check": "prettier --check --ignore-unknown --ext js,jsx,ts,tsx src ./src",
+    "test:package-helpers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/PackageHelpers.Tests.ps1",
+    "package:msi": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1",
     "tauri": "tauri",
     "test": "vitest"
   },
