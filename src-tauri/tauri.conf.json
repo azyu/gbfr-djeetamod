@@ -42,7 +42,7 @@
         "fullscreen": false,
         "width": 330,
         "height": 145,
-        "resizable": true,
+        "resizable": false,
         "decorations": false,
         "transparent": true,
         "minWidth": 280,

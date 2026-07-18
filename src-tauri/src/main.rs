@@ -116,6 +116,20 @@ fn meter_geometry(screen_width: f64, screen_height: f64) -> MeterGeometry {
     }
 }
 
+fn set_meter_size(window: &tauri::Window) -> anyhow::Result<()> {
+    let monitor = window
+        .current_monitor()?
+        .context("No monitor available for the meter window")?;
+    let screen = monitor.size().to_logical::<f64>(monitor.scale_factor());
+    let geometry = meter_geometry(screen.width, screen.height);
+
+    window.set_size(Size::Logical(LogicalSize {
+        width: geometry.width,
+        height: geometry.height,
+    }))?;
+    Ok(())
+}
+
 fn emit_connection_state(app: &AppHandle, state: ConnectionState) {
     *app.state::<ConnectionStatus>().0.lock().unwrap() = state;
     let _ = app.emit_all("connection-state", state);
@@ -160,12 +174,7 @@ fn reset_meter_geometry(window: tauri::Window) -> Result<(), String> {
             y: geometry.y,
         }))
         .map_err(|error| error.to_string())?;
-    window
-        .set_size(Size::Logical(LogicalSize {
-            width: geometry.width,
-            height: geometry.height,
-        }))
-        .map_err(|error| error.to_string())
+    set_meter_size(&window).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -905,6 +914,7 @@ fn main() {
             if let Some(window) = app.get_window("main") {
                 window.set_skip_taskbar(true)?;
                 window.set_always_on_top(true)?;
+                set_meter_size(&window)?;
                 window.set_ignore_cursor_events(DEFAULT_CLICK_THROUGH)?;
             }
 
