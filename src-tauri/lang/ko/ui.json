@@ -102,7 +102,7 @@
       "primary-target": "적",
       "duration": "전투시간",
       "total-damage": "총 데미지",
-      "damage-per-second": "초당 메디지",
+      "damage-per-second": "DPS",
       "delete-all-logs-confirmation": "모든 로그가 지워질것이며, 다시 복구할수 없습니다.",
       "delete-selected-logs-confirmation_one": "{{count}} 개의 로그가 지워질겁이며, 다시 복구할수 없습니다.",
       "delete-selected-logs-confirmation_other": " {{count}} 개의 로그가 지워질겁이며, 다시 복구할수 없습니다.",

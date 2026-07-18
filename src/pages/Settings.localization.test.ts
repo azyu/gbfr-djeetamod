@@ -138,4 +138,11 @@ describe("Korean settings localization", () => {
     expect(source).toContain('t("ui.navigation.battle-records")');
     expect(source).toContain('t("ui.navigation.settings")');
   });
+
+  it("uses DPS for the Korean damage-per-second graph label", () => {
+    const logs = korean.logs as Record<string, string>;
+
+    expect(logs["damage-per-second"]).toBe("DPS");
+    expect(JSON.stringify(korean)).not.toContain("초당 메디지");
+  });
 });
