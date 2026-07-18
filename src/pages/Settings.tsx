@@ -79,28 +79,28 @@ const SettingsPage = () => {
             onChangeEnd={(value) => setMeterSettings({ color_1: value })}
             withEyeDropper={false}
             label={t("ui.player-1-color")}
-            placeholder="Color"
+            placeholder={t("ui.color-placeholder")}
           />
           <ColorInput
             defaultValue={color_2}
             onChangeEnd={(value) => setMeterSettings({ color_2: value })}
             withEyeDropper={false}
             label={t("ui.player-2-color")}
-            placeholder="Color"
+            placeholder={t("ui.color-placeholder")}
           />
           <ColorInput
             defaultValue={color_3}
             onChangeEnd={(value) => setMeterSettings({ color_3: value })}
             withEyeDropper={false}
             label={t("ui.player-3-color")}
-            placeholder="Color"
+            placeholder={t("ui.color-placeholder")}
           />
           <ColorInput
             defaultValue={color_4}
             onChangeEnd={(value) => setMeterSettings({ color_4: value })}
             withEyeDropper={false}
             label={t("ui.player-4-color")}
-            placeholder="Color"
+            placeholder={t("ui.color-placeholder")}
           />
           <Text size="sm">{t("ui.meter-transparency")}</Text>
           <Slider
@@ -147,10 +147,10 @@ const SettingsPage = () => {
             <Checkbox label={t("ui.debug-mode")} checked={debugMode} onChange={toggleDebugMode} />
           </Tooltip>
           <Divider />
-          <Text size="sm">Customize Overlay Meter Columns</Text>
+          <Text size="sm">{t("ui.customize-overlay-columns")}</Text>
           <Menu shadow="md" trigger="hover" openDelay={100} closeDelay={400}>
             <Menu.Target>
-              <Button>Add column</Button>
+              <Button>{t("ui.add-column")}</Button>
             </Menu.Target>
             <Menu.Dropdown>
               {availableOverlayColumns.map((item) => (
@@ -181,7 +181,7 @@ const SettingsPage = () => {
                           </Flex>
                           <Flex align="center">
                             <ActionIcon
-                              aria-label="Remove column"
+                              aria-label={t("ui.remove-column")}
                               variant="transparent"
                               color="gray"
                               onClick={() => removeOverlayColumn(item)}
