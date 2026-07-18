@@ -287,6 +287,7 @@ pub enum EquipmentCaptureStatus {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct EquippedTraitSource {
     pub kind: EquipmentSourceKind,
     pub slot: u8,

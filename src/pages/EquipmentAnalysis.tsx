@@ -11,6 +11,7 @@ import {
   CharacterType,
   EquipmentAnalysisResponse,
   EquipmentSourceKind,
+  EquippedTraitSource,
   TraitAnalysis,
   TraitAnalysisState,
 } from "@/types";
@@ -148,7 +149,7 @@ const TraitRow = ({ trait }: { trait: TraitAnalysis }) => {
               {trait.sources.map((source, index) => (
                 <Text size="xs" key={`${source.kind}-${source.slot}-${index}`}>
                   {sourceKindLabel(source.kind, t)} #{source.slot + 1} · 0x
-                  {source.itemId.toString(16).padStart(8, "0")} · +{source.traitLevel}
+                  {formatItemId(source)} · +{sourceTraitLevel(source) ?? "—"}
                 </Text>
               ))}
             </Stack>
@@ -176,4 +177,20 @@ function characterLabel(characterType: CharacterType, t: (key: string) => string
 
 function sourceKindLabel(kind: EquipmentSourceKind, t: (key: string) => string): string {
   return t(`ui.equipment-analysis.source.${kind}`);
+}
+
+type LegacyEquippedTraitSource = EquippedTraitSource & {
+  item_id?: number;
+  trait_level?: number;
+};
+
+function formatItemId(source: EquippedTraitSource): string {
+  const legacySource = source as LegacyEquippedTraitSource;
+  const itemId = source.itemId ?? legacySource.item_id;
+  return itemId === undefined ? "????????" : itemId.toString(16).padStart(8, "0");
+}
+
+function sourceTraitLevel(source: EquippedTraitSource): number | undefined {
+  const legacySource = source as LegacyEquippedTraitSource;
+  return source.traitLevel ?? legacySource.trait_level;
 }

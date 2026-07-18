@@ -190,5 +190,20 @@ mod tests {
             json["characters"][0]["traits"][0]["sources"][0]["kind"],
             "sigilPrimary"
         );
+        assert_eq!(
+            json["characters"][0]["traits"][0]["sources"][0]["itemId"],
+            2
+        );
+        assert_eq!(
+            json["characters"][0]["traits"][0]["sources"][0]["traitId"],
+            1
+        );
+        assert_eq!(
+            json["characters"][0]["traits"][0]["sources"][0]["traitLevel"],
+            65
+        );
+        assert!(json["characters"][0]["traits"][0]["sources"][0]
+            .get("item_id")
+            .is_none());
     }
 }

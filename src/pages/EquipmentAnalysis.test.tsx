@@ -117,6 +117,41 @@ it("shows overflow first and preserves unknown caps", async () => {
   expect(within(rows[0]).getByText("대미지 상한")).toBeTruthy();
 });
 
+it("does not blank the page when a stale source uses snake-case fields", async () => {
+  mocks.response = {
+    connected: true,
+    characters: [
+      {
+        characterType: "Pl2400",
+        status: "complete",
+        traits: [
+          {
+            traitId: 1,
+            totalLevel: 70,
+            maxLevel: 65,
+            overflowLevel: 5,
+            state: "overflow",
+            sources: [
+              {
+                kind: "sigilPrimary",
+                slot: 0,
+                item_id: 123,
+                trait_id: 1,
+                trait_level: 15,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  } as unknown as EquipmentAnalysisResponse;
+
+  renderPage();
+
+  expect(await screen.findByText("70 / 65")).toBeTruthy();
+  expect(screen.getByText("5 초과")).toBeTruthy();
+});
+
 it("preserves a selected character while it remains in an update", () => {
   const store = useEquipmentAnalysisStore.getState();
   store.loadResponse({
