@@ -1,0 +1,1050 @@
+{
+  "gameVersion": "2.0.2",
+  "gameExeSha256": "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F",
+  "records": [
+    {
+      "traitId": 5462430,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 22138782,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 34453299,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 99806428,
+      "maxLevel": 20
+    },
+    {
+      "traitId": 100287897,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 108106290,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 116903646,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 136328139,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 162168245,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 178391110,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 215402021,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 233342880,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 239255067,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 240724676,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 246244832,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 251817200,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 263866344,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 276891751,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 296412661,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 318837236,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 342947936,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 354305652,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 359194852,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 360738300,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 384825448,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 439285150,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 453875863,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 473304163,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 486727549,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 499767271,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 501304421,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 505212110,
+      "maxLevel": 35
+    },
+    {
+      "traitId": 574788127,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 593331951,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 600897151,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 612907763,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 631183515,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 647327525,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 672273579,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 672577048,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 696436579,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 699431915,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 699568808,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 778413940,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 801700863,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 813117847,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 831329001,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 843017225,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 859723874,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 920880269,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 928622009,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 997306130,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1006557464,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1009473456,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1030848632,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1031885729,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1037734138,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1051936215,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1059866670,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1061716793,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1063789971,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1072455552,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1075985448,
+      "maxLevel": 25
+    },
+    {
+      "traitId": 1159561548,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1176145415,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1190015254,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1194869320,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1208391236,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1219058573,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1262488321,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1274208657,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1280871463,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1314875142,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1326666263,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1327117955,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1342675484,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1353995229,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1371608530,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1376339515,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1378755464,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1382624881,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1413488146,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1415783215,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1431905071,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1470847760,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 1474865471,
+      "maxLevel": 2
+    },
+    {
+      "traitId": 1552297491,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1581394661,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 1612199723,
+      "maxLevel": 20
+    },
+    {
+      "traitId": 1619384869,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 1662438379,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1725849777,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1752302261,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 1802063213,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 1826216888,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1834667356,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1858052470,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1878020643,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1882806065,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1889216950,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 1911626395,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 1920590968,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1931609893,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1934383313,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 1934743042,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1950410857,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 1957328342,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2009598453,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2030206920,
+      "maxLevel": 55
+    },
+    {
+      "traitId": 2032559190,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2060501008,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2068825210,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2069563421,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2083409252,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2089068211,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2094004047,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 2104875268,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2107235286,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 2128439760,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2128510976,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 2155570820,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2174991284,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 2175964121,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2194548621,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2215087280,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2233052490,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2238888111,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2261503428,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2311482059,
+      "maxLevel": 5
+    },
+    {
+      "traitId": 2335962636,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2363462530,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2366080407,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2368396142,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2373493147,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 2404396813,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2432048579,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2441731667,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 2451270412,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2452677621,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2452806679,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2472379623,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 2475281414,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2476869948,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2515794566,
+      "maxLevel": 20
+    },
+    {
+      "traitId": 2533525007,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2537245103,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2561468416,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 2575988941,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 2594029936,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2597196811,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2597893606,
+      "maxLevel": 6
+    },
+    {
+      "traitId": 2600336030,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2609938956,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 2712200093,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2716046842,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 2723457932,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 2734331525,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2738476610,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2742353392,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2743406818,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2746520096,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2765535360,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 2788919757,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2809291152,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2812567336,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2828591747,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2829260347,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2849079125,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2860774728,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2895541441,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 2935927228,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2941336221,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2943961735,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 2959386164,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3009445917,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3029266248,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3053428691,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 3068338038,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3092382396,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3109276702,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3116918209,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 3125822983,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3131056344,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 3151461427,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3163604644,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 3191080121,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3199521257,
+      "maxLevel": 20
+    },
+    {
+      "traitId": 3212377084,
+      "maxLevel": 20
+    },
+    {
+      "traitId": 3221316531,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3231160855,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3252432714,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 3254202179,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 3265578921,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3273093624,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3277525275,
+      "maxLevel": 20
+    },
+    {
+      "traitId": 3347353246,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 3350506164,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 3352525297,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3362730114,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 3402018802,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 3416279598,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 3439526504,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3440525669,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3440945021,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3454759926,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 3468099822,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 3484714882,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3492412936,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3500263141,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3506515340,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3514225250,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3536380170,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3540284198,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3552100895,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 3557629595,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3578760359,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3584241795,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 3593126152,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 3614395684,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3623467912,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3640028188,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3641188925,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3671987420,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3673144103,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3684800360,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3689011061,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3693239446,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3696775008,
+      "maxLevel": 65
+    },
+    {
+      "traitId": 3697311093,
+      "maxLevel": 20
+    },
+    {
+      "traitId": 3712643102,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3769084039,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 3769368062,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 3794678696,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 3812147424,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 3859444572,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3868870292,
+      "maxLevel": 20
+    },
+    {
+      "traitId": 3870895668,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3872242332,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 3895712106,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 3898603744,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3940753899,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 3961284473,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3963416948,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3980020129,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 3985476312,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 4001746207,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 4010142797,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 4051194041,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 4057324496,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 4067143333,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 4076708701,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 4084396182,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 4136093167,
+      "maxLevel": 45
+    },
+    {
+      "traitId": 4137488502,
+      "maxLevel": 20
+    },
+    {
+      "traitId": 4146039191,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 4165559094,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 4176936334,
+      "maxLevel": 1
+    },
+    {
+      "traitId": 4216792705,
+      "maxLevel": 30
+    },
+    {
+      "traitId": 4258376996,
+      "maxLevel": 15
+    },
+    {
+      "traitId": 4261597231,
+      "maxLevel": 50
+    },
+    {
+      "traitId": 4294496100,
+      "maxLevel": 15
+    }
+  ]
+}
