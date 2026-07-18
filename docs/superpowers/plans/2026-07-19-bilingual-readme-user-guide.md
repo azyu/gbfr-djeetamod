@@ -44,6 +44,12 @@ Expected: command exits successfully with no output because neither guide exists
 
 - [ ] **Step 2: Insert the complete Korean guide after `## 표시와 동작`**
 
+Replace the outdated installation step about resizing the meter with this current behavior:
+
+```markdown
+4. 관리 창의 왼쪽 메뉴에서 데미지 미터를 켜거나 끌 수 있고, 미터의 상단 제목 영역을 드래그하면 위치를 옮길 수 있습니다.
+```
+
 Add this Markdown immediately before `## 성능 영향`:
 
 ```markdown
