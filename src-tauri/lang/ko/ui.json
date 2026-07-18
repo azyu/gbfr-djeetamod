@@ -4,6 +4,11 @@
       "title": "파티 데미지",
       "unknown-character": "알 수 없는 캐릭터"
     },
+    "navigation": {
+      "damage-meter": "데미지 미터",
+      "battle-records": "전투 기록",
+      "settings": "설정"
+    },
     "connection": {
       "searching": "게임 연결 대기 중",
       "connected": "게임 연결됨",

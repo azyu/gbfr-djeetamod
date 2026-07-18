@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { CompactDamageMeter } from "./CompactDamageMeter";
 
@@ -13,6 +13,8 @@ vi.mock("react-i18next", () => ({
       })[key] ?? key,
   }),
 }));
+
+afterEach(cleanup);
 
 it("shows Korean character names, full totals, DPS, and relative bars", () => {
   const { container } = render(
@@ -43,4 +45,11 @@ it("shows Korean character names, full totals, DPS, and relative bars", () => {
   expect(screen.getByText("1,234,567")).toBeTruthy();
   expect(screen.getByText("12,345 DPS")).toBeTruthy();
   expect(container.querySelectorAll<HTMLElement>(".compact-meter__bar")[1].style.width).toBe("50%");
+});
+
+it("keeps a draggable header visible while waiting for combat", () => {
+  const { container } = render(<CompactDamageMeter transparency={0.2} rows={[]} />);
+
+  expect(screen.getByText("파티 데미지")).toBeTruthy();
+  expect(container.querySelector(".compact-meter__header")?.hasAttribute("data-tauri-drag-region")).toBe(true);
 });

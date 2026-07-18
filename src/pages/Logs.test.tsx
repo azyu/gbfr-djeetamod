@@ -1,0 +1,92 @@
+import { MantineProvider } from "@mantine/core";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+import Layout from "./Logs";
+
+const mocks = vi.hoisted(() => ({
+  meterEnabled: true,
+  setMeterEnabled: vi.fn(),
+}));
+
+vi.mock("./useMeterVisibility", () => ({
+  default: () => ({
+    meterEnabled: mocks.meterEnabled,
+    setMeterEnabled: mocks.setMeterEnabled,
+  }),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => vi.fn()),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) =>
+      ({
+        "ui.navigation.damage-meter": "데미지 미터",
+        "ui.navigation.battle-records": "전투 기록",
+        "ui.navigation.settings": "설정",
+        "ui.equipment-analysis.title": "진 특성 상한 분석",
+      })[key] ?? key,
+  }),
+}));
+
+beforeEach(() => {
+  mocks.meterEnabled = true;
+  mocks.setMeterEnabled.mockReset();
+  mocks.setMeterEnabled.mockResolvedValue(undefined);
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+});
+
+afterEach(cleanup);
+
+function renderLayout() {
+  return render(
+    <MantineProvider>
+      <MemoryRouter initialEntries={["/logs"]}>
+        <Routes>
+          <Route path="/logs" element={<Layout />}>
+            <Route index element={<div>content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </MantineProvider>
+  );
+}
+
+it("shows the management navigation with an enabled meter switch", () => {
+  renderLayout();
+
+  expect(screen.getByText("데미지 미터")).toBeTruthy();
+  expect(screen.getByText("진 특성 상한 분석")).toBeTruthy();
+  expect(screen.getByText("전투 기록")).toBeTruthy();
+  expect(screen.getByText("설정")).toBeTruthy();
+  expect((screen.getByRole("switch", { name: "데미지 미터" }) as HTMLInputElement).checked).toBe(true);
+});
+
+it("toggles once from either the row or the switch", () => {
+  renderLayout();
+
+  fireEvent.click(screen.getByText("데미지 미터"));
+  expect(mocks.setMeterEnabled).toHaveBeenCalledTimes(1);
+  expect(mocks.setMeterEnabled).toHaveBeenLastCalledWith(false);
+
+  mocks.setMeterEnabled.mockClear();
+  fireEvent.click(screen.getByRole("switch", { name: "데미지 미터" }));
+  expect(mocks.setMeterEnabled).toHaveBeenCalledTimes(1);
+  expect(mocks.setMeterEnabled).toHaveBeenLastCalledWith(false);
+});

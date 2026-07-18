@@ -90,6 +90,18 @@ const expectedKoreanColumns = {
   "stun-per-second-description": "초당 스턴 수치",
 };
 
+const expectedEnglishNavigation = {
+  "damage-meter": "Damage Meter",
+  "battle-records": "Battle Records",
+  settings: "Settings",
+};
+
+const expectedKoreanNavigation = {
+  "damage-meter": "데미지 미터",
+  "battle-records": "전투 기록",
+  settings: "설정",
+};
+
 describe("Korean settings localization", () => {
   const korean = readJson("../../src-tauri/lang/ko/ui.json").ui;
   const english = readJson("../../src-tauri/lang/en/ui.json").ui;
@@ -115,5 +127,15 @@ describe("Korean settings localization", () => {
     const abbreviations = { dps: "DPS", damage: "DMG", sba: "SBA", "stun-per-second": "SPS" };
     expect(english["meter-columns"]).toMatchObject(abbreviations);
     expect(korean["meter-columns"]).toMatchObject(abbreviations);
+  });
+
+  it("provides translated management navigation without hardcoded labels", () => {
+    expect(english["navigation"]).toEqual(expectedEnglishNavigation);
+    expect(korean["navigation"]).toEqual(expectedKoreanNavigation);
+
+    const source = readFileSync(resolve(process.cwd(), "src/pages/Logs.tsx"), "utf8");
+    expect(source).toContain('t("ui.navigation.damage-meter")');
+    expect(source).toContain('t("ui.navigation.battle-records")');
+    expect(source).toContain('t("ui.navigation.settings")');
   });
 });

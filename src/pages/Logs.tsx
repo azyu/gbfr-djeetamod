@@ -1,20 +1,22 @@
 import { useMeterSettingsStore } from "@/stores/useMeterSettingsStore";
 import "./Logs.css";
 
-import { AppShell, Burger, Group, NavLink, Text } from "@mantine/core";
+import { AppShell, Burger, Group, NavLink, Switch, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { ChartBar, Gear, House } from "@phosphor-icons/react";
+import { ChartBar, Gauge, Gear, House } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
 import { Toaster } from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useNavigate } from "react-router-dom";
+import useMeterVisibility from "./useMeterVisibility";
 
 const Layout = () => {
   const { t } = useTranslation();
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(false);
   const { open_log_on_save } = useMeterSettingsStore((state) => ({ open_log_on_save: state.open_log_on_save }));
+  const { meterEnabled, setMeterEnabled } = useMeterVisibility();
 
   const navigate = useNavigate();
 
@@ -55,16 +57,39 @@ const Layout = () => {
         </AppShell.Header>
         <AppShell.Navbar p="sm">
           <AppShell.Section grow>
-            <NavLink label="Logs" leftSection={<House size="1rem" />} component={Link} to="/logs" />
+            <NavLink
+              label={t("ui.navigation.damage-meter")}
+              leftSection={<Gauge size="1rem" />}
+              rightSection={
+                <Switch
+                  aria-label={t("ui.navigation.damage-meter")}
+                  checked={meterEnabled}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => void setMeterEnabled(event.currentTarget.checked).catch(() => undefined)}
+                />
+              }
+              onClick={() => void setMeterEnabled(!meterEnabled).catch(() => undefined)}
+            />
             <NavLink
               label={t("ui.equipment-analysis.title")}
               leftSection={<ChartBar size="1rem" />}
               component={Link}
               to="/logs/equipment"
             />
+            <NavLink
+              label={t("ui.navigation.battle-records")}
+              leftSection={<House size="1rem" />}
+              component={Link}
+              to="/logs"
+            />
           </AppShell.Section>
           <AppShell.Section>
-            <NavLink label="Settings" leftSection={<Gear size="1rem" />} component={Link} to="/logs/settings" />
+            <NavLink
+              label={t("ui.navigation.settings")}
+              leftSection={<Gear size="1rem" />}
+              component={Link}
+              to="/logs/settings"
+            />
           </AppShell.Section>
         </AppShell.Navbar>
         <AppShell.Main>

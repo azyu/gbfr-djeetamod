@@ -4,6 +4,11 @@
       "title": "Party Damage",
       "unknown-character": "Unknown Character"
     },
+    "navigation": {
+      "damage-meter": "Damage Meter",
+      "battle-records": "Battle Records",
+      "settings": "Settings"
+    },
     "connection": {
       "searching": "Waiting for the game",
       "connected": "Game connected",
