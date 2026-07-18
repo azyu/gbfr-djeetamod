@@ -95,10 +95,7 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 function isCharacterType(value: unknown): value is CharacterType {
-  return (
-    (typeof value === "string" && value.length > 0) ||
-    (isRecord(value) && isNonNegativeInteger(value.Unknown))
-  );
+  return (typeof value === "string" && value.length > 0) || (isRecord(value) && isNonNegativeInteger(value.Unknown));
 }
 
 function isOneOf<T extends string>(value: unknown, allowed: readonly T[]): value is T {
