@@ -268,6 +268,38 @@ pub enum HookStatus {
     Unsupported,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EquipmentSourceKind {
+    SigilPrimary,
+    SigilSecondary,
+    Weapon,
+    Wrightstone,
+    MasterTrait,
+    Summon,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EquipmentCaptureStatus {
+    Complete,
+    Unsupported,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct EquippedTraitSource {
+    pub kind: EquipmentSourceKind,
+    pub slot: u8,
+    pub item_id: u32,
+    pub trait_id: u32,
+    pub trait_level: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct LocalEquipmentSnapshotEvent {
+    pub character_type: u32,
+    pub status: EquipmentCaptureStatus,
+    pub sources: Vec<EquippedTraitSource>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Message {
     OnAreaEnter(AreaEnterEvent),
@@ -286,6 +318,8 @@ pub enum Message {
     PlayerIdentityEvent(PlayerIdentityEvent),
     /// Reports whether the injected DLL installed every hook required by the meter.
     HookStatus(HookStatus),
+    /// A read-only snapshot of one local character's normal equipment traits.
+    LocalEquipmentSnapshot(LocalEquipmentSnapshotEvent),
 }
 
 /// Damage event layout used through Awa Edition 1.8.4.
@@ -369,7 +403,7 @@ pub fn deserialize_message(bytes: &[u8]) -> bincode::Result<Message> {
 
 #[cfg(test)]
 mod tests {
-    use super::{HookStatus, Message};
+    use super::{EquipmentCaptureStatus, HookStatus, LocalEquipmentSnapshotEvent, Message};
 
     #[test]
     fn hook_status_round_trips() {
@@ -378,5 +412,21 @@ mod tests {
             let decoded: Message = bincode::deserialize(&bytes).unwrap();
             assert!(matches!(decoded, Message::HookStatus(value) if value == status));
         }
+    }
+
+    #[test]
+    fn equipment_snapshot_is_appended_after_existing_variants() {
+        let hook_status = bincode::serialize(&Message::HookStatus(HookStatus::Ready)).unwrap();
+        let equipment = bincode::serialize(&Message::LocalEquipmentSnapshot(
+            LocalEquipmentSnapshotEvent {
+                character_type: 1,
+                status: EquipmentCaptureStatus::Complete,
+                sources: Vec::new(),
+            },
+        ))
+        .unwrap();
+
+        assert_eq!(&hook_status[..4], &11_u32.to_le_bytes());
+        assert_eq!(&equipment[..4], &12_u32.to_le_bytes());
     }
 }

@@ -89,3 +89,23 @@ fn compatibility_decoder_preserves_current_damage_details() {
     assert_eq!(event.stun_value, Some(12.5));
     assert!(event.details.is_some());
 }
+
+#[test]
+fn local_equipment_snapshot_round_trips() {
+    let message = Message::LocalEquipmentSnapshot(protocol::LocalEquipmentSnapshotEvent {
+        character_type: 0x4C71_4F77,
+        status: protocol::EquipmentCaptureStatus::Complete,
+        sources: vec![protocol::EquippedTraitSource {
+            kind: protocol::EquipmentSourceKind::SigilPrimary,
+            slot: 0,
+            item_id: 0x1234_5678,
+            trait_id: 0x9ABC_DEF0,
+            trait_level: 15,
+        }],
+    });
+    let encoded = protocol::bincode::serialize(&message).unwrap();
+    assert!(matches!(
+        protocol::bincode::deserialize::<Message>(&encoded).unwrap(),
+        Message::LocalEquipmentSnapshot(_)
+    ));
+}
