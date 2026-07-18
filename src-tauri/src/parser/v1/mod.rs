@@ -655,8 +655,10 @@ impl Parser {
 
     // Called when a damage event is received from the game.
     pub fn on_damage_event(&mut self, event: DamageEvent) {
-        let now = Utc::now().timestamp_millis();
+        self.on_damage_event_at(event, Utc::now().timestamp_millis());
+    }
 
+    fn on_damage_event_at(&mut self, event: DamageEvent, now: i64) {
         if Self::should_ignore_damage_event(&event) {
             return;
         }
@@ -709,16 +711,21 @@ impl Parser {
             return false;
         }
 
-        let finished = self.finish_and_save_encounter();
-        if finished {
-            // "Play Again" does not emit the disabled area-enter hook. Drop
-            // the completed encounter's actor-to-party snapshot here, before
-            // the next battle's identity events arrive.
-            self.encounter.reset_player_data();
-            self.emit_party_update();
+        let saved = self.finish_and_save_encounter();
+
+        // "Play Again" does not emit the disabled area-enter hook. Drop the
+        // completed encounter and its actor-to-party snapshot before the next
+        // battle's identity events arrive. The reward overlay must also close
+        // when persistence fails.
+        self.encounter.reset_player_data();
+        self.reset();
+        self.update_status(ParserStatus::Waiting);
+        self.emit_party_update();
+        if let Some(window) = &self.window_handle {
+            let _ = window.emit("encounter-update", &self.derived_state);
         }
 
-        finished
+        saved
     }
 
     fn finish_and_save_encounter(&mut self) -> bool {
@@ -1091,12 +1098,82 @@ mod tests {
 
     use super::*;
 
+    fn test_damage(source_index: u32, target_index: u32, damage: i32) -> DamageEvent {
+        DamageEvent {
+            source: Actor {
+                index: source_index,
+                actor_type: 0x4C714F77,
+                parent_index: source_index,
+                parent_actor_type: 0x4C714F77,
+            },
+            target: Actor {
+                index: target_index,
+                actor_type: 0xDEAD0000 + target_index,
+                parent_index: target_index,
+                parent_actor_type: 0xDEAD0000 + target_index,
+            },
+            damage,
+            flags: 0,
+            action_id: ActionType::Normal(100),
+            attack_rate: None,
+            stun_value: None,
+            damage_cap: None,
+            details: None,
+        }
+    }
+
     #[test]
     fn can_create_parser() {
         let parser = Parser::default();
 
         assert_eq!(parser.status, ParserStatus::Waiting);
         assert_eq!(parser.start_time(), 1);
+    }
+
+    #[test]
+    fn first_hit_starts_and_multiple_targets_share_one_encounter() {
+        let mut parser = Parser::default();
+        parser.on_damage_event_at(test_damage(7, 1, 1_000), 1_000);
+        parser.on_damage_event_at(test_damage(7, 2, 3_000), 5_000);
+
+        assert_eq!(parser.status, ParserStatus::InProgress);
+        assert_eq!(parser.derived_state.start_time, 1_000);
+        assert_eq!(parser.derived_state.end_time, 5_000);
+        assert_eq!(parser.derived_state.total_damage, 4_000);
+        assert_eq!(
+            parser.derived_state.party.get(&7).unwrap().total_damage,
+            4_000
+        );
+        assert_eq!(parser.derived_state.targets.len(), 2);
+        assert_eq!(parser.derived_state.party.get(&7).unwrap().dps, 1_000.0);
+    }
+
+    #[test]
+    fn reward_saves_then_clears_damage_and_stale_identity() {
+        let mut parser = Parser::default();
+        parser.on_player_identity_event(PlayerIdentityEvent {
+            character_name: CString::new("Player").unwrap(),
+            display_name: CString::new("Player").unwrap(),
+            character_type: 0x4C714F77,
+            party_index: 0,
+            actor_index: 7,
+            is_online: false,
+        });
+        parser.on_damage_event_at(test_damage(7, 1, 4_000), 1_000);
+
+        assert!(parser.on_battle_end_event());
+        assert_eq!(parser.status, ParserStatus::Waiting);
+        assert_eq!(parser.derived_state.status, ParserStatus::Waiting);
+        assert_eq!(parser.derived_state.total_damage, 0);
+        assert!(parser.derived_state.party.is_empty());
+        assert!(parser.derived_state.targets.is_empty());
+        assert!(parser.encounter.raw_event_log.is_empty());
+        assert!(parser.encounter.player_data.iter().all(Option::is_none));
+        assert!(!parser.on_battle_end_event());
+
+        parser.on_damage_event_at(test_damage(7, 3, 500), 10_000);
+        assert_eq!(parser.derived_state.total_damage, 500);
+        assert_eq!(parser.derived_state.start_time, 10_000);
     }
 
     #[test]
@@ -1134,7 +1211,7 @@ mod tests {
     }
 
     #[test]
-    fn battle_end_event_stops_and_saves_once() {
+    fn battle_end_event_clears_and_saves_once() {
         let mut parser = Parser::default();
         parser.on_player_identity_event(PlayerIdentityEvent {
             character_name: CString::new("First Character").unwrap(),
@@ -1167,7 +1244,7 @@ mod tests {
         });
 
         assert!(parser.on_battle_end_event());
-        assert_eq!(parser.status, ParserStatus::Stopped);
+        assert_eq!(parser.status, ParserStatus::Waiting);
         assert!(parser.encounter.player_data.iter().all(Option::is_none));
         assert!(!parser.on_battle_end_event());
 

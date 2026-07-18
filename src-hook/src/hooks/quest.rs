@@ -33,6 +33,11 @@ const ON_SHOW_RESULT_SCREEN_SIG: &str =
 const ON_BATTLE_END_SIG: &str =
     "41 56 56 57 53 48 83 ec 38 48 89 ce 48 8b 0d ? ? ? ? 48 8d 54 24 30 41 b8 ab 4e f1 51 e8 ? ? ? ? 48 8b 44 24 30 48 85 c0 0f 84 ? ? ? ? 48 8b 58 18 4c 8b 70 20 4c 39 f3 0f 84 ? ? ? ? 48 8d 7c 24 2c";
 
+fn notify_before_original(notify: impl FnOnce(), original: impl FnOnce()) {
+    notify();
+    original();
+}
+
 /// Called once the quest result screen is ready for input.
 #[derive(Clone)]
 pub struct OnBattleEndHook {
@@ -63,9 +68,13 @@ impl OnBattleEndHook {
     }
 
     fn run(&self, a1: *const usize) {
-        unsafe { OnBattleEnd.call(a1) };
-        super::reset_battle_identity_state();
-        let _ = self.tx.send(Message::OnBattleEnd);
+        notify_before_original(
+            || {
+                super::reset_battle_identity_state();
+                let _ = self.tx.send(Message::OnBattleEnd);
+            },
+            || unsafe { OnBattleEnd.call(a1) },
+        );
     }
 }
 
@@ -167,5 +176,23 @@ impl OnQuestCompleteHook {
         }
 
         unsafe { OnShowResultScreen.call(a1) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+
+    use super::notify_before_original;
+
+    #[test]
+    fn battle_end_notification_precedes_reward_setup() {
+        let calls = RefCell::new(Vec::new());
+        notify_before_original(
+            || calls.borrow_mut().push("notify"),
+            || calls.borrow_mut().push("original"),
+        );
+
+        assert_eq!(*calls.borrow(), vec!["notify", "original"]);
     }
 }
