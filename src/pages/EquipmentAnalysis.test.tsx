@@ -31,7 +31,8 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) =>
       ({
-        "ui.equipment-analysis.title": "장비 특성 분석",
+        "ui.equipment-analysis.title": "진 특성 상한 분석",
+        "ui.equipment-analysis.scope": "장착 진 12개만 합산",
         "ui.equipment-analysis.select-character": "캐릭터 선택",
         "ui.equipment-analysis.overflow": "초과",
         "ui.equipment-analysis.capped": "최대",

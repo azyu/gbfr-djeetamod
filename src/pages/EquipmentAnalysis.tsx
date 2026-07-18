@@ -54,6 +54,9 @@ export const EquipmentAnalysis = () => {
   return (
     <Stack gap="md">
       <Title order={2}>{t("ui.equipment-analysis.title")}</Title>
+      <Text c="dimmed" size="sm">
+        {t("ui.equipment-analysis.scope")}
+      </Text>
       {!response.connected ? (
         <StatusMessage>{t("ui.equipment-analysis.waiting-game")}</StatusMessage>
       ) : response.characters.length === 0 ? (
