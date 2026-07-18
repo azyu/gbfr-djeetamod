@@ -1,5 +1,7 @@
 import { MantineProvider } from "@mantine/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -89,4 +91,11 @@ it("toggles once from either the row or the switch", () => {
   fireEvent.click(screen.getByRole("switch", { name: "데미지 미터" }));
   expect(mocks.setMeterEnabled).toHaveBeenCalledTimes(1);
   expect(mocks.setMeterEnabled).toHaveBeenLastCalledWith(false);
+});
+
+it("starts with mobile navigation closed and desktop navigation open", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/pages/Logs.tsx"), "utf8");
+
+  expect(source).toMatch(/mobileOpened[\s\S]*useDisclosure\(\)/);
+  expect(source).toMatch(/desktopOpened[\s\S]*useDisclosure\(true\)/);
 });

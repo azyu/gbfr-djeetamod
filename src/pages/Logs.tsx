@@ -14,7 +14,7 @@ import useMeterVisibility from "./useMeterVisibility";
 const Layout = () => {
   const { t } = useTranslation();
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
-  const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(false);
+  const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const { open_log_on_save } = useMeterSettingsStore((state) => ({ open_log_on_save: state.open_log_on_save }));
   const { meterEnabled, setMeterEnabled } = useMeterVisibility();
 
