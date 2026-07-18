@@ -62,6 +62,10 @@ impl Server {
                 match read_pipe {
                     Ok(stream) => {
                         let rx = self.tx.subscribe();
+                        // The backend owns the displayed equipment state. A new
+                        // pipe client starts empty, so allow unchanged character
+                        // snapshots to be published again after reconnecting.
+                        hooks::reset_equipment_snapshot_cache();
                         tokio::spawn(async move {
                             let encoder = LengthDelimitedCodec::new();
                             let writer = FramedWrite::new(stream, encoder);

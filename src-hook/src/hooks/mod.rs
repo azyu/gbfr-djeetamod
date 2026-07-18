@@ -17,6 +17,7 @@ mod area;
 mod damage;
 mod damage_details;
 mod death;
+mod equipment;
 mod ffi;
 mod globals;
 mod player;
@@ -69,11 +70,14 @@ pub fn setup_hooks(tx: event::Tx) -> Result<()> {
     // Core DPS tracking. The main damage signature is still stable in game 2.0.2.
     OnProcessDamageHook::new(tx.clone()).setup(&process)?;
 
-    // Game 2.0.2 still keeps player names in the per-actor identity snapshot, but
-    // the function that refreshes it moved. This hook deliberately reads only the
-    // stable identity fields; equipment remains disabled until its layout is known.
+    // Game 2.0.2 keeps player names and the verified twelve-sigil array behind the
+    // same refresh boundary. Equipment decoding is isolated so an invalid array
+    // never disables player identity or the damage meter.
     match OnLoadPlayerIdentityHook::new(tx.clone()).setup(&process) {
-        Ok(()) => info!("Player identity refresh hook enabled"),
+        Ok(()) => {
+            info!("Player identity refresh hook enabled");
+            info!("Local sigil capture enabled");
+        }
         Err(error) => warn!(
             "Player identity refresh hook unavailable; using direct actor identity reads: {error}"
         ),
@@ -87,7 +91,7 @@ pub fn setup_hooks(tx: event::Tx) -> Result<()> {
     // The 2.0 update changed the layouts and signatures used by the auxiliary hooks.
     // Keep them disabled until each one has been independently verified; installing a
     // stale hook is much worse than temporarily omitting encounter metadata.
-    warn!("Running in game 2.0 compatibility mode: equipment and auxiliary hooks are disabled");
+    warn!("Running in game 2.0 compatibility mode: unverified auxiliary hooks are disabled");
 
     Ok(())
 }
@@ -131,6 +135,10 @@ pub(super) fn reset_battle_identity_state() {
 
     player::reset_battle_identity_state();
     info!("Battle identity caches reset");
+}
+
+pub(super) fn reset_equipment_snapshot_cache() {
+    equipment::reset_snapshot_cache();
 }
 
 // Returns the concrete parent player actor of a known child/form source.

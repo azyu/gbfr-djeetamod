@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use log::info;
+use log::{info, warn};
 use protocol::PlayerIdentityEvent;
 use retour::static_detour;
 
@@ -171,6 +171,14 @@ impl OnLoadPlayerIdentityHook {
         let Some(identity) = read_player_identity(snapshot) else {
             return;
         };
+
+        if !identity.is_online {
+            if let Err(error) =
+                super::equipment::capture_local_snapshot(&self.tx, snapshot, player_key)
+            {
+                warn!("Local sigil snapshot unavailable for {player_key:#010x}: {error}");
+            }
+        }
 
         #[cfg(feature = "identity-debug")]
         {
