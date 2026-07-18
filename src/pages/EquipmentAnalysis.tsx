@@ -5,13 +5,12 @@ import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 
+import { normalizeEquipmentAnalysisResponse } from "@/equipmentAnalysisContract";
 import { characterTypeKey, useEquipmentAnalysisStore } from "@/stores/useEquipmentAnalysisStore";
 import {
   CharacterEquipmentAnalysis,
   CharacterType,
-  EquipmentAnalysisResponse,
   EquipmentSourceKind,
-  EquippedTraitSource,
   TraitAnalysis,
   TraitAnalysisState,
 } from "@/types";
@@ -36,9 +35,11 @@ export const EquipmentAnalysis = () => {
   );
 
   useEffect(() => {
-    invoke<EquipmentAnalysisResponse>("fetch_equipment_analysis").then(loadResponse);
-    const listener = listen<EquipmentAnalysisResponse>("equipment-analysis-update", (event) =>
-      loadResponse(event.payload)
+    void invoke<unknown>("fetch_equipment_analysis")
+      .then((payload) => loadResponse(normalizeEquipmentAnalysisResponse(payload)))
+      .catch(() => undefined);
+    const listener = listen<unknown>("equipment-analysis-update", (event) =>
+      loadResponse(normalizeEquipmentAnalysisResponse(event.payload))
     );
     return () => {
       listener.then((unlisten) => unlisten());
@@ -149,7 +150,7 @@ const TraitRow = ({ trait }: { trait: TraitAnalysis }) => {
               {trait.sources.map((source, index) => (
                 <Text size="xs" key={`${source.kind}-${source.slot}-${index}`}>
                   {sourceKindLabel(source.kind, t)} #{source.slot + 1} · 0x
-                  {formatItemId(source)} · +{sourceTraitLevel(source) ?? "—"}
+                  {source.itemId.toString(16).padStart(8, "0")} · +{source.traitLevel}
                 </Text>
               ))}
             </Stack>
@@ -177,20 +178,4 @@ function characterLabel(characterType: CharacterType, t: (key: string) => string
 
 function sourceKindLabel(kind: EquipmentSourceKind, t: (key: string) => string): string {
   return t(`ui.equipment-analysis.source.${kind}`);
-}
-
-type LegacyEquippedTraitSource = EquippedTraitSource & {
-  item_id?: number;
-  trait_level?: number;
-};
-
-function formatItemId(source: EquippedTraitSource): string {
-  const legacySource = source as LegacyEquippedTraitSource;
-  const itemId = source.itemId ?? legacySource.item_id;
-  return itemId === undefined ? "????????" : itemId.toString(16).padStart(8, "0");
-}
-
-function sourceTraitLevel(source: EquippedTraitSource): number | undefined {
-  const legacySource = source as LegacyEquippedTraitSource;
-  return source.traitLevel ?? legacySource.trait_level;
 }

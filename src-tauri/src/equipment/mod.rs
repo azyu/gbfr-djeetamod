@@ -206,4 +206,35 @@ mod tests {
             .get("item_id")
             .is_none());
     }
+
+    #[test]
+    fn equipment_response_matches_the_frontend_contract_fixture() {
+        let mut state = EquipmentState::for_test([(0xDC58_4F60, 65)]);
+        let levels = [15, 15, 11, 15, 14];
+        state.apply(LocalEquipmentSnapshotEvent {
+            character_type: 0xE705_3919,
+            status: EquipmentCaptureStatus::Complete,
+            sources: levels
+                .into_iter()
+                .enumerate()
+                .map(|(index, trait_level)| EquippedTraitSource {
+                    kind: if index % 2 == 0 {
+                        EquipmentSourceKind::SigilPrimary
+                    } else {
+                        EquipmentSourceKind::SigilSecondary
+                    },
+                    slot: index as u8,
+                    item_id: index as u32 + 1,
+                    trait_id: 0xDC58_4F60,
+                    trait_level,
+                })
+                .collect(),
+        });
+
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../src/fixtures/equipment-analysis-response.json"
+        ))
+        .unwrap();
+        assert_eq!(serde_json::to_value(state.response()).unwrap(), expected);
+    }
 }

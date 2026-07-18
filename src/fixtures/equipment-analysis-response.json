@@ -1,0 +1,25 @@
+{
+  "connected": true,
+  "characters": [
+    {
+      "characterType": "Pl1400",
+      "status": "complete",
+      "traits": [
+        {
+          "traitId": 3696775008,
+          "totalLevel": 70,
+          "maxLevel": 65,
+          "overflowLevel": 5,
+          "state": "overflow",
+          "sources": [
+            { "kind": "sigilPrimary", "slot": 0, "itemId": 1, "traitId": 3696775008, "traitLevel": 15 },
+            { "kind": "sigilSecondary", "slot": 1, "itemId": 2, "traitId": 3696775008, "traitLevel": 15 },
+            { "kind": "sigilPrimary", "slot": 2, "itemId": 3, "traitId": 3696775008, "traitLevel": 11 },
+            { "kind": "sigilSecondary", "slot": 3, "itemId": 4, "traitId": 3696775008, "traitLevel": 15 },
+            { "kind": "sigilPrimary", "slot": 4, "itemId": 5, "traitId": 3696775008, "traitLevel": 14 }
+          ]
+        }
+      ]
+    }
+  ]
+}

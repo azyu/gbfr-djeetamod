@@ -2,14 +2,14 @@ import { MantineProvider } from "@mantine/core";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import equipmentFixture from "@/fixtures/equipment-analysis-response.json";
 import { useEquipmentAnalysisStore } from "@/stores/useEquipmentAnalysisStore";
-import { EquipmentAnalysisResponse } from "@/types";
 
 import { EquipmentAnalysis } from "./EquipmentAnalysis";
 
 const mocks = vi.hoisted(() => ({
-  response: null as EquipmentAnalysisResponse | null,
-  listeners: new Map<string, (event: { payload: EquipmentAnalysisResponse }) => void>(),
+  response: null as unknown,
+  listeners: new Map<string, (event: { payload: unknown }) => void>(),
 }));
 
 vi.mock("@tauri-apps/api", () => ({
@@ -17,14 +17,14 @@ vi.mock("@tauri-apps/api", () => ({
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(async (name: string, callback: (event: { payload: EquipmentAnalysisResponse }) => void) => {
+  listen: vi.fn(async (name: string, callback: (event: { payload: unknown }) => void) => {
     mocks.listeners.set(name, callback);
     return vi.fn();
   }),
 }));
 
 vi.mock("@/utils", () => ({
-  translateTraitId: (id: number) => (id === 1 ? "대미지 상한" : `특성 ${id}`),
+  translateTraitId: (id: number) => (id === 3696775008 ? "데미지 상한" : `특성 ${id}`),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -42,39 +42,14 @@ vi.mock("react-i18next", () => ({
         "ui.equipment-analysis.waiting-game": "게임 연결 대기 중",
         "ui.equipment-analysis.waiting-equipment": "장비 정보 대기 중",
         "ui.equipment-analysis.sources": "기여 장비",
+        "ui.equipment-analysis.source.sigilPrimary": "진 주 특성",
+        "ui.equipment-analysis.source.sigilSecondary": "진 보조 특성",
+        "characters:Pl1400": "나루메아",
         "characters:Pl2400": "갈란차",
         "characters:Pl2500": "마길라프릴라",
       })[key] ?? key,
   }),
 }));
-
-const completeResponse: EquipmentAnalysisResponse = {
-  connected: true,
-  characters: [
-    {
-      characterType: "Pl2400",
-      status: "complete",
-      traits: [
-        {
-          traitId: 2,
-          totalLevel: 15,
-          maxLevel: null,
-          overflowLevel: 0,
-          state: "unknown",
-          sources: [],
-        },
-        {
-          traitId: 1,
-          totalLevel: 72,
-          maxLevel: 65,
-          overflowLevel: 7,
-          state: "overflow",
-          sources: [],
-        },
-      ],
-    },
-  ],
-};
 
 beforeEach(() => {
   globalThis.ResizeObserver = class ResizeObserver {
@@ -92,7 +67,7 @@ beforeEach(() => {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   }));
-  mocks.response = completeResponse;
+  mocks.response = equipmentFixture;
   mocks.listeners.clear();
   useEquipmentAnalysisStore.getState().reset();
 });
@@ -107,49 +82,37 @@ function renderPage() {
   );
 }
 
-it("shows overflow first and preserves unknown caps", async () => {
+it("renders the shared Narmaya overflow contract", async () => {
   renderPage();
 
-  expect(await screen.findByText("72 / 65")).toBeTruthy();
-  expect(screen.getByText("7 초과")).toBeTruthy();
-  expect(screen.getByText("최대치 미확인")).toBeTruthy();
+  expect(await screen.findByText("70 / 65")).toBeTruthy();
+  expect(screen.getByText("5 초과")).toBeTruthy();
+  expect(screen.getByText("나루메아")).toBeTruthy();
+  expect(screen.getAllByText(/\+15$/).length).toBeGreaterThan(0);
   const rows = screen.getAllByTestId("trait-row");
-  expect(within(rows[0]).getByText("대미지 상한")).toBeTruthy();
+  expect(within(rows[0]).getByText("데미지 상한")).toBeTruthy();
 });
 
 it("does not blank the page when a stale source uses snake-case fields", async () => {
-  mocks.response = {
-    connected: true,
-    characters: [
-      {
-        characterType: "Pl2400",
-        status: "complete",
-        traits: [
-          {
-            traitId: 1,
-            totalLevel: 70,
-            maxLevel: 65,
-            overflowLevel: 5,
-            state: "overflow",
-            sources: [
-              {
-                kind: "sigilPrimary",
-                slot: 0,
-                item_id: 123,
-                trait_id: 1,
-                trait_level: 15,
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  } as unknown as EquipmentAnalysisResponse;
+  const staleResponse = structuredClone(equipmentFixture) as unknown as {
+    characters: Array<{ traits: Array<{ sources: unknown[] }> }>;
+  };
+  staleResponse.characters[0].traits[0].sources = [
+    {
+      kind: "sigilPrimary",
+      slot: 0,
+      item_id: 123,
+      trait_id: 3696775008,
+      trait_level: 15,
+    },
+  ];
+  mocks.response = staleResponse;
 
   renderPage();
 
   expect(await screen.findByText("70 / 65")).toBeTruthy();
   expect(screen.getByText("5 초과")).toBeTruthy();
+  expect(screen.queryByText(/0x0000007b/)).toBeNull();
 });
 
 it("preserves a selected character while it remains in an update", () => {
