@@ -14,16 +14,26 @@ mod event;
 mod hooks;
 mod process;
 
-use protocol::Message;
+use protocol::{HookStatus, Message};
 use tokio_util::codec::{FramedWrite, LengthDelimitedCodec};
+
+async fn send_message(
+    stream: &mut FramedWrite<SendPipeStream<pipe_mode::Bytes>, LengthDelimitedCodec>,
+    message: &Message,
+) -> Result<()> {
+    let bytes = protocol::bincode::serialize(message)?;
+    stream.send(bytes.into()).await?;
+    Ok(())
+}
 
 async fn handle_client(
     mut stream: FramedWrite<SendPipeStream<pipe_mode::Bytes>, LengthDelimitedCodec>,
     mut rx: event::Rx,
+    hook_status: HookStatus,
 ) -> Result<()> {
-    while let Ok(msg) = rx.recv().await {
-        let bytes = protocol::bincode::serialize(&msg)?;
-        stream.send(bytes.into()).await?;
+    send_message(&mut stream, &Message::HookStatus(hook_status)).await?;
+    while let Ok(message) = rx.recv().await {
+        send_message(&mut stream, &message).await?;
     }
 
     Ok(())
@@ -40,7 +50,7 @@ impl Server {
         Server { tx }
     }
 
-    async fn run(&self) {
+    async fn run(&self, hook_status: HookStatus) {
         if let Ok(listener) = PipeListenerOptions::new()
             .path(protocol::PIPE_NAME)
             .mode(PipeMode::Bytes)
@@ -56,7 +66,7 @@ impl Server {
                             let encoder = LengthDelimitedCodec::new();
                             let writer = FramedWrite::new(stream, encoder);
 
-                            let _ = handle_client(writer, rx).await;
+                            let _ = handle_client(writer, rx, hook_status).await;
                         });
                     }
                     Err(e) => {
@@ -77,17 +87,23 @@ async fn setup() {
 
     info!("Setting up hooks...");
 
-    match hooks::setup_hooks(tx) {
-        Ok(_) => info!("Hooks initialized"),
-        Err(e) => warn!("Error initializing hooks: {:?}", e),
-    }
+    let hook_status = match hooks::setup_hooks(tx) {
+        Ok(()) => {
+            info!("Hooks initialized");
+            HookStatus::Ready
+        }
+        Err(error) => {
+            warn!("Required meter hook unavailable: {error:?}");
+            HookStatus::Unsupported
+        }
+    };
 
     #[cfg(feature = "console")]
     println!("Hook library initialized");
 
     let _ = std::io::stdout().flush();
 
-    server.run().await;
+    server.run(hook_status).await;
 }
 
 fn initialize_logger() -> anyhow::Result<()> {

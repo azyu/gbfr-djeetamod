@@ -262,6 +262,12 @@ pub struct OnDeathEvent {
     pub death_counter: u32,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookStatus {
+    Ready,
+    Unsupported,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Message {
     OnAreaEnter(AreaEnterEvent),
@@ -278,6 +284,8 @@ pub enum Message {
     OnBattleEnd,
     /// Player name and actor mapping without version-sensitive equipment data.
     PlayerIdentityEvent(PlayerIdentityEvent),
+    /// Reports whether the injected DLL installed every hook required by the meter.
+    HookStatus(HookStatus),
 }
 
 /// Damage event layout used through Awa Edition 1.8.4.
@@ -356,5 +364,19 @@ pub fn deserialize_message(bytes: &[u8]) -> bincode::Result<Message> {
         Err(current_error) => bincode::deserialize::<LegacyMessage>(bytes)
             .map(Message::from)
             .map_err(|_| current_error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HookStatus, Message};
+
+    #[test]
+    fn hook_status_round_trips() {
+        for status in [HookStatus::Ready, HookStatus::Unsupported] {
+            let bytes = bincode::serialize(&Message::HookStatus(status)).unwrap();
+            let decoded: Message = bincode::deserialize(&bytes).unwrap();
+            assert!(matches!(decoded, Message::HookStatus(value) if value == status));
+        }
     }
 }

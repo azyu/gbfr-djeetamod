@@ -659,7 +659,13 @@ impl Parser {
     }
 
     fn on_damage_event_at(&mut self, event: DamageEvent, now: i64) {
-        if Self::should_ignore_damage_event(&event) {
+        let has_player_identity = self
+            .encounter
+            .player_data
+            .iter()
+            .flatten()
+            .any(|player| player.actor_index == event.source.parent_index);
+        if Self::should_ignore_damage_event(&event, has_player_identity) {
             return;
         }
 
@@ -726,6 +732,16 @@ impl Parser {
         }
 
         saved
+    }
+
+    pub fn on_connection_lost(&mut self) {
+        self.encounter.reset_player_data();
+        self.reset();
+        self.update_status(ParserStatus::Waiting);
+        self.emit_party_update();
+        if let Some(window) = &self.window_handle {
+            let _ = window.emit("encounter-update", &self.derived_state);
+        }
     }
 
     fn finish_and_save_encounter(&mut self) -> bool {
@@ -980,11 +996,16 @@ impl Parser {
     }
 
     // Checks if the damage event should be ignored for the purposes of parsing.
-    fn should_ignore_damage_event(event: &DamageEvent) -> bool {
+    fn should_ignore_damage_event(event: &DamageEvent, has_player_identity: bool) -> bool {
         let character_type = CharacterType::from_hash(event.source.parent_actor_type);
 
         if event.damage <= 0 {
+            log::warn!("Ignoring non-positive damage event: {event:?}");
             return true;
+        }
+
+        if event.damage >= 1_000_000_000 {
+            log::warn!("Suspiciously large damage event retained for diagnostics: {event:?}");
         }
 
         // Eugen's Grenade should be ignored.
@@ -994,7 +1015,7 @@ impl Parser {
 
         // If the parent actor type is unknown (not tied to a player character), then ignore it.
         // This usually happens if the damage instance is tied to an enemy/monster.
-        if matches!(character_type, CharacterType::Unknown(_)) {
+        if matches!(character_type, CharacterType::Unknown(_)) && !has_player_identity {
             return true;
         }
 
@@ -1174,6 +1195,61 @@ mod tests {
         parser.on_damage_event_at(test_damage(7, 3, 500), 10_000);
         assert_eq!(parser.derived_state.total_damage, 500);
         assert_eq!(parser.derived_state.start_time, 10_000);
+    }
+
+    #[test]
+    fn disconnect_discards_live_meter_without_saving() {
+        let mut parser = Parser::default();
+        parser.on_damage_event_at(test_damage(7, 1, 1_000), 1_000);
+        parser.on_connection_lost();
+
+        assert_eq!(parser.status, ParserStatus::Waiting);
+        assert_eq!(parser.derived_state.total_damage, 0);
+        assert!(parser.derived_state.party.is_empty());
+        assert!(parser.encounter.raw_event_log.is_empty());
+    }
+
+    #[test]
+    fn identified_unknown_player_is_separate_but_unknown_enemy_is_ignored() {
+        let mut parser = Parser::default();
+        let unknown_hash = 0x11112222;
+        parser.encounter.player_data[0] = Some(PlayerData {
+            actor_index: 41,
+            display_name: "Unknown Player".into(),
+            character_name: "Unknown Player".into(),
+            character_type: CharacterType::Unknown(unknown_hash),
+            sigils: Vec::new(),
+            is_online: true,
+            weapon_info: None,
+            overmastery_info: None,
+            player_stats: None,
+        });
+
+        let mut player_hit = test_damage(41, 1, 700);
+        player_hit.source.actor_type = unknown_hash;
+        player_hit.source.parent_actor_type = unknown_hash;
+        parser.on_damage_event_at(player_hit, 1_000);
+
+        let mut enemy_hit = test_damage(99, 1, 900);
+        enemy_hit.source.actor_type = 0x99998888;
+        enemy_hit.source.parent_actor_type = 0x99998888;
+        parser.on_damage_event_at(enemy_hit, 2_000);
+
+        assert_eq!(parser.derived_state.party.len(), 1);
+        assert_eq!(
+            parser.derived_state.party.get(&41).unwrap().total_damage,
+            700
+        );
+    }
+
+    #[test]
+    fn invalid_damage_is_ignored_but_a_large_valid_hit_is_preserved() {
+        let mut parser = Parser::default();
+        parser.on_damage_event_at(test_damage(7, 1, -1), 1_000);
+        parser.on_damage_event_at(test_damage(7, 1, 1_000_000_000), 2_000);
+
+        assert_eq!(parser.derived_state.total_damage, 1_000_000_000);
+        assert_eq!(parser.encounter.raw_event_log.len(), 1);
     }
 
     #[test]
@@ -1453,7 +1529,7 @@ mod tests {
                 details: None,
             };
 
-            assert!(!Parser::should_ignore_damage_event(&event));
+            assert!(!Parser::should_ignore_damage_event(&event, false));
         }
     }
 

@@ -18,7 +18,7 @@ use parser::{
     constants::{CharacterType, EnemyType},
     v1::{self, PlayerData},
 };
-use protocol::Message;
+use protocol::{HookStatus, Message};
 use rusqlite::params_from_iter;
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -36,6 +36,19 @@ mod parser;
 struct AlwaysOnTop(AtomicBool);
 struct ClickThrough(AtomicBool);
 struct DebugMode(AtomicBool);
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum ConnectionState {
+    Searching,
+    Connected,
+    Disconnected,
+    Unsupported,
+}
+
+fn emit_connection_state(app: &AppHandle, state: ConnectionState) {
+    let _ = app.emit_all("connection-state", state);
+}
 
 #[tauri::command]
 fn set_debug_mode(app: AppHandle, state: State<DebugMode>, enabled: bool) {
@@ -412,6 +425,8 @@ fn delete_logs(ids: Vec<u64>) -> Result<(), String> {
 
 // Continuously check for the game process and inject the DLL when found.
 async fn check_and_perform_hook(app: AppHandle) {
+    emit_connection_state(&app, ConnectionState::Searching);
+
     loop {
         match OwnedProcess::find_first_by_name("granblue_fantasy_relink.exe") {
             Some(target) => {
@@ -437,6 +452,7 @@ async fn check_and_perform_hook(app: AppHandle) {
                         // stayed open during an app upgrade. Still try its pipe;
                         // the compatibility decoder below can consume it.
                         warn!("Could not inject Hook {:?}: {:?}", dll_path, error);
+                        emit_connection_state(&app, ConnectionState::Unsupported);
                         let _ = app.emit_all(
                             "error-alert",
                             "Hook injection failed; trying the existing game connection.",
@@ -467,12 +483,11 @@ fn connect_and_run_parser(app: AppHandle) {
         loop {
             match RecvPipeStream::connect_by_path(protocol::PIPE_NAME).await {
                 Ok(stream) => {
-                    info!("Connected to game!");
-
-                    let _ = app.emit_all("success-alert", "Connnected to game!");
+                    info!("Connected to the game pipe; awaiting hook status");
 
                     let decoder = tokio_util::codec::LengthDelimitedCodec::new();
                     let mut reader = FramedRead::new(stream, decoder);
+                    let mut connection_ready = false;
                     let mut inactivity_check =
                         tokio::time::interval(std::time::Duration::from_secs(1));
                     inactivity_check
@@ -496,6 +511,16 @@ fn connect_and_run_parser(app: AppHandle) {
                                     Ok(msg) => {
                                         if debug_mode {
                                             let _ = logs_window.emit("debug-event", &msg);
+                                        }
+
+                                        if !matches!(&msg, protocol::Message::HookStatus(_))
+                                            && !connection_ready
+                                        {
+                                            connection_ready = true;
+                                            emit_connection_state(
+                                                &app,
+                                                ConnectionState::Connected,
+                                            );
                                         }
 
                                         match msg {
@@ -532,6 +557,24 @@ fn connect_and_run_parser(app: AppHandle) {
                                         protocol::Message::OnBattleEnd => {
                                             state.on_battle_end_event();
                                         }
+                                        protocol::Message::HookStatus(HookStatus::Ready) => {
+                                            connection_ready = true;
+                                            emit_connection_state(
+                                                &app,
+                                                ConnectionState::Connected,
+                                            );
+                                            let _ = app.emit_all(
+                                                "success-alert",
+                                                "Connected to game.",
+                                            );
+                                        }
+                                        protocol::Message::HookStatus(HookStatus::Unsupported) => {
+                                            connection_ready = false;
+                                            emit_connection_state(
+                                                &app,
+                                                ConnectionState::Unsupported,
+                                            );
+                                        }
                                         }
                                     }
                                     Err(error) => {
@@ -552,7 +595,9 @@ fn connect_and_run_parser(app: AppHandle) {
                     info!("Game has closed.");
 
                     // The game has closed, so we should go back to waiting for the game to reopen.
-                    let _ = app.emit_all("error-alert", "Game has closed!");
+                    state.on_connection_lost();
+                    emit_connection_state(&app, ConnectionState::Disconnected);
+                    let _ = app.emit_all("error-alert", "Game connection closed");
                     break;
                 }
                 Err(_) => {

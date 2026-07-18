@@ -81,10 +81,8 @@ pub fn setup_hooks(tx: event::Tx) -> Result<()> {
 
     // This hooks the actual reward/result setup rather than the generic result
     // input operation, which is also reused by fall recovery and boss mechanics.
-    match OnBattleEndHook::new(tx).setup(&process) {
-        Ok(()) => info!("Game 2.0.2 result reward hook enabled"),
-        Err(error) => warn!("Battle-end hook unavailable; using inactivity fallback: {error}"),
-    }
+    OnBattleEndHook::new(tx).setup(&process)?;
+    info!("Game 2.0.2 result reward hook enabled");
 
     // The 2.0 update changed the layouts and signatures used by the auxiliary hooks.
     // Keep them disabled until each one has been independently verified; installing a
