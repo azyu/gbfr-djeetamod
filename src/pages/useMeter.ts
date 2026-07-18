@@ -91,10 +91,6 @@ export default function useMeter() {
       toast.error(evt.payload as string);
     });
 
-    const onPinned = listen("on-pinned", (evt) => {
-      evt.payload ? toast.success(t("ui.on-pin-enabled")) : toast.success(t("ui.on-pin-disabled"));
-    });
-
     const onClickthrough = listen("on-clickthrough", (evt) => {
       evt.payload ? toast.success(t("ui.on-clickthrough-enabled")) : toast.success(t("ui.on-clickthrough-disabled"));
     });
@@ -107,7 +103,6 @@ export default function useMeter() {
       onPartyUpdate.then((f) => f());
       onSuccessAlert.then((f) => f());
       onErrorAlert.then((f) => f());
-      onPinned.then((f) => f());
       onClickthrough.then((f) => f());
     };
   }, [partyData]);

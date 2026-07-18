@@ -38,11 +38,26 @@ mod db;
 mod equipment;
 mod parser;
 
-struct AlwaysOnTop(AtomicBool);
 struct ClickThrough(AtomicBool);
 struct DebugMode(AtomicBool);
 struct ConnectionStatus(Mutex<ConnectionState>);
 struct EquipmentStatus(Mutex<equipment::EquipmentState>);
+
+const DEFAULT_CLICK_THROUGH: bool = false;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MeterWindowAction {
+    Show,
+    Hide,
+}
+
+fn meter_window_action(enabled: bool) -> MeterWindowAction {
+    if enabled {
+        MeterWindowAction::Show
+    } else {
+        MeterWindowAction::Hide
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -732,17 +747,13 @@ fn connect_and_run_parser(app: AppHandle) {
 }
 
 fn system_tray_with_menu() -> SystemTray {
-    let meter = CustomMenuItem::new("open_meter", "미터 열기");
-    let logs = CustomMenuItem::new("open_logs", "로그 열기");
-    let always_on_top = CustomMenuItem::new("always_on_top", "항상 위 ✓");
-    let toggle_clickthrough = CustomMenuItem::new("toggle_clickthrough", "클릭 통과 ✓");
+    let management = CustomMenuItem::new("open_management", "Djeeta MOD 열기");
+    let toggle_clickthrough = CustomMenuItem::new("toggle_clickthrough", "클릭 통과");
     let reset_windows = CustomMenuItem::new("reset_windows", "창 위치 초기화");
     let quit = CustomMenuItem::new("quit", "종료");
 
     let menu = SystemTrayMenu::new()
-        .add_item(meter)
-        .add_item(logs)
-        .add_item(always_on_top)
+        .add_item(management)
         .add_item(toggle_clickthrough)
         .add_item(reset_windows)
         .add_native_item(SystemTrayMenuItem::Separator)
@@ -767,21 +778,19 @@ fn toggle_window_visibility(handle: &AppHandle, id: &str, focus: Option<bool>) {
 }
 
 #[tauri::command]
-fn toggle_always_on_top(window: tauri::Window, state: State<AlwaysOnTop>) {
-    let always_on_top = &state.0;
-    let new_state = !always_on_top.load(Ordering::Acquire);
-    always_on_top.store(new_state, Ordering::Release);
-    window.set_always_on_top(new_state).unwrap();
-    let _ = window.emit("on-pinned", new_state);
-    let _ = window
-        .app_handle()
-        .tray_handle()
-        .get_item("always_on_top")
-        .set_title(if new_state {
-            "항상 위 ✓"
-        } else {
-            "항상 위"
-        });
+fn set_meter_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let window = app
+        .get_window("main")
+        .ok_or_else(|| "meter window not found".to_string())?;
+    match meter_window_action(enabled) {
+        MeterWindowAction::Show => {
+            window
+                .set_always_on_top(true)
+                .map_err(|error| error.to_string())?;
+            window.show().map_err(|error| error.to_string())
+        }
+        MeterWindowAction::Hide => window.hide().map_err(|error| error.to_string()),
+    }
 }
 
 #[tauri::command]
@@ -806,22 +815,16 @@ fn menu_tray_handler(handle: &AppHandle, event: SystemTrayEvent) {
     let should_focus = true;
     match event {
         SystemTrayEvent::LeftClick { .. } => {
-            toggle_window_visibility(handle, "main", Some(should_focus))
+            toggle_window_visibility(handle, "logs", Some(should_focus))
         }
         SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
-            "open_meter" => toggle_window_visibility(handle, "main", Some(should_focus)),
-            "open_logs" => toggle_window_visibility(handle, "logs", Some(should_focus)),
+            "open_management" => toggle_window_visibility(handle, "logs", Some(should_focus)),
             "toggle_clickthrough" => toggle_clickthrough(
                 handle.get_window("main").unwrap(),
                 handle.state::<ClickThrough>(),
             ),
-            "always_on_top" => toggle_always_on_top(
-                handle.get_window("main").unwrap(),
-                handle.state::<AlwaysOnTop>(),
-            ),
             "reset_windows" => {
                 if let Some(window) = handle.get_window("main") {
-                    let _ = window.show();
                     let _ = window.unminimize();
                     let _ = reset_meter_geometry(window);
                 }
@@ -846,9 +849,7 @@ fn menu_tray_handler(handle: &AppHandle, event: SystemTrayEvent) {
 }
 
 fn show_window(app: &AppHandle) {
-    let windows = app.windows();
-
-    for window in windows.values() {
+    if let Some(window) = app.get_window("logs") {
         let _ = window.show();
     }
 }
@@ -873,8 +874,7 @@ fn main() {
                 .level_for("tao", LevelFilter::Error)
                 .build(),
         )
-        .manage(AlwaysOnTop(AtomicBool::new(true)))
-        .manage(ClickThrough(AtomicBool::new(true)))
+        .manage(ClickThrough(AtomicBool::new(DEFAULT_CLICK_THROUGH)))
         .manage(DebugMode(AtomicBool::new(false)))
         .manage(ConnectionStatus(Mutex::new(ConnectionState::Searching)))
         .manage(EquipmentStatus(Mutex::new(
@@ -894,7 +894,7 @@ fn main() {
             fetch_logs,
             delete_logs,
             delete_all_logs,
-            toggle_always_on_top,
+            set_meter_enabled,
             export_damage_log_to_file,
             set_debug_mode,
             reset_meter_geometry,
@@ -903,7 +903,7 @@ fn main() {
         ])
         .setup(|app| {
             if let Some(window) = app.get_window("main") {
-                window.set_ignore_cursor_events(true)?;
+                window.set_ignore_cursor_events(DEFAULT_CLICK_THROUGH)?;
             }
 
             // Perform the game hook check in a separate thread.
@@ -918,7 +918,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        accept_hook_message, meter_geometry, HookHandshakeState, HookStatus, Message, MeterGeometry,
+        accept_hook_message, meter_geometry, meter_window_action, HookHandshakeState, HookStatus,
+        Message, MeterGeometry, MeterWindowAction, DEFAULT_CLICK_THROUGH,
     };
 
     #[test]
@@ -960,5 +961,16 @@ mod tests {
 
         assert!(accept_hook_message(&mut state, &Message::OnBattleEnd));
         assert_eq!(state, HookHandshakeState::Legacy);
+    }
+
+    #[test]
+    fn meter_visibility_maps_to_explicit_window_actions() {
+        assert_eq!(meter_window_action(true), MeterWindowAction::Show);
+        assert_eq!(meter_window_action(false), MeterWindowAction::Hide);
+    }
+
+    #[test]
+    fn click_through_starts_disabled_for_dragging() {
+        assert!(!DEFAULT_CLICK_THROUGH);
     }
 }

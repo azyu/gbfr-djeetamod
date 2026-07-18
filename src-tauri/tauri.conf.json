@@ -48,10 +48,11 @@
         "minWidth": 280,
         "minHeight": 120,
         "alwaysOnTop": true,
+        "skipTaskbar": true,
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu"
       },
       {
-        "title": "Djeeta MOD - Logs",
+        "title": "Djeeta MOD",
         "label": "logs",
         "url": "/logs",
         "fullscreen": false,
