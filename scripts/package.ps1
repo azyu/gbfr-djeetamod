@@ -69,14 +69,24 @@ try {
     }
     Copy-Item -LiteralPath $releaseHookPath -Destination $bundledHookPath -Force
 
-    Invoke-NativeCommand -FilePath $npmPath -Arguments @('run', 'tauri', 'build', '--', '--bundles', 'msi')
+    $tauriConfig = Get-Content -Raw -LiteralPath 'src-tauri\tauri.conf.json' | ConvertFrom-Json
+    $productName = $tauriConfig.package.productName
+    $productVersion = $tauriConfig.package.version
+    $buildStartedAt = [datetime]::UtcNow
+    Invoke-NativeCommand -FilePath $npmPath -Arguments @(
+        'run',
+        'tauri',
+        '--',
+        'build',
+        '--bundles',
+        'msi',
+        '--',
+        '--bin',
+        'gbfr-logs'
+    )
 
-    $msi = Get-ChildItem -LiteralPath 'target\release\bundle\msi' -Filter '*.msi' |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-    if ($null -eq $msi) {
-        throw 'Tauri did not produce an MSI.'
-    }
+    $msiArtifacts = @(Get-ChildItem -LiteralPath 'target\release\bundle\msi' -Filter '*.msi')
+    $msi = Select-ProductMsi -Artifacts $msiArtifacts -ProductName $productName -Version $productVersion -BuildStartedAt $buildStartedAt
 
     $releaseHookHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $releaseHookPath).Hash
     $bundledHookHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $bundledHookPath).Hash
@@ -85,13 +95,17 @@ try {
     }
     $msiHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $msi.FullName).Hash
 
+    $updatedDocuments = @{}
     foreach ($documentPath in @('README.md', 'docs\testing\game-2.0.2-smoke-test.md')) {
         $absolutePath = Join-Path $repositoryRoot $documentPath
         $currentText = [System.IO.File]::ReadAllText($absolutePath)
         $updatedText = Set-ArtifactHashesInText -Text $currentText -MsiHash $msiHash -HookHash $releaseHookHash
         if ($updatedText -ne $currentText) {
-            [System.IO.File]::WriteAllText($absolutePath, $updatedText, $utf8WithoutBom)
+            $updatedDocuments[$absolutePath] = $updatedText
         }
+    }
+    foreach ($document in $updatedDocuments.GetEnumerator()) {
+        [System.IO.File]::WriteAllText($document.Key, $document.Value, $utf8WithoutBom)
     }
 
     Invoke-NativeCommand -FilePath $gitPath -Arguments @('diff', '--check')
@@ -101,7 +115,7 @@ try {
         MsiSHA256 = $msiHash
         HookSHA256 = $releaseHookHash
         HookHashesEqual = $true
-        UpdatedDocuments = @('README.md', 'docs/testing/game-2.0.2-smoke-test.md')
+        UpdatedDocuments = @($updatedDocuments.Keys)
     } | Format-List
 }
 finally {

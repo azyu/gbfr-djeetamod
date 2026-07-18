@@ -31,6 +31,38 @@ Assert-Equal $nodeWarnings.Count 1 'Node 24 must emit one warning.'
 Assert-GameNotRunning -Processes @()
 Assert-Throws { Assert-GameNotRunning -Processes @([pscustomobject]@{ Id = 1234 }) } 'A running game must fail.'
 
+$buildStartedAt = [datetime]'2026-07-19T01:00:00Z'
+$productMsi = [pscustomobject]@{
+    Name = 'Djeeta MOD_0.1.0_x64_en-US.msi'
+    LastWriteTimeUtc = [datetime]'2026-07-19T01:00:01Z'
+}
+$helperMsi = [pscustomobject]@{
+    Name = 'build_trait_caps_0.1.0_x64_en-US.msi'
+    LastWriteTimeUtc = [datetime]'2026-07-19T01:00:02Z'
+}
+$selectedMsi = Select-ProductMsi -Artifacts @($productMsi, $helperMsi) -ProductName 'Djeeta MOD' -Version '0.1.0' -BuildStartedAt $buildStartedAt
+Assert-Equal $selectedMsi.Name $productMsi.Name 'Product MSI selection failed.'
+Assert-Throws {
+    Select-ProductMsi -Artifacts @($helperMsi) -ProductName 'Djeeta MOD' -Version '0.1.0' -BuildStartedAt $buildStartedAt
+} 'A helper-only MSI result must fail.'
+Assert-Throws {
+    Select-ProductMsi -Artifacts @(
+        $productMsi,
+        [pscustomobject]@{
+            Name = 'Djeeta MOD_0.1.0_x64_ko-KR.msi'
+            LastWriteTimeUtc = [datetime]'2026-07-19T01:00:03Z'
+        }
+    ) -ProductName 'Djeeta MOD' -Version '0.1.0' -BuildStartedAt $buildStartedAt
+} 'Multiple product MSIs must fail.'
+Assert-Throws {
+    Select-ProductMsi -Artifacts @(
+        [pscustomobject]@{
+            Name = 'Djeeta MOD_0.1.0_x64_en-US.msi'
+            LastWriteTimeUtc = [datetime]'2026-07-19T00:59:59Z'
+        }
+    ) -ProductName 'Djeeta MOD' -Version '0.1.0' -BuildStartedAt $buildStartedAt
+} 'A stale product MSI must fail.'
+
 $oldMsi = 'A' * 64
 $oldHook = 'B' * 64
 $newMsi = 'C' * 64

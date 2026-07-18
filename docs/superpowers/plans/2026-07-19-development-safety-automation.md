@@ -291,7 +291,7 @@ The script must:
 5. Resolve `node.exe`, `npm.cmd`, Cargo from `Get-Command` or `$env:USERPROFILE\.cargo\bin\cargo.exe`, and `git.exe`; add Cargo's directory to the process `PATH`.
 6. Validate `node --version`.
 7. Run helper tests, every required npm gate, the locked release hook build, and locked workspace tests through `Invoke-NativeCommand`.
-8. Copy the release hook, build the MSI, locate the newest single MSI, calculate hashes, and require hook equality.
+8. Copy the release hook, build only the configured application binary, require exactly one freshly produced Djeeta MOD MSI matching the configured product and version, calculate hashes, and require hook equality.
 9. Update `README.md` and `docs/testing/game-2.0.2-smoke-test.md` with `Set-ArtifactHashesInText`, writing UTF-8 without BOM via `System.Text.UTF8Encoding($false)`.
 10. Run `git diff --check` and print a final `PSCustomObject` containing `MsiPath`, `MsiSHA256`, `HookSHA256`, and `HookHashesEqual`.
 
@@ -381,7 +381,7 @@ git commit -m "docs: align game smoke test with window policy"
 
 **Interfaces:**
 - Consumes: Tasks 1–4 and a stopped game process.
-- Produces: one fresh MSI, equal hook hashes, current hash records, and full verification evidence.
+- Produces: one fresh Djeeta MOD MSI, equal hook hashes, current hash records, and full verification evidence.
 
 - [ ] **Step 1: Run the complete package command**
 
@@ -389,11 +389,11 @@ git commit -m "docs: align game smoke test with window policy"
 npm run package:msi
 ```
 
-Expected: every required npm and Cargo gate passes, one MSI is produced, hook hashes are equal, and the command prints the final hashes. If the game is running, stop here and ask the user to exit it; do not stop it automatically.
+Expected: every required npm and Cargo gate passes, exactly one fresh Djeeta MOD MSI is produced, hook hashes are equal, and the command prints the final hashes. If the game is running, stop here and ask the user to exit it; do not stop it automatically.
 
 - [ ] **Step 2: Verify the artifact and documentation values independently**
 
-Calculate the newest MSI hash and both hook hashes with `Get-FileHash`. Assert the hook hashes are equal and that README plus the smoke-test document each contain the current MSI and hook hashes.
+Calculate the configured Djeeta MOD product MSI hash and both hook hashes with `Get-FileHash`. Assert the hook hashes are equal and that README plus the smoke-test document each contain the current MSI and hook hashes.
 
 - [ ] **Step 3: Inspect the complete diff and status**
 

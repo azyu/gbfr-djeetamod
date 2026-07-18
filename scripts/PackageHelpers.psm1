@@ -30,6 +30,25 @@ function Assert-GameNotRunning {
     }
 }
 
+function Select-ProductMsi {
+    param(
+        [Parameter(Mandatory)][object[]]$Artifacts,
+        [Parameter(Mandatory)][string]$ProductName,
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][datetime]$BuildStartedAt
+    )
+
+    $expectedName = '^' + [regex]::Escape("${ProductName}_${Version}_x64_") + '[^\\]+\.msi$'
+    $matches = @($Artifacts | Where-Object { $_.Name -match $expectedName })
+    if ($matches.Count -ne 1) {
+        throw "Expected exactly one ${ProductName} ${Version} x64 MSI; found $($matches.Count)."
+    }
+    if ($matches[0].LastWriteTimeUtc.ToUniversalTime() -lt $BuildStartedAt.ToUniversalTime()) {
+        throw "The ${ProductName} MSI was not produced by the current build."
+    }
+    return $matches[0]
+}
+
 function Set-ArtifactHashesInText {
     param(
         [Parameter(Mandatory)][string]$Text,
@@ -71,4 +90,4 @@ function Invoke-NativeCommand {
     return $output
 }
 
-Export-ModuleMember -Function Get-NodeMajorVersion, Assert-SupportedNodeVersion, Assert-GameNotRunning, Set-ArtifactHashesInText, Invoke-NativeCommand
+Export-ModuleMember -Function Get-NodeMajorVersion, Assert-SupportedNodeVersion, Assert-GameNotRunning, Select-ProductMsi, Set-ArtifactHashesInText, Invoke-NativeCommand
