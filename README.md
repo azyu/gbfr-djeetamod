@@ -104,11 +104,23 @@ Djeeta MOD는 게임의 그래픽 설정이나 렌더링 품질을 변경하지 
 
 Node.js 20, Visual Studio 2022 C++ Build Tools, Windows SDK, WebView2, rustup과 `rust-toolchain.toml`에 지정된 툴체인이 필요합니다.
 
+전체 검증, 최신 훅 동기화, MSI 생성과 해시 기록 갱신은 다음 명령으로 실행합니다. 게임은 먼저 종료해야 합니다.
+
+```powershell
+npm run package:msi
+```
+
+스크립트가 실행하는 개별 검증 명령은 다음과 같습니다.
+
 ```powershell
 npm ci
+npm run format-check
+npm run lint
+npm run tsc
+npm test -- --run
+npm run build
 cargo build --release --locked --package hook
 cargo test --workspace --all-targets --locked
-npm test -- --run
 npm run tauri build -- --bundles msi
 ```
 
