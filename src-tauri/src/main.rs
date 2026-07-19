@@ -686,6 +686,10 @@ fn connect_and_run_parser(app: AppHandle) {
                                             state.on_player_identity_event(event);
                                         }
                                         protocol::Message::LocalEquipmentSnapshot(event) => {
+                                            equipment_probe::record_hook_snapshot(
+                                                &app,
+                                                event.clone(),
+                                            );
                                             let response = {
                                                 let equipment = app.state::<EquipmentStatus>();
                                                 let mut equipment = equipment.0.lock().unwrap();
@@ -887,6 +891,7 @@ fn main() {
         .manage(ClickThrough(AtomicBool::new(DEFAULT_CLICK_THROUGH)))
         .manage(DebugMode(AtomicBool::new(false)))
         .manage(ConnectionStatus(Mutex::new(ConnectionState::Searching)))
+        .manage(equipment_probe::ProbeState::default())
         .manage(EquipmentStatus(Mutex::new(
             equipment::EquipmentState::from_bundled_catalog()
                 .expect("bundled trait cap catalog must be valid"),
