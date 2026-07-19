@@ -119,6 +119,11 @@ impl ProbeComparator {
     }
 }
 
+pub(crate) fn snapshot_digest_prefix(bytes: &[u8]) -> String {
+    let digest: [u8; 32] = Sha256::digest(bytes).into();
+    digest_prefix(&digest)
+}
+
 fn digest_prefix(digest: &[u8; 32]) -> String {
     digest[..8]
         .iter()

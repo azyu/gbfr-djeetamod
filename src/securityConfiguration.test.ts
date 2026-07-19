@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, test } from "vitest";
 
 const readRepositoryFile = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
@@ -50,4 +50,20 @@ it("exposes only the verified NSIS packaging command", () => {
   expect(packagingScript).toContain("'target\\release\\bundle\\nsis'");
   expect(packagingScript).toMatch(/'build',\s*'--bundles',\s*'nsis'/);
   expect(packagingScript).not.toMatch(/'build',\s*'--bundles',\s*'msi'/);
+});
+
+test("external equipment probe requests read-only process access", () => {
+  const source = readRepositoryFile("src-tauri/src/equipment_probe/memory.rs");
+  expect(source).toContain("PROCESS_VM_READ");
+  expect(source).toContain("PROCESS_QUERY_LIMITED_INFORMATION");
+  for (const forbidden of [
+    "PROCESS_VM_WRITE",
+    "PROCESS_VM_OPERATION",
+    "PROCESS_CREATE_THREAD",
+    "WriteProcessMemory",
+    "VirtualAllocEx",
+    "CreateRemoteThread",
+  ]) {
+    expect(source).not.toContain(forbidden);
+  }
 });

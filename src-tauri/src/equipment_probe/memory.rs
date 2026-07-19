@@ -12,7 +12,7 @@ use std::{
 };
 #[cfg(windows)]
 use windows::Win32::{
-    Foundation::{CloseHandle, HANDLE},
+    Foundation::{CloseHandle, HANDLE, STILL_ACTIVE},
     System::{
         Diagnostics::{
             Debug::ReadProcessMemory,
@@ -22,7 +22,9 @@ use windows::Win32::{
                 TH32CS_SNAPPROCESS,
             },
         },
-        Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ},
+        Threading::{
+            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
+        },
     },
 };
 
@@ -125,6 +127,12 @@ impl RemoteProcess {
 
     pub fn executable_sha256(&self) -> Result<[u8; 32], MemoryReadError> {
         sha256_file(&self.module_path)
+    }
+
+    pub fn is_running(&self) -> Result<bool, MemoryReadError> {
+        let mut exit_code = 0;
+        unsafe { GetExitCodeProcess(self.handle.0, &mut exit_code) }.map_err(windows_error)?;
+        Ok(exit_code == STILL_ACTIVE.0 as u32)
     }
 }
 

@@ -926,6 +926,7 @@ fn main() {
 
             // Perform the game hook check in a separate thread.
             tauri::async_runtime::spawn(check_and_perform_hook(app.handle()));
+            tauri::async_runtime::spawn(equipment_probe::run_if_enabled(app.handle()));
 
             Ok(())
         })
