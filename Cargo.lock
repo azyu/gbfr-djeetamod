@@ -1082,6 +1082,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "equipment-core"
+version = "0.1.0"
+dependencies = [
+ "protocol",
+ "thiserror",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1815,6 +1823,7 @@ dependencies = [
  "anyhow",
  "ctor",
  "dirs",
+ "equipment-core",
  "fern",
  "futures",
  "interprocess",

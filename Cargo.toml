@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "equipment-core",
   "src-hook",
   "src-tauri"
 ]

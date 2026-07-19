@@ -3,19 +3,11 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use anyhow::{bail, ensure, Context, Result};
-use protocol::{
-    EquipmentCaptureStatus, EquipmentSourceKind, EquippedTraitSource, LocalEquipmentSnapshotEvent,
-    Message,
-};
+use anyhow::{Context, Result};
+use equipment_core::{decode_snapshot, SIGIL_ARRAY_BYTES};
+use protocol::{LocalEquipmentSnapshotEvent, Message};
 
 use crate::event;
-
-pub(super) const EMPTY_HASH: u32 = 0x887A_E0B0;
-const SIGIL_COUNT: usize = 12;
-const SIGIL_STRIDE: usize = 0x24;
-pub(super) const SIGIL_ARRAY_BYTES: usize = SIGIL_COUNT * SIGIL_STRIDE;
-const MAX_TRAIT_LEVEL: u32 = 10_000;
 
 #[derive(Default)]
 pub(super) struct EquipmentSnapshotCache {
@@ -58,102 +50,6 @@ pub(super) fn reset_snapshot_cache() {
     }
 }
 
-fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
-    let value = bytes
-        .get(offset..offset + 4)
-        .context("sigil field is outside the captured array")?;
-    Ok(u32::from_le_bytes(
-        value.try_into().expect("four-byte slice"),
-    ))
-}
-
-fn is_empty_hash(value: u32) -> bool {
-    value == 0 || value == EMPTY_HASH
-}
-
-fn push_trait(
-    sources: &mut Vec<EquippedTraitSource>,
-    kind: EquipmentSourceKind,
-    slot: usize,
-    item_id: u32,
-    trait_id: u32,
-    trait_level: u32,
-) -> Result<()> {
-    if is_empty_hash(trait_id) {
-        return Ok(());
-    }
-
-    ensure!(
-        (1..=MAX_TRAIT_LEVEL).contains(&trait_level),
-        "sigil slot {slot} has invalid trait level {trait_level}"
-    );
-    sources.push(EquippedTraitSource {
-        kind,
-        slot: u8::try_from(slot).expect("twelve slots fit in u8"),
-        item_id,
-        trait_id,
-        trait_level,
-    });
-    Ok(())
-}
-
-pub(super) fn decode_snapshot(
-    bytes: &[u8],
-    character_key: u32,
-) -> Result<LocalEquipmentSnapshotEvent> {
-    ensure!(
-        bytes.len() >= SIGIL_ARRAY_BYTES,
-        "sigil snapshot is shorter than {SIGIL_ARRAY_BYTES:#x} bytes"
-    );
-    ensure!(
-        !is_empty_hash(character_key),
-        "equipment character key is empty"
-    );
-
-    let mut sources = Vec::new();
-    for slot in 0..SIGIL_COUNT {
-        let base = slot * SIGIL_STRIDE;
-        let primary_trait = read_u32(bytes, base)?;
-        let primary_level = read_u32(bytes, base + 0x04)?;
-        let secondary_trait = read_u32(bytes, base + 0x08)?;
-        let secondary_level = read_u32(bytes, base + 0x0C)?;
-        let sigil_id = read_u32(bytes, base + 0x10)?;
-        let equipped_character = read_u32(bytes, base + 0x14)?;
-
-        if is_empty_hash(sigil_id) {
-            continue;
-        }
-        if equipped_character != character_key {
-            bail!(
-                "sigil slot {slot} belongs to {equipped_character:#010x}, expected {character_key:#010x}"
-            );
-        }
-
-        push_trait(
-            &mut sources,
-            EquipmentSourceKind::SigilPrimary,
-            slot,
-            sigil_id,
-            primary_trait,
-            primary_level,
-        )?;
-        push_trait(
-            &mut sources,
-            EquipmentSourceKind::SigilSecondary,
-            slot,
-            sigil_id,
-            secondary_trait,
-            secondary_level,
-        )?;
-    }
-
-    Ok(LocalEquipmentSnapshotEvent {
-        character_type: character_key,
-        status: EquipmentCaptureStatus::Complete,
-        sources,
-    })
-}
-
 fn publish_if_changed(
     cache: &mut EquipmentSnapshotCache,
     tx: &event::Tx,
@@ -191,11 +87,10 @@ pub(super) fn capture_local_snapshot(
 
 #[cfg(test)]
 mod tests {
+    use equipment_core::{decode_snapshot, EMPTY_HASH, SIGIL_ARRAY_BYTES};
     use protocol::{EquipmentCaptureStatus, EquipmentSourceKind};
 
-    use super::{
-        decode_snapshot, publish_if_changed, EquipmentSnapshotCache, EMPTY_HASH, SIGIL_ARRAY_BYTES,
-    };
+    use super::{publish_if_changed, EquipmentSnapshotCache};
 
     const CHARACTER_KEY: u32 = 0xE705_3919;
 
