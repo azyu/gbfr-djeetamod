@@ -2,11 +2,13 @@
 
 Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Windows x64 파티 데미지 미터 테스트 빌드입니다. 캐릭터별 누적 피해, 상대 비율 바와 DPS를 한국어 소형 오버레이로 표시합니다.
 
-> 현재 자동 테스트와 MSI 패키징은 완료됐지만, 실제 게임 2.0.2 플레이 체크리스트는 아직 검증되지 않았습니다. 아래 MSI를 호환성이 확정된 정식 릴리스로 간주하지 마십시오.
+> 현재 자동 테스트와 NSIS 패키징은 완료됐지만, 실제 게임 2.0.2 플레이 체크리스트는 아직 검증되지 않았습니다. 아래 설치 프로그램을 호환성이 확정된 정식 릴리스로 간주하지 마십시오.
 
 ## 설치와 실행
 
-1. 릴리스의 MSI를 설치합니다.
+> 이전 MSI 버전이 `C:\Program Files\Djeeta MOD`에 설치되어 있다면 Windows **설치된 앱**에서 먼저 제거한 뒤 새 NSIS 설치 프로그램을 실행하십시오. 새 버전은 현재 Windows 사용자 전용으로 설치되며 관리자 권한을 요구하지 않습니다.
+
+1. 릴리스의 NSIS 설치 프로그램을 실행합니다.
 2. 게임을 먼저 실행합니다.
 3. Djeeta MOD를 실행합니다.
 4. 관리 창의 왼쪽 메뉴에서 데미지 미터를 켜거나 끌 수 있고, 미터의 상단 제목 영역을 드래그하면 위치를 옮길 수 있습니다.
@@ -25,7 +27,7 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 
 ### 시작하기
 
-1. MSI를 설치한 뒤 Granblue Fantasy: Relink를 먼저 실행합니다.
+1. NSIS 설치 프로그램을 실행한 뒤 Granblue Fantasy: Relink를 먼저 실행합니다.
 2. Djeeta MOD를 실행합니다. 작업 표시줄에는 관리 창만 표시되고, 데미지 미터는 게임 위에 별도 창으로 표시됩니다.
 3. 관리 창의 왼쪽 사이드바에서 기능을 선택합니다. 데스크톱에서는 사이드바가 기본으로 열려 있습니다.
 
@@ -57,9 +59,11 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 
 ## User Guide (English)
 
+> If an earlier MSI build is installed under `C:\Program Files\Djeeta MOD`, remove it from Windows **Installed apps** before running the new NSIS setup executable. The new build installs for the current Windows user and does not require administrator privileges.
+
 ### Getting started
 
-1. Install the MSI, then start Granblue Fantasy: Relink first.
+1. Run the NSIS setup executable, then start Granblue Fantasy: Relink first.
 2. Start Djeeta MOD. Only the management window appears on the taskbar; the damage meter is a separate overlay above the game.
 3. Select a feature from the left sidebar in the management window. The sidebar is open by default on desktop.
 
@@ -101,17 +105,17 @@ Djeeta MOD는 게임의 그래픽 설정이나 렌더링 품질을 변경하지 
 
 ## 0.1.0 빌드 해시
 
-- MSI: `2047CA4D31C11288065B43B3BDF487DC6DD0A201618EFB9234412BB8E3D87231`
+- NSIS installer: `2047CA4D31C11288065B43B3BDF487DC6DD0A201618EFB9234412BB8E3D87231`
 - `hook.dll`: `09AC0D0757F0BA31188FED10ACCDE11166068D76480EA4F7C7A5DCB689EA231B`
 
 ## 소스 빌드
 
 Node.js 20, Visual Studio 2022 C++ Build Tools, Windows SDK, WebView2, rustup과 `rust-toolchain.toml`에 지정된 툴체인이 필요합니다.
 
-전체 검증, 최신 훅 동기화, MSI 생성과 해시 기록 갱신은 다음 명령으로 실행합니다. 게임은 먼저 종료해야 합니다.
+전체 검증, 최신 훅 동기화, NSIS 설치 프로그램 생성과 해시 기록 갱신은 다음 명령으로 실행합니다. 게임은 먼저 종료해야 합니다.
 
 ```powershell
-npm run package:msi
+npm run package:nsis
 ```
 
 스크립트가 실행하는 개별 검증 명령은 다음과 같습니다.
@@ -125,7 +129,7 @@ npm test -- --run
 npm run build
 cargo build --release --locked --package hook
 cargo test --workspace --all-targets --locked
-npm run tauri build -- --bundles msi
+npm run tauri build -- --bundles nsis
 ```
 
 실제 게임 검증 항목은 [`docs/testing/game-2.0.2-smoke-test.md`](docs/testing/game-2.0.2-smoke-test.md)를 따릅니다.

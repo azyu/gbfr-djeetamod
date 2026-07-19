@@ -35,7 +35,7 @@
 - Node.js 20
 - Visual Studio 2022 C++ Build Tools and Windows SDK
 - rustup toolchain from `rust-toolchain.toml` (`nightly-2024-05-04`)
-- WebView2 and WiX as used by Tauri 1
+- WebView2 and NSIS as used by Tauri 1
 
 Load the Visual Studio developer environment before Rust builds when the shell does not already expose MSVC.
 
@@ -50,10 +50,10 @@ npm test -- --run
 npm run build
 cargo build --release --locked --package hook
 cargo test --workspace --all-targets --locked
-npm run tauri build -- --bundles msi
+npm run tauri build -- --bundles nsis
 ```
 
-After packaging, require SHA-256 equality between `target/release/hook.dll` and `src-tauri/hook.dll`, then record the MSI and hook hashes in `README.md` and `docs/testing/game-2.0.2-smoke-test.md`.
+After packaging, require SHA-256 equality between `target/release/hook.dll` and `src-tauri/hook.dll`, then record the NSIS installer and hook hashes in `README.md` and `docs/testing/game-2.0.2-smoke-test.md`.
 
 ## Change discipline
 
