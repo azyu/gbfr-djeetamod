@@ -1,11 +1,16 @@
-use std::{collections::BTreeMap, env, fs::File, io::Write, path::Path};
+use std::{
+    collections::BTreeMap,
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{bail, Context, Result};
-use rusqlite::{types::ValueRef, Connection};
+use rusqlite::{types::ValueRef, Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 
 const EMPTY_TRAIT_ID: u32 = 0x887A_E0B0;
 const GAME_VERSION: &str = "2.0.2";
+const GAME_EXE_SHA256: &str = "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F";
 const PRIME32_1: u32 = 0x9E37_79B1;
 const PRIME32_2: u32 = 0x85EB_CA77;
 const PRIME32_3: u32 = 0xC2B2_AE3D;
@@ -19,10 +24,10 @@ struct TraitCapRecord {
     max_level: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TraitCapCatalog {
-    game_version: &'static str,
+    game_version: String,
     game_exe_sha256: String,
     records: Vec<TraitCapRecord>,
 }
@@ -75,7 +80,7 @@ struct MessageColumn {
     text_: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct TraitNameRecord {
     key: String,
     text: String,
@@ -263,10 +268,6 @@ fn build_cap_records(definitions: &[TraitDefinition]) -> Vec<TraitCapRecord> {
         .collect()
 }
 
-fn load_records(connection: &Connection) -> Result<Vec<TraitCapRecord>> {
-    Ok(build_cap_records(&load_definitions(connection)?))
-}
-
 fn find_skill_status_table(connection: &Connection) -> Result<String> {
     let mut statement = connection.prepare(
         "SELECT name FROM sqlite_master
@@ -301,45 +302,140 @@ fn normalized_sha256(value: &str) -> Result<String> {
     Ok(value.to_ascii_uppercase())
 }
 
-fn write_catalog(sqlite_path: &Path, output_path: &Path, game_exe_sha256: &str) -> Result<usize> {
-    let connection = Connection::open(sqlite_path)
-        .with_context(|| format!("failed to open {}", sqlite_path.display()))?;
-    let records = load_records(&connection)?;
-    let record_count = records.len();
-    let catalog = TraitCapCatalog {
-        game_version: GAME_VERSION,
-        game_exe_sha256: normalized_sha256(game_exe_sha256)?,
+fn validated_game_sha256(value: &str) -> Result<String> {
+    let normalized = normalized_sha256(value)?;
+    if normalized != GAME_EXE_SHA256 {
+        bail!("game executable SHA-256 does not match Granblue Fantasy: Relink 2.0.2");
+    }
+    Ok(normalized)
+}
+
+#[derive(Debug)]
+struct GeneratedCatalogs {
+    caps: Vec<u8>,
+    ko_names: Vec<u8>,
+    en_names: Vec<u8>,
+    cap_count: usize,
+    name_count: usize,
+}
+
+fn pretty_json<T: Serialize>(value: &T) -> Result<Vec<u8>> {
+    let mut bytes = serde_json::to_vec_pretty(value)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+fn generate_catalogs(
+    connection: &Connection,
+    ko_message: &[u8],
+    en_message: &[u8],
+    game_exe_sha256: &str,
+) -> Result<GeneratedCatalogs> {
+    let definitions = load_definitions(connection)?;
+    let records = build_cap_records(&definitions);
+    let ko_names = build_name_catalog(&definitions, &parse_message_names(ko_message)?, "Korean")?;
+    let en_names = build_name_catalog(&definitions, &parse_message_names(en_message)?, "English")?;
+
+    if ko_names.keys().ne(en_names.keys()) {
+        bail!("Korean and English trait-name catalogs have different keys");
+    }
+
+    let cap_count = records.len();
+    let name_count = ko_names.len();
+    let caps = TraitCapCatalog {
+        game_version: GAME_VERSION.to_owned(),
+        game_exe_sha256: validated_game_sha256(game_exe_sha256)?,
         records,
     };
-    let mut output = File::create(output_path)
-        .with_context(|| format!("failed to create {}", output_path.display()))?;
-    serde_json::to_writer_pretty(&mut output, &catalog)?;
-    output.write_all(b"\n")?;
-    Ok(record_count)
+
+    Ok(GeneratedCatalogs {
+        caps: pretty_json(&caps)?,
+        ko_names: pretty_json(&ko_names)?,
+        en_names: pretty_json(&en_names)?,
+        cap_count,
+        name_count,
+    })
+}
+
+fn staged_path(destination: &Path) -> Result<PathBuf> {
+    let mut file_name = destination
+        .file_name()
+        .context("output path has no file name")?
+        .to_os_string();
+    file_name.push(".djeeta-stage");
+    Ok(destination.with_file_name(file_name))
+}
+
+fn write_prepared_outputs(outputs: [(&Path, &[u8]); 3]) -> Result<()> {
+    let staged = outputs
+        .iter()
+        .map(|(destination, _)| staged_path(destination))
+        .collect::<Result<Vec<_>>>()?;
+
+    for ((destination, bytes), staged_path) in outputs.iter().zip(&staged) {
+        fs::write(staged_path, *bytes)
+            .with_context(|| format!("failed to stage {}", destination.display()))?;
+    }
+
+    for ((destination, _), staged_path) in outputs.iter().zip(&staged) {
+        fs::copy(staged_path, destination)
+            .with_context(|| format!("failed to replace {}", destination.display()))?;
+        fs::remove_file(staged_path)?;
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<()> {
     let arguments: Vec<_> = env::args_os().skip(1).collect();
-    if arguments.len() != 3 {
-        bail!("usage: build_trait_caps <input.sqlite> <output.json> <game-exe-sha256>");
+    if arguments.len() != 7 {
+        bail!(
+            "usage: build_trait_caps <input.sqlite> <ko-text.msg> <en-text.msg> \
+             <trait-caps.json> <ko-traits.json> <en-traits.json> <game-exe-sha256>"
+        );
     }
     let sqlite_path = Path::new(&arguments[0]);
-    let output_path = Path::new(&arguments[1]);
-    let game_exe_sha256 = arguments[2]
+    let ko_message_path = Path::new(&arguments[1]);
+    let en_message_path = Path::new(&arguments[2]);
+    let cap_output_path = Path::new(&arguments[3]);
+    let ko_output_path = Path::new(&arguments[4]);
+    let en_output_path = Path::new(&arguments[5]);
+    let game_exe_sha256 = arguments[6]
         .to_str()
         .context("game executable SHA-256 must be valid Unicode")?;
-    let record_count = write_catalog(sqlite_path, output_path, game_exe_sha256)?;
-    println!("wrote {record_count} trait cap records");
+
+    let ko_message = fs::read(ko_message_path)
+        .with_context(|| format!("failed to read {}", ko_message_path.display()))?;
+    let en_message = fs::read(en_message_path)
+        .with_context(|| format!("failed to read {}", en_message_path.display()))?;
+    let connection = Connection::open_with_flags(sqlite_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("failed to open {}", sqlite_path.display()))?;
+    let generated = generate_catalogs(&connection, &ko_message, &en_message, game_exe_sha256)?;
+
+    write_prepared_outputs([
+        (cap_output_path, &generated.caps),
+        (ko_output_path, &generated.ko_names),
+        (en_output_path, &generated.en_names),
+    ])?;
+    println!(
+        "wrote {} trait cap records and {} localized names per language",
+        generated.cap_count, generated.name_count
+    );
+    println!("caps: {}", cap_output_path.display());
+    println!("Korean names: {}", ko_output_path.display());
+    println!("English names: {}", en_output_path.display());
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, fs};
 
     use super::{
-        build_name_catalog, custom_xxhash32, load_records, normalized_sha256, parse_message_names,
-        TraitCapRecord, TraitDefinition,
+        build_cap_records, build_name_catalog, custom_xxhash32, generate_catalogs,
+        load_definitions, normalized_sha256, parse_message_names, validated_game_sha256,
+        write_prepared_outputs, TraitCapCatalog, TraitCapRecord, TraitDefinition, TraitNameCatalog,
+        GAME_EXE_SHA256,
     };
     use rusqlite::Connection;
 
@@ -373,7 +469,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            load_records(&connection).unwrap(),
+            build_cap_records(&load_definitions(&connection).unwrap()),
             vec![
                 TraitCapRecord {
                     trait_id: 1,
@@ -466,5 +562,91 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("collision"));
+    }
+
+    #[test]
+    fn prepares_caps_and_both_language_catalogs_together() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE skill_status (Key TEXT, Level INTEGER, MAX INTEGER);
+                 INSERT INTO skill_status VALUES ('SKILL_020_00', 65, 65);
+                 INSERT INTO skill_status VALUES ('0151cf9e', 1, 30);",
+            )
+            .unwrap();
+        let ko = message_fixture(&[("TXT_SKILL_020_00", "대미지 상한")]);
+        let en = message_fixture(&[("TXT_SKILL_020_00", "Damage Cap")]);
+
+        let generated = generate_catalogs(&connection, &ko, &en, GAME_EXE_SHA256).unwrap();
+
+        let caps: TraitCapCatalog = serde_json::from_slice(&generated.caps).unwrap();
+        let ko_names: TraitNameCatalog = serde_json::from_slice(&generated.ko_names).unwrap();
+        let en_names: TraitNameCatalog = serde_json::from_slice(&generated.en_names).unwrap();
+        assert_eq!(caps.records.len(), 2);
+        assert_eq!(
+            caps.records
+                .iter()
+                .find(|record| record.trait_id == custom_xxhash32(b"SKILL_020_00"))
+                .unwrap()
+                .max_level,
+            65,
+        );
+        assert_eq!(ko_names.len(), 1);
+        assert_eq!(
+            ko_names.keys().collect::<Vec<_>>(),
+            en_names.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn refuses_all_outputs_when_one_language_is_incomplete() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE skill_status (Key TEXT, Level INTEGER, MAX INTEGER);
+                 INSERT INTO skill_status VALUES ('SKILL_020_00', 1, 65);",
+            )
+            .unwrap();
+
+        let error = generate_catalogs(
+            &connection,
+            &message_fixture(&[("TXT_SKILL_020_00", "대미지 상한")]),
+            &message_fixture(&[]),
+            GAME_EXE_SHA256,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("English"));
+    }
+
+    #[test]
+    fn rejects_a_well_formed_but_different_game_executable_hash() {
+        assert!(validated_game_sha256(&"AB".repeat(32))
+            .unwrap_err()
+            .to_string()
+            .contains("2.0.2"));
+    }
+
+    #[test]
+    fn writes_all_prepared_outputs() {
+        let root =
+            std::env::temp_dir().join(format!("djeeta-catalog-output-test-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let cap_path = root.join("trait-caps.json");
+        let ko_path = root.join("ko-traits.json");
+        let en_path = root.join("en-traits.json");
+
+        write_prepared_outputs([
+            (&cap_path, b"caps".as_slice()),
+            (&ko_path, b"korean".as_slice()),
+            (&en_path, b"english".as_slice()),
+        ])
+        .unwrap();
+
+        assert_eq!(fs::read(&cap_path).unwrap(), b"caps");
+        assert_eq!(fs::read(&ko_path).unwrap(), b"korean");
+        assert_eq!(fs::read(&en_path).unwrap(), b"english");
+        fs::remove_dir_all(root).unwrap();
     }
 }
