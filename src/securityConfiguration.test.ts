@@ -21,3 +21,18 @@ it("keeps SmartScreen protection enabled in every WebView window", () => {
     expect(window.additionalBrowserArgs).not.toContain("msSmartScreenProtection");
   }
 });
+
+it("packages only a current-user NSIS installer", () => {
+  const config = JSON.parse(readRepositoryFile("src-tauri/tauri.conf.json")) as {
+    tauri: {
+      bundle: {
+        targets: string[];
+        windows: { nsis?: { installMode?: string } };
+      };
+    };
+  };
+
+  expect(config.tauri.bundle.targets).toEqual(["nsis"]);
+  expect(config.tauri.bundle.targets).not.toContain("msi");
+  expect(config.tauri.bundle.windows.nsis?.installMode).toBe("currentUser");
+});

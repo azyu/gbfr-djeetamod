@@ -71,7 +71,7 @@
     },
     "bundle": {
       "active": true,
-      "targets": ["msi"],
+      "targets": ["nsis"],
       "identifier": "com.azyu.djeeta-mod",
       "longDescription": "Unverified test build of Djeeta MOD targeting Granblue Fantasy: Relink 2.0.2",
       "shortDescription": "Djeeta MOD Test Build",
@@ -80,6 +80,9 @@
       "windows": {
         "webviewInstallMode": {
           "type": "embedBootstrapper"
+        },
+        "nsis": {
+          "installMode": "currentUser"
         }
       }
     },
