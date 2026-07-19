@@ -44,7 +44,7 @@ it("exposes only the verified NSIS packaging command", () => {
   const packagingScript = readRepositoryFile("scripts/package.ps1");
 
   expect(packageJson.scripts["package:nsis"]).toBe(
-    "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1"
   );
   expect(packageJson.scripts).not.toHaveProperty("package:msi");
   expect(packagingScript).toContain("'target\\release\\bundle\\nsis'");
