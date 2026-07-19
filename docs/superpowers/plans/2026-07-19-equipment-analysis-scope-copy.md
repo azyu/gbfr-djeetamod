@@ -34,10 +34,11 @@ Create `src/pages/EquipmentAnalysis.localization.test.ts`:
 
 ```ts
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, it } from "vitest";
 
 const readScope = (language: "ko" | "en") => {
-  const path = new URL(`../../src-tauri/lang/${language}/ui.json`, import.meta.url);
+  const path = resolve(process.cwd(), `src-tauri/lang/${language}/ui.json`);
   const locale = JSON.parse(readFileSync(path, "utf8")) as {
     ui: { "equipment-analysis": { scope: string } };
   };

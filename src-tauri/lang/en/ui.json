@@ -17,7 +17,7 @@
     },
     "equipment-analysis": {
       "title": "Sigil Trait Cap Analysis",
-      "scope": "This phase totals primary and secondary traits from the 12 equipped sigils only.",
+      "scope": "Currently, only primary and secondary traits from the 12 equipped sigils are totaled. Weapon and wrightstone, summons, and master traits are not included yet.",
       "select-character": "Select character",
       "trait": "Trait",
       "level": "Current / Max",
