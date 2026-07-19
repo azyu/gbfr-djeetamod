@@ -30,6 +30,7 @@
       "unsupported": "진 정보 미지원",
       "waiting-game": "게임 연결 대기 중",
       "waiting-equipment": "진 정보 대기 중",
+      "unknown-trait": "알 수 없는 특성 (0x{{id}})",
       "source": {
         "sigilPrimary": "진 주 특성",
         "sigilSecondary": "진 보조 특성",

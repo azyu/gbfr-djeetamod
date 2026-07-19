@@ -24,7 +24,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("@/utils", () => ({
-  translateTraitId: (id: number) => (id === 3696775008 ? "데미지 상한" : `특성 ${id}`),
+  translateTraitId: (id: number) =>
+    id === 3696775008 ? "데미지 상한" : `알 수 없는 특성 (0x${id.toString(16).padStart(8, "0")})`,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -113,6 +114,34 @@ it("does not blank the page when a stale source uses snake-case fields", async (
   expect(await screen.findByText("70 / 65")).toBeTruthy();
   expect(screen.getByText("5 초과")).toBeTruthy();
   expect(screen.queryByText(/0x0000007b/)).toBeNull();
+});
+
+it("keeps level and cap state visible for an unresolved trait name", async () => {
+  mocks.response = {
+    connected: true,
+    characters: [
+      {
+        characterType: "Pl1400",
+        status: "complete",
+        traits: [
+          {
+            traitId: 0x0151cf9e,
+            totalLevel: 15,
+            maxLevel: null,
+            overflowLevel: 0,
+            state: "unknown",
+            sources: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  renderPage();
+
+  expect(await screen.findByText("알 수 없는 특성 (0x0151cf9e)")).toBeTruthy();
+  expect(screen.getByText("15 / —")).toBeTruthy();
+  expect(screen.getByText("최대치 미확인")).toBeTruthy();
 });
 
 it("preserves a selected character while it remains in an update", () => {

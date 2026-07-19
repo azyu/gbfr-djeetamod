@@ -383,7 +383,9 @@ export const translateTraitId = (id: number | null): string => {
   if (id === EMPTY_ID) return "";
 
   const hash = id.toString(16).padStart(8, "0");
-  return t([`traits:${hash}.text`, "ui.unknown"], { id: hash });
+  return t([`traits:${hash}.text`, "ui.equipment-analysis.unknown-trait"], {
+    id: hash,
+  });
 };
 
 /// Translates the sigil ID to a human-readable string.

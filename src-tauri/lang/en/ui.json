@@ -30,6 +30,7 @@
       "unsupported": "Sigil information unsupported",
       "waiting-game": "Waiting for game connection",
       "waiting-equipment": "Waiting for sigil information",
+      "unknown-trait": "Unknown trait (0x{{id}})",
       "source": {
         "sigilPrimary": "Sigil primary",
         "sigilSecondary": "Sigil secondary",
