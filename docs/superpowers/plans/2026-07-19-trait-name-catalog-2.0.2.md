@@ -33,7 +33,8 @@
 Add this dependency beside the existing serde dependencies in `src-tauri/Cargo.toml`:
 
 ```toml
-rmp-serde = "1.3"
+rmp = "=0.8.14"
+rmp-serde = "=1.3.0"
 ```
 
 Resolve and lock it without updating unrelated packages:
@@ -43,7 +44,7 @@ cargo check --package gbfr-logs --bin build_trait_caps
 git diff -- Cargo.lock
 ```
 
-Expected: Cargo adds `rmp-serde` and its required MessagePack dependencies to `Cargo.lock`, the existing generator still compiles, and no unrelated locked package changes version. If Cargo resolves a later compatible `1.3.x`, keep the resolver-selected version; do not force a downgrade solely to match this example.
+Expected: Cargo adds the toolchain-compatible `rmp-serde 1.3.0`, `rmp 0.8.14`, and their required MessagePack dependencies to `Cargo.lock`, the existing generator still compiles, and no unrelated locked package changes version. The exact pins are required because their next patch releases use an Edition 2024 manifest that the repository's pinned 2024-05 Cargo cannot parse.
 
 - [ ] **Step 2: Write failing tests for MessagePack parsing and catalog joining**
 

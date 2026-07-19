@@ -1,4 +1,4 @@
-use std::{env, fs::File, io::Write, path::Path};
+use std::{collections::BTreeMap, env, fs::File, io::Write, path::Path};
 
 use anyhow::{bail, Context, Result};
 use rusqlite::{types::ValueRef, Connection};
@@ -27,9 +27,68 @@ struct TraitCapCatalog {
     records: Vec<TraitCapRecord>,
 }
 
-fn parse_trait_id(value: ValueRef<'_>) -> Result<u32> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TraitKey {
+    Symbolic(String),
+    RawHash,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TraitDefinition {
+    key: TraitKey,
+    trait_id: u32,
+    max_level: u32,
+}
+
+impl TraitDefinition {
+    fn symbolic(key: &str, trait_id: u32, max_level: u32) -> Self {
+        Self {
+            key: TraitKey::Symbolic(key.to_owned()),
+            trait_id,
+            max_level,
+        }
+    }
+
+    fn raw(trait_id: u32, max_level: u32) -> Self {
+        Self {
+            key: TraitKey::RawHash,
+            trait_id,
+            max_level,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct MessageTable {
+    rows_: Vec<MessageRow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MessageRow {
+    column_: MessageColumn,
+}
+
+#[derive(Debug, Deserialize)]
+struct MessageColumn {
+    id_hash_: String,
+    subid_hash_: String,
+    text_: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct TraitNameRecord {
+    key: String,
+    text: String,
+}
+
+type TraitNameCatalog = BTreeMap<String, TraitNameRecord>;
+
+fn parse_trait_key(value: ValueRef<'_>, max_level: u32) -> Result<TraitDefinition> {
     match value {
-        ValueRef::Integer(value) => u32::try_from(value).context("trait key is outside u32"),
+        ValueRef::Integer(value) => Ok(TraitDefinition::raw(
+            u32::try_from(value).context("trait key is outside u32")?,
+            max_level,
+        )),
         ValueRef::Text(value) => {
             let value = std::str::from_utf8(value)?.trim();
             let hexadecimal = value
@@ -37,11 +96,18 @@ fn parse_trait_id(value: ValueRef<'_>) -> Result<u32> {
                 .or_else(|| value.strip_prefix("0X"))
                 .unwrap_or(value);
             if hexadecimal.len() == 8 && hexadecimal.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                Ok(u32::from_str_radix(hexadecimal, 16)?)
-            } else if value.is_ascii() {
-                Ok(custom_xxhash32(value.as_bytes()))
+                Ok(TraitDefinition::raw(
+                    u32::from_str_radix(hexadecimal, 16)?,
+                    max_level,
+                ))
+            } else if value.is_ascii() && value.starts_with("SKILL_") {
+                Ok(TraitDefinition::symbolic(
+                    value,
+                    custom_xxhash32(value.as_bytes()),
+                    max_level,
+                ))
             } else {
-                bail!("trait key {value:?} is not ASCII")
+                bail!("trait key {value:?} is neither SKILL_ text nor an eight-digit hash")
             }
         }
         _ => bail!("trait key must be an integer or hexadecimal text"),
@@ -104,29 +170,101 @@ fn custom_xxhash32(input: &[u8]) -> u32 {
     hash ^ (hash >> 16)
 }
 
-fn load_records(connection: &Connection) -> Result<Vec<TraitCapRecord>> {
+fn parse_message_names(bytes: &[u8]) -> Result<BTreeMap<String, String>> {
+    let table: MessageTable = rmp_serde::from_slice(bytes).context("parse text.msg MessagePack")?;
+    let mut names = BTreeMap::new();
+
+    for row in table.rows_ {
+        let MessageColumn {
+            id_hash_,
+            subid_hash_,
+            text_,
+        } = row.column_;
+        let _ = subid_hash_;
+        let Some(key) = id_hash_.strip_prefix("TXT_SKILL_") else {
+            continue;
+        };
+        let key = format!("SKILL_{key}");
+        let text = text_.trim();
+        if text.is_empty() {
+            bail!("empty localized name for {key}");
+        }
+        if let Some(previous) = names.insert(key.clone(), text.to_owned()) {
+            if previous != text {
+                bail!("conflicting localized names for {key}");
+            }
+        }
+    }
+
+    Ok(names)
+}
+
+fn build_name_catalog(
+    definitions: &[TraitDefinition],
+    names: &BTreeMap<String, String>,
+    language: &str,
+) -> Result<TraitNameCatalog> {
+    let mut catalog = BTreeMap::new();
+
+    for definition in definitions {
+        let TraitKey::Symbolic(key) = &definition.key else {
+            continue;
+        };
+        let text = names
+            .get(key)
+            .with_context(|| format!("{language} name missing for {key}"))?;
+        let hash = format!("{:08x}", definition.trait_id);
+        let record = TraitNameRecord {
+            key: key.clone(),
+            text: text.clone(),
+        };
+        if let Some(previous) = catalog.insert(hash.clone(), record.clone()) {
+            if previous != record {
+                bail!("trait hash collision at {hash}");
+            }
+        }
+    }
+
+    Ok(catalog)
+}
+
+fn load_definitions(connection: &Connection) -> Result<Vec<TraitDefinition>> {
     let table_name = find_skill_status_table(connection)?;
     let quoted_table_name = table_name.replace('"', "\"\"");
     let query =
         format!("SELECT Key, MAX(Level) FROM \"{quoted_table_name}\" GROUP BY Key ORDER BY Key");
     let mut statement = connection.prepare(&query)?;
     let mut rows = statement.query([])?;
-    let mut records = Vec::new();
+    let mut definitions = Vec::new();
 
     while let Some(row) = rows.next()? {
-        let trait_id = parse_trait_id(row.get_ref(0)?)?;
         let max_level =
             u32::try_from(row.get::<_, i64>(1)?).context("trait maximum level is outside u32")?;
-        if trait_id != 0 && trait_id != EMPTY_TRAIT_ID && max_level > 0 {
-            records.push(TraitCapRecord {
-                trait_id,
-                max_level,
-            });
+        let definition = parse_trait_key(row.get_ref(0)?, max_level)?;
+        if definition.trait_id != 0
+            && definition.trait_id != EMPTY_TRAIT_ID
+            && definition.max_level > 0
+        {
+            definitions.push(definition);
         }
     }
 
-    records.sort_by_key(|record| record.trait_id);
-    Ok(records)
+    definitions.sort_by_key(|definition| definition.trait_id);
+    Ok(definitions)
+}
+
+fn build_cap_records(definitions: &[TraitDefinition]) -> Vec<TraitCapRecord> {
+    definitions
+        .iter()
+        .map(|definition| TraitCapRecord {
+            trait_id: definition.trait_id,
+            max_level: definition.max_level,
+        })
+        .collect()
+}
+
+fn load_records(connection: &Connection) -> Result<Vec<TraitCapRecord>> {
+    Ok(build_cap_records(&load_definitions(connection)?))
 }
 
 fn find_skill_status_table(connection: &Connection) -> Result<String> {
@@ -197,8 +335,30 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{custom_xxhash32, load_records, normalized_sha256, TraitCapRecord};
+    use std::collections::BTreeMap;
+
+    use super::{
+        build_name_catalog, custom_xxhash32, load_records, normalized_sha256, parse_message_names,
+        TraitCapRecord, TraitDefinition,
+    };
     use rusqlite::Connection;
+
+    fn message_fixture(rows: &[(&str, &str)]) -> Vec<u8> {
+        let rows = rows
+            .iter()
+            .map(|(id_hash, text)| {
+                serde_json::json!({
+                    "column_": {
+                        "id_hash_": id_hash,
+                        "subid_hash_": "",
+                        "text_": text,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        rmp_serde::to_vec_named(&serde_json::json!({ "rows_": rows })).unwrap()
+    }
 
     #[test]
     fn selects_highest_level_per_trait_and_sorts_by_id() {
@@ -240,5 +400,71 @@ mod tests {
     fn hashes_symbolic_trait_keys_like_the_game() {
         assert_eq!(custom_xxhash32(b"SKILL_000_00"), 0x5007_9A1C);
         assert_eq!(custom_xxhash32(b"SKILL_020_00"), 0xDC58_4F60);
+    }
+
+    #[test]
+    fn parses_skill_names_from_messagepack() {
+        let bytes = message_fixture(&[("TXT_SKILL_020_00", "대미지 상한"), ("TXT_OTHER", "무시")]);
+
+        let names = parse_message_names(&bytes).unwrap();
+
+        assert_eq!(names.get("SKILL_020_00"), Some(&"대미지 상한".to_owned()));
+        assert!(!names.contains_key("OTHER"));
+    }
+
+    #[test]
+    fn joins_only_symbolic_trait_keys_with_localized_names() {
+        let definitions = vec![
+            TraitDefinition::symbolic("SKILL_020_00", custom_xxhash32(b"SKILL_020_00"), 65),
+            TraitDefinition::raw(0x0151_cf9e, 30),
+        ];
+        let names = BTreeMap::from([("SKILL_020_00".to_owned(), "Damage Cap".to_owned())]);
+
+        let catalog = build_name_catalog(&definitions, &names, "English").unwrap();
+        let damage_cap_hash = format!("{:08x}", custom_xxhash32(b"SKILL_020_00"));
+
+        assert_eq!(catalog.len(), 1);
+        assert_eq!(catalog[&damage_cap_hash].key, "SKILL_020_00");
+        assert_eq!(catalog[&damage_cap_hash].text, "Damage Cap");
+        assert!(!catalog.contains_key("0151cf9e"));
+    }
+
+    #[test]
+    fn rejects_a_symbolic_trait_missing_from_a_language_table() {
+        let definitions = vec![TraitDefinition::symbolic(
+            "SKILL_020_00",
+            custom_xxhash32(b"SKILL_020_00"),
+            65,
+        )];
+
+        let error = build_name_catalog(&definitions, &BTreeMap::new(), "Korean")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("Korean"));
+        assert!(error.contains("SKILL_020_00"));
+    }
+
+    #[test]
+    fn rejects_empty_names_and_trait_hash_collisions() {
+        let empty = message_fixture(&[("TXT_SKILL_020_00", "   ")]);
+        assert!(parse_message_names(&empty)
+            .unwrap_err()
+            .to_string()
+            .contains("empty"));
+
+        let definitions = vec![
+            TraitDefinition::symbolic("SKILL_020_00", 7, 65),
+            TraitDefinition::symbolic("SKILL_173_00", 7, 30),
+        ];
+        let names = BTreeMap::from([
+            ("SKILL_020_00".to_owned(), "Damage Cap".to_owned()),
+            ("SKILL_173_00".to_owned(), "Gladiator's Frenzy".to_owned()),
+        ]);
+
+        assert!(build_name_catalog(&definitions, &names, "English")
+            .unwrap_err()
+            .to_string()
+            .contains("collision"));
     }
 }
