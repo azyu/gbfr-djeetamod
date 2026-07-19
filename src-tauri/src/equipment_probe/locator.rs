@@ -3,6 +3,8 @@ use std::collections::HashSet;
 use equipment_core::EMPTY_HASH;
 use thiserror::Error;
 
+use super::memory::{MemoryReadError, MemoryReader};
+
 const MIN_USER_ADDRESS: usize = 0x1_0000;
 const MAX_USER_ADDRESS: usize = 0x0000_7FFF_FFFF_FFFF;
 const MAX_PLAYER_NODES: usize = 1024;
@@ -15,16 +17,6 @@ const LOOKUP_PATTERN: &str = concat!(
 const GETTER_PROLOGUE: [u8; 16] = [
     0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x56, 0x57, 0x55, 0x53, 0x48, 0x83, 0xEC, 0x68,
 ];
-
-#[derive(Debug, Error, PartialEq, Eq)]
-pub(crate) enum MemoryReadError {
-    #[error("memory at {0:#x} is unavailable")]
-    Unavailable(usize),
-}
-
-pub(crate) trait MemoryReader {
-    fn read_exact(&self, address: usize, output: &mut [u8]) -> Result<(), MemoryReadError>;
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LocatedEquipment {
@@ -271,8 +263,8 @@ mod tests {
 
     use super::{
         find_unique_pattern, locate_equipment, locate_from_globals, resolve_rel32, LocateError,
-        MemoryReadError, MemoryReader,
     };
+    use crate::equipment_probe::memory::{MemoryReadError, MemoryReader};
 
     #[derive(Default)]
     struct FakeMemory {
