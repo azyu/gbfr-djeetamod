@@ -49,7 +49,7 @@
         "minHeight": 120,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI --disable-gpu"
       },
       {
         "title": "Djeeta MOD",
@@ -63,7 +63,7 @@
         "resizable": true,
         "closable": true,
         "decorations": true,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI --disable-gpu"
       }
     ],
     "security": {
