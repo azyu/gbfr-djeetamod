@@ -36,3 +36,18 @@ it("packages only a current-user NSIS installer", () => {
   expect(config.tauri.bundle.targets).not.toContain("msi");
   expect(config.tauri.bundle.windows.nsis?.installMode).toBe("currentUser");
 });
+
+it("exposes only the verified NSIS packaging command", () => {
+  const packageJson = JSON.parse(readRepositoryFile("package.json")) as {
+    scripts: Record<string, string>;
+  };
+  const packagingScript = readRepositoryFile("scripts/package.ps1");
+
+  expect(packageJson.scripts["package:nsis"]).toBe(
+    "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1",
+  );
+  expect(packageJson.scripts).not.toHaveProperty("package:msi");
+  expect(packagingScript).toContain("'target\\release\\bundle\\nsis'");
+  expect(packagingScript).toMatch(/'build',\s*'--bundles',\s*'nsis'/);
+  expect(packagingScript).not.toMatch(/'build',\s*'--bundles',\s*'msi'/);
+});

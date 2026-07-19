@@ -9,7 +9,7 @@ $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
 Push-Location $repositoryRoot
 try {
     if ($env:OS -ne 'Windows_NT') {
-        throw 'MSI packaging is supported only on Windows.'
+        throw 'NSIS packaging is supported only on Windows.'
     }
 
     $requiredPaths = @(
@@ -79,27 +79,27 @@ try {
         '--',
         'build',
         '--bundles',
-        'msi',
+        'nsis',
         '--',
         '--bin',
         'gbfr-logs'
     )
 
-    $msiArtifacts = @(Get-ChildItem -LiteralPath 'target\release\bundle\msi' -Filter '*.msi')
-    $msi = Select-ProductMsi -Artifacts $msiArtifacts -ProductName $productName -Version $productVersion -BuildStartedAt $buildStartedAt
+    $installerArtifacts = @(Get-ChildItem -LiteralPath 'target\release\bundle\nsis' -Filter '*.exe')
+    $installer = Select-ProductNsisInstaller -Artifacts $installerArtifacts -ProductName $productName -Version $productVersion -BuildStartedAt $buildStartedAt
 
     $releaseHookHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $releaseHookPath).Hash
     $bundledHookHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $bundledHookPath).Hash
     if ($releaseHookHash -ne $bundledHookHash) {
         throw 'Release and bundled hook.dll hashes differ.'
     }
-    $msiHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $msi.FullName).Hash
+    $installerHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName).Hash
 
     $updatedDocuments = @{}
     foreach ($documentPath in @('README.md', 'docs\testing\game-2.0.2-smoke-test.md')) {
         $absolutePath = Join-Path $repositoryRoot $documentPath
         $currentText = [System.IO.File]::ReadAllText($absolutePath)
-        $updatedText = Set-ArtifactHashesInText -Text $currentText -MsiHash $msiHash -HookHash $releaseHookHash
+        $updatedText = Set-ArtifactHashesInText -Text $currentText -InstallerHash $installerHash -HookHash $releaseHookHash
         if ($updatedText -ne $currentText) {
             $updatedDocuments[$absolutePath] = $updatedText
         }
@@ -111,8 +111,8 @@ try {
     Invoke-NativeCommand -FilePath $gitPath -Arguments @('diff', '--check')
 
     [pscustomobject]@{
-        MsiPath = $msi.FullName
-        MsiSHA256 = $msiHash
+        InstallerPath = $installer.FullName
+        InstallerSHA256 = $installerHash
         HookSHA256 = $releaseHookHash
         HookHashesEqual = $true
         UpdatedDocuments = @($updatedDocuments.Keys)
