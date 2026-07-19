@@ -41,7 +41,9 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 - `현재 / 최대`는 장착 진에서 합산한 현재 스킬 레벨과 확인된 상한을 뜻합니다.
 - `정상`은 상한 미만, `최대`는 상한 도달, `N 초과`는 상한보다 N레벨 높다는 뜻입니다. 예를 들어 데미지 상한이 `70 / 65`이면 5레벨이 초과된 상태입니다.
 - `최대치 미확인`은 해당 특성의 상한 데이터가 아직 검증되지 않았다는 뜻이며, 상한이 없다는 의미가 아닙니다.
+- 이름이 확인된 특성은 게임 2.0.2에서 추출한 공식 한국어 이름으로 표시합니다. 공식 이름 행이 없는 특성은 추측하지 않고 `알 수 없는 특성 (0x1234abcd)`처럼 8자리 ID를 표시하므로 문제를 보고할 때 함께 알려주십시오.
 - `기여 진`을 펼치면 합계에 포함된 각 진의 주·보조 특성 레벨을 확인할 수 있습니다.
+- 현재 합계는 장착 진 12개만 대상으로 합니다. 장착 무기와 가호석, 최대 4개의 소환석, 마스터 특성에서 추가되는 레벨은 아직 포함하지 않으므로 해당 구성이 있는 빌드의 최종 합계로 간주하지 마십시오.
 
 ### 문제가 있을 때
 
@@ -73,7 +75,9 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 - `Current / Max` is the total current skill level from equipped sigils and the verified cap.
 - `Normal` means below the cap, `Max` means the cap is reached, and `N over` means the total exceeds the cap by N levels. For example, Damage Cap at `70 / 65` is 5 levels over the cap.
 - `Maximum unverified` means the cap data for that trait has not been verified yet; it does not mean the trait has no cap.
+- Recognized traits use official English names extracted from game version 2.0.2. When no official localization row exists, the app does not guess a name and instead shows an eight-digit ID such as `Unknown trait (0x1234abcd)`; include that ID when reporting the trait.
 - Expand `Contributing sigils` to see the primary and secondary trait levels included in the total.
+- Current totals cover only the 12 equipped sigils. Levels contributed by the equipped weapon and wrightstone, up to four summons, and master traits are not included yet, so do not treat builds using those sources as complete totals.
 
 ### Troubleshooting
 
@@ -97,7 +101,7 @@ Djeeta MOD는 게임의 그래픽 설정이나 렌더링 품질을 변경하지 
 
 ## 0.1.0 빌드 해시
 
-- MSI: `F8C5612A0903CB753E112A98065BDA72CDFFC2CC3BE9FEB5926F532DF519CC31`
+- MSI: `AB54960A44BE644CBED26C5A45CCBB831FA8AFA8724B5995607AF8B1F6D1F589`
 - `hook.dll`: `09AC0D0757F0BA31188FED10ACCDE11166068D76480EA4F7C7A5DCB689EA231B`
 
 ## 소스 빌드
