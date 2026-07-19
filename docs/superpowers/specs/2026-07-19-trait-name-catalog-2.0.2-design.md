@@ -11,11 +11,13 @@ The equipment analysis currently reads the primary and secondary traits from the
 The current data sets contain:
 
 - 261 distinct entries in the 2.0.2 `skill_status` cap catalog;
-- 230 public symbolic keys in the form `SKILL_xxx_xx`;
+- 230 symbolic keys in the form `SKILL_xxx_xx`;
+- 170 symbolic keys with matching official Korean and English localization rows;
+- 60 symbolic keys without a localization row in either language;
 - 31 raw eight-digit hash keys without a symbolic name relationship; and
 - 165 entries in the current Korean and English trait-name resources.
 
-Therefore 65 public symbolic traits need official 2.0.2 names added. The 31 raw hashes must not be given invented names.
+Therefore the generated name catalogs must contain the 170 names verified in both 2.0.2 localization tables. The 60 unlocalized symbolic keys and 31 raw hashes must not be given invented names; all 91 use the ID-bearing runtime fallback if captured.
 
 ## Delivery Roadmap
 
@@ -69,13 +71,13 @@ The generated outputs are:
 - `src-tauri/lang/en/traits.json`; and
 - the existing `src-tauri/assets/trait-caps.json`.
 
-The two name catalogs contain all 230 public symbolic traits. Raw eight-digit `skill_status` keys are retained in the cap catalog but are not written to a name catalog because no verified symbolic-name relationship exists.
+The two name catalogs contain the same 170 verified localized traits. Symbolic keys absent from both localization tables and raw eight-digit `skill_status` keys remain in the cap catalog but are not written to a name catalog.
 
 Generation fails before writing any output when:
 
 - the game hash is wrong;
 - either localization file is missing or malformed;
-- a public symbolic trait lacks a Korean or English name;
+- a symbolic trait has a name in only one of the two languages;
 - a name is empty;
 - two symbolic keys resolve to the same trait ID; or
 - output validation fails.
@@ -114,7 +116,8 @@ Generator tests cover:
 - symbolic key hashing and localized-name joining;
 - `SKILL_020_00` mapping to trait ID `0xDC584F60`, Korean `대미지 상한`, English `Damage Cap`, and cap 65;
 - at least one Endless Ragnarok symbolic trait absent from the 1.3.x catalog;
-- rejection of missing Korean or English public names;
+- omission of symbolic traits absent from both language tables;
+- rejection of Korean/English key-set asymmetry;
 - rejection of empty names and trait-ID collisions;
 - classification of raw eight-digit keys without inventing names; and
 - validation-before-write behavior.
@@ -122,10 +125,10 @@ Generator tests cover:
 Catalog consistency tests require:
 
 - 261 cap records;
-- 230 Korean public-name records;
-- 230 English public-name records;
+- 170 Korean verified-name records;
+- 170 English verified-name records;
 - identical ID and symbolic-key sets between Korean and English;
-- 31 cap-only raw hash entries; and
+- 91 cap-only entries: 60 unlocalized symbolic keys and 31 raw hashes; and
 - no blank names or duplicate IDs.
 
 Frontend tests require:

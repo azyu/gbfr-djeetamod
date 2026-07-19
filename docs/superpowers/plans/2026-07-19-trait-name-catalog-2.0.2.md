@@ -100,19 +100,16 @@ fn joins_only_symbolic_trait_keys_with_localized_names() {
 }
 
 #[test]
-fn rejects_a_symbolic_trait_missing_from_a_language_table() {
+fn omits_a_symbolic_trait_missing_from_a_language_table() {
     let definitions = vec![TraitDefinition::symbolic(
         "SKILL_020_00",
         custom_xxhash32(b"SKILL_020_00"),
         65,
     )];
 
-    let error = build_name_catalog(&definitions, &BTreeMap::new(), "Korean")
-        .unwrap_err()
-        .to_string();
+    let catalog = build_name_catalog(&definitions, &BTreeMap::new(), "Korean").unwrap();
 
-    assert!(error.contains("Korean"));
-    assert!(error.contains("SKILL_020_00"));
+    assert!(catalog.is_empty());
 }
 
 #[test]
@@ -154,7 +151,7 @@ In `src-tauri/src/bin/build_trait_caps.rs`:
 2. Replace the cap-only query model with a definition that retains the source key.
 3. Deserialize only the verified `text.msg` shape.
 4. Include only `TXT_SKILL_...` rows.
-5. Reject missing text, conflicting duplicate message rows, and hash collisions.
+5. Omit a symbolic key with no verified localized text, and reject empty text, conflicting duplicate message rows, and hash collisions.
 
 Use these shapes and behavior:
 
@@ -249,9 +246,9 @@ fn build_name_catalog(
         let TraitKey::Symbolic(key) = &definition.key else {
             continue;
         };
-        let text = names
-            .get(key)
-            .with_context(|| format!("{language} name missing for {key}"))?;
+        let Some(text) = names.get(key) else {
+            continue;
+        };
         let hash = format!("{:08x}", definition.trait_id);
         let record = TraitNameRecord {
             key: key.clone(),
@@ -475,7 +472,7 @@ Implement `main` so it:
 7. Leaves still-staged files in place with a destination-specific error if a filesystem replacement fails.
 8. Prints cap-record count, localized-name count, and all destination paths.
 
-Use a destination-specific staged name such as `traits.json.djeeta-stage`; never stage under the repository root. On Windows, if the destination exists, use `std::fs::copy` from the validated staged file followed by removal of that staged file; do not delete the destination first. The guarantee is specifically that argument, parsing, missing-name, collision, and cross-language validation failures occur before any checked-in output changes. If a filesystem write itself fails, report the destination that failed and retain any remaining staged files for diagnosis.
+Use a destination-specific staged name such as `traits.json.djeeta-stage`; never stage under the repository root. On Windows, if the destination exists, use `std::fs::copy` from the validated staged file followed by removal of that staged file; do not delete the destination first. The guarantee is specifically that argument, parsing, collision, and cross-language key-set validation failures occur before any checked-in output changes. If a filesystem write itself fails, report the destination that failed and retain any remaining staged files for diagnosis.
 
 Implement the staging helper as:
 
@@ -653,10 +650,10 @@ cargo run --locked --package gbfr-logs --bin build_trait_caps -- `
 Expected summary:
 
 - 261 cap records.
-- 230 Korean localized records.
-- 230 English localized records.
+- 170 Korean localized records verified in `text.msg`.
+- 170 English localized records with the same key set.
 - The Korean and English key sets are identical.
-- The 31 raw-hash cap keys are intentionally absent from both name catalogs.
+- 91 cap keys are intentionally absent from both name catalogs: 60 symbolic keys with no localization row in either language and 31 raw hashes.
 
 - [ ] **Step 4: Write failing bundled-catalog coverage tests**
 
@@ -664,7 +661,7 @@ Add these tests to the generator test module before copying the staged files int
 
 ```rust
 #[test]
-fn bundled_2_0_2_catalogs_cover_every_symbolic_trait() {
+fn bundled_2_0_2_catalogs_cover_every_verified_localized_trait() {
     let caps: TraitCapCatalog =
         serde_json::from_str(include_str!("../../assets/trait-caps.json")).unwrap();
     let ko: TraitNameCatalog =
@@ -673,10 +670,10 @@ fn bundled_2_0_2_catalogs_cover_every_symbolic_trait() {
         serde_json::from_str(include_str!("../../lang/en/traits.json")).unwrap();
 
     assert_eq!(caps.records.len(), 261);
-    assert_eq!(ko.len(), 230);
-    assert_eq!(en.len(), 230);
+    assert_eq!(ko.len(), 170);
+    assert_eq!(en.len(), 170);
     assert_eq!(ko.keys().collect::<Vec<_>>(), en.keys().collect::<Vec<_>>());
-    assert_eq!(caps.records.len() - ko.len(), 31);
+    assert_eq!(caps.records.len() - ko.len(), 91);
     assert!(ko.values().all(|record| !record.text.trim().is_empty()));
     assert!(en.values().all(|record| !record.text.trim().is_empty()));
     assert!(ko.iter().all(|(hash, ko_record)| {
@@ -694,10 +691,10 @@ fn bundled_2_0_2_catalog_contains_endless_ragnarok_trait() {
         serde_json::from_str(include_str!("../../lang/ko/traits.json")).unwrap();
     let en: TraitNameCatalog =
         serde_json::from_str(include_str!("../../lang/en/traits.json")).unwrap();
-    let hash = format!("{:08x}", custom_xxhash32(b"SKILL_173_00"));
+    let hash = format!("{:08x}", custom_xxhash32(b"SKILL_173_01"));
 
-    assert_eq!(ko[&hash].key, "SKILL_173_00");
-    assert_eq!(en[&hash].key, "SKILL_173_00");
+    assert_eq!(ko[&hash].key, "SKILL_173_01");
+    assert_eq!(en[&hash].key, "SKILL_173_01");
     assert!(!ko[&hash].text.trim().is_empty());
     assert!(!en[&hash].text.trim().is_empty());
 }
@@ -706,10 +703,10 @@ fn bundled_2_0_2_catalog_contains_endless_ragnarok_trait() {
 - [ ] **Step 5: Run the bundled coverage test and verify RED**
 
 ```powershell
-cargo test --locked --package gbfr-logs --bin build_trait_caps bundled_2_0_2_catalogs_cover_every_symbolic_trait
+cargo test --locked --package gbfr-logs --bin build_trait_caps bundled_2_0_2_catalogs_cover_every_verified_localized_trait
 ```
 
-Expected: the old 1.3.x catalogs fail the 230-record assertion; the currently observed old count is 165.
+Expected: the old 1.3.x catalogs fail the 170-record assertion; the currently observed old count is 165.
 
 - [ ] **Step 6: Copy only validated generated outputs into the repository**
 
@@ -732,7 +729,7 @@ git diff --check
 cargo test --locked --package gbfr-logs --bin build_trait_caps
 ```
 
-Expected: every generator test passes, including 261/230/230 coverage and `SKILL_173_00`.
+Expected: every generator test passes, including 261/170/170 coverage and `SKILL_173_01`.
 
 - [ ] **Step 8: Record reproducible provenance**
 
@@ -741,7 +738,7 @@ In `docs/research/2026-07-18-gbfr-er-2.0.2-trait-overflow.md`, add:
 - the exact three game-relative source paths;
 - SHA-256 for both extracted `.msg` files;
 - SHA-256 for all three generated JSON files;
-- 261 total cap records, 230 symbolic localized names, and 31 raw hash-only records;
+- 261 total cap records, 170 verified localized names, 60 unlocalized symbolic keys, and 31 raw hash-only records;
 - the generator CLI shown above;
 - the explicit statement that `.msg` is MessagePack and is parsed by `rmp-serde`;
 - the explicit limitation that stage 1 still reads only the 12 equipped sigil slots.
@@ -1022,7 +1019,7 @@ Verify:
 - `logs.db` remains untracked and unstaged;
 - no protocol files changed;
 - no weapon, wrightstone, summon, or master-trait reader was introduced;
-- generated catalogs contain 230 official names in each language;
+- generated catalogs contain 170 verified official names in each language;
 - fallback output always includes `0x` plus eight lowercase hex digits;
 - README and smoke-test hashes match the files just built.
 
@@ -1038,8 +1035,8 @@ git commit -m "docs: document 2.0.2 trait catalog scope"
 ## Completion Criteria
 
 - The generator derives caps and both localized catalogs from one 2.0.2 `skill_status.tbl` plus Korean and English `text.msg` inputs.
-- Korean and English catalogs each contain the same 230 symbolic trait hashes.
-- The cap catalog still contains all 261 records, including 31 raw hash-only records.
+- Korean and English catalogs each contain the same 170 verified localized trait hashes.
+- The cap catalog still contains all 261 records, including 60 unlocalized symbolic records and 31 raw hash-only records.
 - Known traits use official extracted 2.0.2 text; raw or otherwise unresolved traits show a stable hexadecimal ID.
 - Current totals remain explicitly scoped to the 12 equipped sigils.
 - Unit tests, formatting, lint, TypeScript checks, frontend build, release hook build, all Cargo tests, and MSI packaging pass.

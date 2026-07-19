@@ -215,9 +215,9 @@ fn build_name_catalog(
         let TraitKey::Symbolic(key) = &definition.key else {
             continue;
         };
-        let text = names
-            .get(key)
-            .with_context(|| format!("{language} name missing for {key}"))?;
+        let Some(text) = names.get(key) else {
+            continue;
+        };
         let hash = format!("{:08x}", definition.trait_id);
         let record = TraitNameRecord {
             key: key.clone(),
@@ -225,7 +225,7 @@ fn build_name_catalog(
         };
         if let Some(previous) = catalog.insert(hash.clone(), record.clone()) {
             if previous != record {
-                bail!("trait hash collision at {hash}");
+                bail!("{language} trait hash collision at {hash}");
             }
         }
     }
@@ -337,7 +337,21 @@ fn generate_catalogs(
     let en_names = build_name_catalog(&definitions, &parse_message_names(en_message)?, "English")?;
 
     if ko_names.keys().ne(en_names.keys()) {
-        bail!("Korean and English trait-name catalogs have different keys");
+        let missing_korean = en_names
+            .keys()
+            .filter(|key| !ko_names.contains_key(*key))
+            .cloned()
+            .collect::<Vec<_>>();
+        let missing_english = ko_names
+            .keys()
+            .filter(|key| !en_names.contains_key(*key))
+            .cloned()
+            .collect::<Vec<_>>();
+        bail!(
+            "localized trait-name catalogs differ; missing Korean: {}; missing English: {}",
+            missing_korean.join(", "),
+            missing_english.join(", ")
+        );
     }
 
     let cap_count = records.len();
@@ -526,19 +540,16 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_symbolic_trait_missing_from_a_language_table() {
+    fn omits_a_symbolic_trait_missing_from_a_language_table() {
         let definitions = vec![TraitDefinition::symbolic(
             "SKILL_020_00",
             custom_xxhash32(b"SKILL_020_00"),
             65,
         )];
 
-        let error = build_name_catalog(&definitions, &BTreeMap::new(), "Korean")
-            .unwrap_err()
-            .to_string();
+        let catalog = build_name_catalog(&definitions, &BTreeMap::new(), "Korean").unwrap();
 
-        assert!(error.contains("Korean"));
-        assert!(error.contains("SKILL_020_00"));
+        assert!(catalog.is_empty());
     }
 
     #[test]
@@ -648,5 +659,47 @@ mod tests {
         assert_eq!(fs::read(&ko_path).unwrap(), b"korean");
         assert_eq!(fs::read(&en_path).unwrap(), b"english");
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bundled_2_0_2_catalogs_cover_every_verified_localized_trait() {
+        let caps: TraitCapCatalog =
+            serde_json::from_str(include_str!("../../assets/trait-caps.json")).unwrap();
+        let ko: TraitNameCatalog =
+            serde_json::from_str(include_str!("../../lang/ko/traits.json")).unwrap();
+        let en: TraitNameCatalog =
+            serde_json::from_str(include_str!("../../lang/en/traits.json")).unwrap();
+
+        assert_eq!(caps.records.len(), 261);
+        assert_eq!(ko.len(), 170);
+        assert_eq!(en.len(), 170);
+        assert_eq!(ko.keys().collect::<Vec<_>>(), en.keys().collect::<Vec<_>>());
+        assert_eq!(caps.records.len() - ko.len(), 91);
+        assert!(ko.values().all(|record| !record.text.trim().is_empty()));
+        assert!(en.values().all(|record| !record.text.trim().is_empty()));
+        assert!(ko.iter().all(|(hash, ko_record)| {
+            en.get(hash)
+                .is_some_and(|en_record| en_record.key == ko_record.key)
+        }));
+        assert!(ko.keys().all(|hash| {
+            let trait_id = u32::from_str_radix(hash, 16).unwrap();
+            caps.records
+                .iter()
+                .any(|record| record.trait_id == trait_id)
+        }));
+    }
+
+    #[test]
+    fn bundled_2_0_2_catalog_contains_endless_ragnarok_trait() {
+        let ko: TraitNameCatalog =
+            serde_json::from_str(include_str!("../../lang/ko/traits.json")).unwrap();
+        let en: TraitNameCatalog =
+            serde_json::from_str(include_str!("../../lang/en/traits.json")).unwrap();
+        let hash = format!("{:08x}", custom_xxhash32(b"SKILL_173_01"));
+
+        assert_eq!(ko[&hash].key, "SKILL_173_01");
+        assert_eq!(en[&hash].key, "SKILL_173_01");
+        assert!(!ko[&hash].text.trim().is_empty());
+        assert!(!en[&hash].text.trim().is_empty());
     }
 }
