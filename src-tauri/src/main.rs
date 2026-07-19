@@ -612,6 +612,7 @@ fn connect_and_run_parser(app: AppHandle) {
             match RecvPipeStream::connect_by_path(protocol::PIPE_NAME).await {
                 Ok(stream) => {
                     info!("Connected to the game pipe; awaiting hook status");
+                    equipment_probe::begin_hook_session(&app);
 
                     let decoder = tokio_util::codec::LengthDelimitedCodec::new();
                     let mut reader = FramedRead::new(stream, decoder);

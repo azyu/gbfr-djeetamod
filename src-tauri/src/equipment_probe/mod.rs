@@ -12,8 +12,8 @@ use tokio::time::sleep;
 
 use self::{
     compare::{snapshot_digest_prefix, CompareDecision, DeferredReason},
-    locator::{locate_from_globals, resolve_roots},
-    memory::{MemoryReader, RemoteProcess},
+    locator::{locate_from_globals_slot, resolve_roots, LocateError},
+    memory::{MemoryReadError, MemoryReader, RemoteProcess},
 };
 
 mod compare;
@@ -31,12 +31,34 @@ pub(crate) fn record_hook_snapshot(app: &AppHandle, event: LocalEquipmentSnapsho
         .record_hook(event);
 }
 
+pub(crate) fn begin_hook_session(app: &AppHandle) {
+    app.state::<ProbeState>()
+        .0
+        .lock()
+        .expect("equipment probe comparator lock poisoned")
+        .begin_hook_session();
+}
+
 const GAME_PROCESS_NAME: &str = "granblue_fantasy_relink.exe";
 const PINNED_GAME_SHA256: &str = "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F";
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 const STABILITY_DELAY: Duration = Duration::from_millis(50);
 const DISCOVERY_DELAY: Duration = Duration::from_secs(1);
 const LOG_REPEAT_INTERVAL: Duration = Duration::from_secs(5);
+
+#[derive(Debug, thiserror::Error)]
+enum CandidateReadError {
+    #[error(transparent)]
+    Locate(#[from] LocateError),
+    #[error(transparent)]
+    Memory(#[from] MemoryReadError),
+}
+
+impl CandidateReadError {
+    fn is_expected_empty_slot(&self) -> bool {
+        matches!(self, Self::Locate(LocateError::EmptyCharacterKey))
+    }
+}
 
 pub(crate) fn probe_enabled(debug_build: bool, env_value: Option<&str>) -> bool {
     debug_build && env_value == Some("1")
@@ -143,37 +165,42 @@ async fn probe_process(
 
     loop {
         let deadline = Instant::now() + POLL_INTERVAL;
-        let (first_location, first, second_location, second) =
-            match read_candidate(process, roots.local_key_global, roots.manager_global).await {
-                Ok(candidate) => candidate,
-                Err(error) => {
-                    log_unavailable(throttle, "equipment-read", &error);
-                    match process.is_running() {
-                        Ok(true) => {
-                            sleep(deadline.saturating_duration_since(Instant::now())).await;
+        for slot in 0..4 {
+            let (first_location, first, second_location, second) =
+                match read_candidate(process, roots.local_key_global, roots.manager_global, slot)
+                    .await
+                {
+                    Ok(candidate) => candidate,
+                    Err(error) => {
+                        if error.is_expected_empty_slot() {
                             continue;
                         }
-                        Ok(false) => return Ok(()),
-                        Err(error) => return Err(error.to_string()),
+                        let stage = format!("equipment-read-slot-{slot}");
+                        log_unavailable(throttle, &stage, &error);
+                        match process.is_running() {
+                            Ok(true) => continue,
+                            Ok(false) => return Ok(()),
+                            Err(error) => return Err(error.to_string()),
+                        }
                     }
-                }
-            };
+                };
 
-        let decision = if first_location.character_key != second_location.character_key {
-            CompareDecision::Deferred(DeferredReason::UnstableRead)
-        } else {
-            app.state::<ProbeState>()
-                .0
-                .lock()
-                .expect("equipment probe comparator lock poisoned")
-                .compare_external(
-                    first_location.character_key,
-                    &first,
-                    &second,
-                    Instant::now(),
-                )
-        };
-        log_decision(throttle, first_location.character_key, &first, decision);
+            let decision = if first_location.character_key != second_location.character_key {
+                CompareDecision::Deferred(DeferredReason::UnstableRead)
+            } else {
+                app.state::<ProbeState>()
+                    .0
+                    .lock()
+                    .expect("equipment probe comparator lock poisoned")
+                    .compare_external(
+                        first_location.character_key,
+                        &first,
+                        &second,
+                        Instant::now(),
+                    )
+            };
+            log_decision(throttle, first_location.character_key, &first, decision);
+        }
 
         sleep(deadline.saturating_duration_since(Instant::now())).await;
     }
@@ -183,6 +210,7 @@ async fn read_candidate(
     process: &RemoteProcess,
     local_key_global: usize,
     manager_global: usize,
+    slot: usize,
 ) -> Result<
     (
         locator::LocatedEquipment,
@@ -190,22 +218,17 @@ async fn read_candidate(
         locator::LocatedEquipment,
         [u8; SIGIL_ARRAY_BYTES],
     ),
-    String,
+    CandidateReadError,
 > {
-    let first_location = locate_from_globals(process, local_key_global, manager_global)
-        .map_err(|error| error.to_string())?;
+    let first_location = locate_from_globals_slot(process, local_key_global, manager_global, slot)?;
     let mut first = [0u8; SIGIL_ARRAY_BYTES];
-    process
-        .read_exact(first_location.snapshot_address, &mut first)
-        .map_err(|error| error.to_string())?;
+    process.read_exact(first_location.snapshot_address, &mut first)?;
 
     sleep(STABILITY_DELAY).await;
-    let second_location = locate_from_globals(process, local_key_global, manager_global)
-        .map_err(|error| error.to_string())?;
+    let second_location =
+        locate_from_globals_slot(process, local_key_global, manager_global, slot)?;
     let mut second = [0u8; SIGIL_ARRAY_BYTES];
-    process
-        .read_exact(second_location.snapshot_address, &mut second)
-        .map_err(|error| error.to_string())?;
+    process.read_exact(second_location.snapshot_address, &mut second)?;
     Ok((first_location, first, second_location, second))
 }
 
@@ -238,11 +261,7 @@ fn log_decision(
     }
 }
 
-fn log_unavailable(
-    throttle: &mut ProbeLogThrottle,
-    stage: &'static str,
-    error: &dyn std::fmt::Display,
-) {
+fn log_unavailable(throttle: &mut ProbeLogThrottle, stage: &str, error: &dyn std::fmt::Display) {
     if throttle.allows(format!("unavailable:{stage}"), Instant::now()) {
         warn!("PROBE UNAVAILABLE stage={stage} error={error}");
     }
@@ -250,7 +269,8 @@ fn log_unavailable(
 
 #[cfg(test)]
 mod tests {
-    use super::probe_enabled;
+    use super::{probe_enabled, CandidateReadError};
+    use crate::equipment_probe::locator::LocateError;
 
     #[test]
     fn probe_requires_debug_build_and_exact_opt_in() {
@@ -258,5 +278,12 @@ mod tests {
         assert!(!probe_enabled(true, None));
         assert!(!probe_enabled(true, Some("true")));
         assert!(!probe_enabled(false, Some("1")));
+    }
+
+    #[test]
+    fn empty_party_slot_is_not_reportable() {
+        let error = CandidateReadError::Locate(LocateError::EmptyCharacterKey);
+
+        assert!(error.is_expected_empty_slot());
     }
 }

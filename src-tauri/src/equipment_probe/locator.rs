@@ -44,8 +44,10 @@ pub(crate) enum LocateError {
     InvalidPointer(usize),
     #[error("local equipment character key is empty")]
     EmptyCharacterKey,
-    #[error("local player was not found in the player table")]
-    PlayerNotFound,
+    #[error("local party slot {0} is outside 0..4")]
+    InvalidLocalSlot(usize),
+    #[error("local player key {character_key:#010x} was not found in the player table")]
+    PlayerNotFound { character_key: u32 },
     #[error("player hash-table list contains a cycle at {0:#x}")]
     LinkedListCycle(usize),
     #[error("player hash-table traversal exceeded {MAX_PLAYER_NODES} nodes")]
@@ -89,8 +91,21 @@ pub(crate) fn locate_from_globals<R: MemoryReader>(
     local_key_global: usize,
     manager_global: usize,
 ) -> Result<LocatedEquipment, LocateError> {
+    locate_from_globals_slot(reader, local_key_global, manager_global, 0)
+}
+
+pub(crate) fn locate_from_globals_slot<R: MemoryReader>(
+    reader: &R,
+    local_key_global: usize,
+    manager_global: usize,
+    slot: usize,
+) -> Result<LocatedEquipment, LocateError> {
+    if slot >= 4 {
+        return Err(LocateError::InvalidLocalSlot(slot));
+    }
     let local_keys = validate_pointer(read_usize(reader, local_key_global)?)?;
-    let character_key = read_u32(reader, local_keys)?;
+    let key_offset = slot.checked_mul(0x10).ok_or(LocateError::AddressOverflow)?;
+    let character_key = read_u32(reader, checked_address(local_keys, key_offset)?)?;
     if character_key == 0 || character_key == EMPTY_HASH {
         return Err(LocateError::EmptyCharacterKey);
     }
@@ -108,8 +123,8 @@ pub(crate) fn locate_from_globals<R: MemoryReader>(
     let mut node = validate_pointer(read_usize(reader, checked_address(bucket, 0x08)?)?)?;
     let mut visited = HashSet::new();
     let found = loop {
-        if node == sentinel || node == bucket_end {
-            return Err(LocateError::PlayerNotFound);
+        if node == sentinel {
+            return Err(LocateError::PlayerNotFound { character_key });
         }
         if !visited.insert(node) {
             return Err(LocateError::LinkedListCycle(node));
@@ -120,10 +135,14 @@ pub(crate) fn locate_from_globals<R: MemoryReader>(
         if read_u32(reader, checked_address(node, 0x10)?)? == character_key {
             break node;
         }
+        if node == bucket_end {
+            return Err(LocateError::PlayerNotFound { character_key });
+        }
         node = validate_pointer(read_usize(reader, checked_address(node, 0x08)?)?)?;
     };
 
     let record = validate_pointer(read_usize(reader, checked_address(found, 0x30)?)?)?;
+
     let record_key = read_u32(reader, checked_address(record, 0x5EA8)?)?;
     if record_key != character_key {
         return Err(LocateError::RecordCharacterMismatch {
@@ -262,7 +281,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        find_unique_pattern, locate_equipment, locate_from_globals, resolve_rel32, LocateError,
+        find_unique_pattern, locate_equipment, locate_from_globals, locate_from_globals_slot,
+        resolve_rel32, LocateError,
     };
     use crate::equipment_probe::memory::{MemoryReadError, MemoryReader};
 
@@ -325,7 +345,7 @@ mod tests {
         memory.insert(MANAGER, manager);
 
         let mut buckets = vec![0u8; 0x10];
-        buckets[0x00..0x08].copy_from_slice(&SENTINEL.to_le_bytes());
+        buckets[0x00..0x08].copy_from_slice(&NODE.to_le_bytes());
         buckets[0x08..0x10].copy_from_slice(&NODE.to_le_bytes());
         memory.insert(BUCKETS, buckets);
 
@@ -389,6 +409,43 @@ mod tests {
         assert_eq!(located.character_key, key);
         assert_eq!(located.record_address, record);
         assert_eq!(located.snapshot_address, snapshot);
+    }
+
+    #[test]
+    fn locates_a_nonzero_local_party_slot() {
+        const LOCAL_KEYS: usize = 0x2000_0000;
+        const BUCKETS: usize = 0x2200_0000;
+        const SENTINEL: usize = 0x2300_0000;
+        const FIRST_NODE: usize = 0x2400_0000;
+        const SECOND_NODE: usize = 0x2410_0000;
+        const SECOND_RECORD: usize = 0x2510_0000;
+        const SECOND_SNAPSHOT: usize = 0x2610_0000;
+        const SECOND_KEY: u32 = 0xDD7A_151E;
+        let (mut memory, local_global, manager_global, first_key, _, _) =
+            player_fixture(0x14000_0000);
+        memory.insert_u32(LOCAL_KEYS + 0x10, SECOND_KEY);
+        memory.insert(
+            BUCKETS,
+            [SECOND_NODE.to_le_bytes(), FIRST_NODE.to_le_bytes()].concat(),
+        );
+        let mut first_node = vec![0u8; 0x38];
+        first_node[0x08..0x10].copy_from_slice(&SECOND_NODE.to_le_bytes());
+        first_node[0x10..0x14].copy_from_slice(&first_key.to_le_bytes());
+        memory.insert(FIRST_NODE, first_node);
+        let mut second_node = vec![0u8; 0x38];
+        second_node[0x08..0x10].copy_from_slice(&SENTINEL.to_le_bytes());
+        second_node[0x10..0x14].copy_from_slice(&SECOND_KEY.to_le_bytes());
+        second_node[0x30..0x38].copy_from_slice(&SECOND_RECORD.to_le_bytes());
+        memory.insert(SECOND_NODE, second_node);
+        let mut second_record = vec![0u8; 0x5EB0];
+        second_record[0x5E60..0x5E68].copy_from_slice(&SECOND_SNAPSHOT.to_le_bytes());
+        second_record[0x5EA8..0x5EAC].copy_from_slice(&SECOND_KEY.to_le_bytes());
+        memory.insert(SECOND_RECORD, second_record);
+
+        let located = locate_from_globals_slot(&memory, local_global, manager_global, 1).unwrap();
+        assert_eq!(located.character_key, SECOND_KEY);
+        assert_eq!(located.record_address, SECOND_RECORD);
+        assert_eq!(located.snapshot_address, SECOND_SNAPSHOT);
     }
 
     #[test]

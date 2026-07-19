@@ -60,10 +60,15 @@ struct EmissionFingerprint {
 #[derive(Debug, Default)]
 pub(crate) struct ProbeComparator {
     hook_truth: HashMap<u32, LocalEquipmentSnapshotEvent>,
-    last_emission: Option<(EmissionFingerprint, Instant)>,
+    last_emission: HashMap<u32, (EmissionFingerprint, Instant)>,
 }
 
 impl ProbeComparator {
+    pub fn begin_hook_session(&mut self) {
+        self.hook_truth.clear();
+        self.last_emission.clear();
+    }
+
     pub fn record_hook(&mut self, event: LocalEquipmentSnapshotEvent) {
         self.hook_truth.insert(event.character_type, event);
     }
@@ -97,7 +102,7 @@ impl ProbeComparator {
         };
         if self
             .last_emission
-            .as_ref()
+            .get(&character_key)
             .is_some_and(|(previous, emitted_at)| {
                 previous == &fingerprint
                     && now.saturating_duration_since(*emitted_at) < REPEAT_INTERVAL
@@ -105,7 +110,7 @@ impl ProbeComparator {
         {
             return CompareDecision::Suppressed;
         }
-        self.last_emission = Some((fingerprint, now));
+        self.last_emission.insert(character_key, (fingerprint, now));
 
         if differences.is_empty() {
             CompareDecision::Match(ComparisonSummary {
@@ -303,5 +308,49 @@ mod tests {
             .chars()
             .all(|character| character.is_ascii_hexdigit() && !character.is_ascii_uppercase()));
         assert!(!format!("{summary:?}").contains("raw"));
+    }
+
+    #[test]
+    fn throttles_each_character_independently() {
+        const SECOND_KEY: u32 = 0xDD7A_151E;
+        let first = fixture();
+        let mut second = fixture();
+        put_u32(&mut second, 0x14, SECOND_KEY);
+        let now = Instant::now();
+        let mut comparator = ProbeComparator::default();
+        comparator.record_hook(decode_snapshot(&first, KEY).unwrap());
+        comparator.record_hook(decode_snapshot(&second, SECOND_KEY).unwrap());
+
+        assert!(matches!(
+            comparator.compare_external(KEY, &first, &first, now),
+            CompareDecision::Match(_)
+        ));
+        assert!(matches!(
+            comparator.compare_external(SECOND_KEY, &second, &second, now),
+            CompareDecision::Match(_)
+        ));
+        assert!(matches!(
+            comparator.compare_external(KEY, &first, &first, now + Duration::from_secs(1)),
+            CompareDecision::Suppressed
+        ));
+    }
+
+    #[test]
+    fn new_hook_session_discards_previous_truth() {
+        let bytes = fixture();
+        let now = Instant::now();
+        let mut comparator = ProbeComparator::default();
+        comparator.record_hook(decode_snapshot(&bytes, KEY).unwrap());
+        assert!(matches!(
+            comparator.compare_external(KEY, &bytes, &bytes, now),
+            CompareDecision::Match(_)
+        ));
+
+        comparator.begin_hook_session();
+
+        assert!(matches!(
+            comparator.compare_external(KEY, &bytes, &bytes, now + Duration::from_secs(1)),
+            CompareDecision::Deferred(DeferredReason::MissingHookTruth)
+        ));
     }
 }
