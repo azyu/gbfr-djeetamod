@@ -17,6 +17,7 @@ use self::{
 };
 
 mod compare;
+mod inventory;
 mod locator;
 mod memory;
 
