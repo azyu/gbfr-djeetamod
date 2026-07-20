@@ -3,6 +3,9 @@ use protocol::{
 };
 use thiserror::Error;
 
+mod inventory;
+pub use inventory::*;
+
 pub const EMPTY_HASH: u32 = 0x887A_E0B0;
 pub const SIGIL_COUNT: usize = 12;
 pub const SIGIL_STRIDE: usize = 0x24;
