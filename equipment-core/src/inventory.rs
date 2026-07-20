@@ -21,6 +21,13 @@ impl InventoryCatalog {
         }
     }
 
+    pub fn known_non_empty_sigil_ids(&self) -> impl Iterator<Item = u32> + '_ {
+        self.sigil_ids
+            .iter()
+            .copied()
+            .filter(|value| !is_empty_id(*value))
+    }
+
     fn knows_sigil(&self, value: u32) -> bool {
         is_empty_id(value) || self.sigil_ids.contains(&value)
     }
@@ -132,6 +139,8 @@ pub fn decode_inventory_record(
 mod tests {
     use std::collections::HashSet;
 
+    use crate::EMPTY_HASH;
+
     use super::{
         decode_inventory_record, InventoryCatalog, InventoryDecodeError, INVENTORY_RECORD_BYTES,
     };
@@ -164,6 +173,17 @@ mod tests {
         put_u32(&mut bytes, 0x1C, 42);
         put_u32(&mut bytes, 0x20, 1);
         bytes
+    }
+
+    #[test]
+    fn exposes_only_known_non_empty_sigil_ids() {
+        let catalog =
+            InventoryCatalog::new(HashSet::from([SIGIL_ID, 0, EMPTY_HASH]), HashSet::new());
+
+        let mut ids = catalog.known_non_empty_sigil_ids().collect::<Vec<_>>();
+        ids.sort_unstable();
+
+        assert_eq!(ids, vec![SIGIL_ID]);
     }
 
     #[test]
