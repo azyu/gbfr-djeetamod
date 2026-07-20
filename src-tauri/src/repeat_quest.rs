@@ -30,10 +30,26 @@ enum RepeatQuestError {
     SignatureCount { site: PatchSiteName, count: usize },
     #[error("patch address overflow")]
     AddressOverflow,
+    #[error("target bytes are neither original nor patched")]
+    UnexpectedBytes,
+    #[error("read failed at {address:#x}: {detail}")]
+    Read { address: usize, detail: String },
+    #[error("write failed at {address:#x}: {detail}")]
+    Write { address: usize, detail: String },
+    #[error("final byte read-back did not match the requested state")]
+    ReadBackMismatch,
+    #[error("enable failed and rollback did not restore OFF")]
+    Rollback,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct PatchOffsets {
+    reset: usize,
+    getter: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PatchSites {
     reset: usize,
     getter: usize,
 }
@@ -72,6 +88,90 @@ fn classify_pair(reset: [u8; 3], getter: [u8; 3]) -> ObservedPatchState {
         (SiteBytes::Patched, SiteBytes::Patched) => ObservedPatchState::On,
         (SiteBytes::Unknown, _) | (_, SiteBytes::Unknown) => ObservedPatchState::Unknown,
         _ => ObservedPatchState::Mixed,
+    }
+}
+
+trait PatchMemory {
+    fn read_site(&self, address: usize) -> Result<[u8; 3], RepeatQuestError>;
+    fn write_site(&mut self, address: usize, bytes: [u8; 3]) -> Result<(), RepeatQuestError>;
+}
+
+fn observe_patch(
+    memory: &impl PatchMemory,
+    sites: PatchSites,
+) -> Result<ObservedPatchState, RepeatQuestError> {
+    Ok(classify_pair(
+        memory.read_site(sites.reset)?,
+        memory.read_site(sites.getter)?,
+    ))
+}
+
+fn enable_patch(
+    memory: &mut impl PatchMemory,
+    sites: PatchSites,
+) -> Result<ObservedPatchState, RepeatQuestError> {
+    match observe_patch(memory, sites)? {
+        ObservedPatchState::On => return Ok(ObservedPatchState::On),
+        ObservedPatchState::Off => {}
+        ObservedPatchState::Mixed | ObservedPatchState::Unknown => {
+            return Err(RepeatQuestError::UnexpectedBytes)
+        }
+    }
+    if let Err(error) = memory.write_site(sites.reset, RESET_PATCHED) {
+        rollback_enable(memory, sites)?;
+        return Err(error);
+    }
+    if let Err(error) = memory.write_site(sites.getter, GETTER_PATCHED) {
+        rollback_enable(memory, sites)?;
+        return Err(error);
+    }
+    let observed = observe_patch(memory, sites)?;
+    if observed == ObservedPatchState::On {
+        Ok(observed)
+    } else {
+        rollback_enable(memory, sites)?;
+        Err(RepeatQuestError::ReadBackMismatch)
+    }
+}
+
+fn rollback_enable(
+    memory: &mut impl PatchMemory,
+    sites: PatchSites,
+) -> Result<(), RepeatQuestError> {
+    match restore_patch(memory, sites) {
+        Ok(ObservedPatchState::Off) => Ok(()),
+        _ => Err(RepeatQuestError::Rollback),
+    }
+}
+
+fn restore_patch(
+    memory: &mut impl PatchMemory,
+    sites: PatchSites,
+) -> Result<ObservedPatchState, RepeatQuestError> {
+    let reset = classify_site(
+        memory.read_site(sites.reset)?,
+        RESET_ORIGINAL,
+        RESET_PATCHED,
+    );
+    let getter = classify_site(
+        memory.read_site(sites.getter)?,
+        GETTER_ORIGINAL,
+        GETTER_PATCHED,
+    );
+    if reset == SiteBytes::Unknown || getter == SiteBytes::Unknown {
+        return Err(RepeatQuestError::UnexpectedBytes);
+    }
+    if reset == SiteBytes::Patched {
+        memory.write_site(sites.reset, RESET_ORIGINAL)?;
+    }
+    if getter == SiteBytes::Patched {
+        memory.write_site(sites.getter, GETTER_ORIGINAL)?;
+    }
+    let observed = observe_patch(memory, sites)?;
+    if observed == ObservedPatchState::Off {
+        Ok(observed)
+    } else {
+        Err(RepeatQuestError::ReadBackMismatch)
     }
 }
 
@@ -116,6 +216,8 @@ fn find_patch_offsets(text: &[u8]) -> Result<PatchOffsets, RepeatQuestError> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     const RESET_SIGNATURE: &[u8] = &[
         0x48, 0x83, 0xB8, 0x08, 0xC1, 0x01, 0x00, 0x00, 0xC7, 0x80, 0x24, 0xC1, 0x01, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x0F, 0x84, 0x11, 0x22, 0x33, 0x44, 0xC6, 0x87, 0x24, 0x06, 0x00, 0x00,
@@ -140,6 +242,78 @@ mod tests {
 
     fn signature_fixture() -> Vec<u8> {
         signature_fixture_with_counts(1, 1)
+    }
+
+    #[derive(Default)]
+    struct FakePatchMemory {
+        bytes: HashMap<usize, [u8; 3]>,
+        writes: Vec<(usize, [u8; 3])>,
+        fail_write_once_at: Option<usize>,
+        fail_write_value_once: Option<(usize, [u8; 3])>,
+        ignore_write_once_at: Option<usize>,
+    }
+
+    impl FakePatchMemory {
+        fn original(sites: super::PatchSites) -> Self {
+            Self {
+                bytes: HashMap::from([
+                    (sites.reset, super::RESET_ORIGINAL),
+                    (sites.getter, super::GETTER_ORIGINAL),
+                ]),
+                writes: Vec::new(),
+                fail_write_once_at: None,
+                fail_write_value_once: None,
+                ignore_write_once_at: None,
+            }
+        }
+
+        fn bytes_at(&self, address: usize) -> [u8; 3] {
+            self.bytes[&address]
+        }
+
+        fn set(&mut self, address: usize, bytes: [u8; 3]) {
+            self.bytes.insert(address, bytes);
+        }
+    }
+
+    impl super::PatchMemory for FakePatchMemory {
+        fn read_site(&self, address: usize) -> Result<[u8; 3], super::RepeatQuestError> {
+            self.bytes
+                .get(&address)
+                .copied()
+                .ok_or_else(|| super::RepeatQuestError::Read {
+                    address,
+                    detail: "missing fake site".to_owned(),
+                })
+        }
+
+        fn write_site(
+            &mut self,
+            address: usize,
+            bytes: [u8; 3],
+        ) -> Result<(), super::RepeatQuestError> {
+            if self.fail_write_value_once == Some((address, bytes)) {
+                self.fail_write_value_once = None;
+                return Err(super::RepeatQuestError::Write {
+                    address,
+                    detail: "injected value failure".to_owned(),
+                });
+            }
+            if self.fail_write_once_at == Some(address) {
+                self.fail_write_once_at = None;
+                return Err(super::RepeatQuestError::Write {
+                    address,
+                    detail: "injected failure".to_owned(),
+                });
+            }
+            self.writes.push((address, bytes));
+            if self.ignore_write_once_at == Some(address) {
+                self.ignore_write_once_at = None;
+                return Ok(());
+            }
+            self.bytes.insert(address, bytes);
+            Ok(())
+        }
     }
 
     #[test]
@@ -188,6 +362,157 @@ mod tests {
         assert_eq!(
             super::classify_pair([0x90; 3], super::GETTER_ORIGINAL),
             super::ObservedPatchState::Unknown
+        );
+    }
+
+    #[test]
+    fn enable_writes_both_sites_and_verifies_on() {
+        let sites = super::PatchSites {
+            reset: 0x1000,
+            getter: 0x2000,
+        };
+        let mut memory = FakePatchMemory::original(sites);
+
+        assert_eq!(
+            super::enable_patch(&mut memory, sites).unwrap(),
+            super::ObservedPatchState::On
+        );
+        assert_eq!(
+            memory.writes,
+            vec![
+                (sites.reset, super::RESET_PATCHED),
+                (sites.getter, super::GETTER_PATCHED),
+            ]
+        );
+        assert_eq!(memory.bytes_at(sites.reset), super::RESET_PATCHED);
+        assert_eq!(memory.bytes_at(sites.getter), super::GETTER_PATCHED);
+    }
+
+    #[test]
+    fn second_enable_write_failure_rolls_back_the_first() {
+        let sites = super::PatchSites {
+            reset: 0x1000,
+            getter: 0x2000,
+        };
+        let mut memory = FakePatchMemory::original(sites);
+        memory.fail_write_once_at = Some(sites.getter);
+
+        assert!(matches!(
+            super::enable_patch(&mut memory, sites),
+            Err(super::RepeatQuestError::Write {
+                address: 0x2000,
+                ..
+            })
+        ));
+        assert_eq!(memory.bytes_at(sites.reset), super::RESET_ORIGINAL);
+        assert_eq!(memory.bytes_at(sites.getter), super::GETTER_ORIGINAL);
+    }
+
+    #[test]
+    fn restore_repairs_mixed_state_without_touching_original_site() {
+        let sites = super::PatchSites {
+            reset: 0x1000,
+            getter: 0x2000,
+        };
+        let mut memory = FakePatchMemory::original(sites);
+        memory.set(sites.reset, super::RESET_PATCHED);
+
+        assert_eq!(
+            super::restore_patch(&mut memory, sites).unwrap(),
+            super::ObservedPatchState::Off
+        );
+        assert_eq!(memory.writes, vec![(sites.reset, super::RESET_ORIGINAL)]);
+    }
+
+    #[test]
+    fn read_back_mismatch_restores_off_before_returning_error() {
+        let sites = super::PatchSites {
+            reset: 0x1000,
+            getter: 0x2000,
+        };
+        let mut memory = FakePatchMemory::original(sites);
+        memory.ignore_write_once_at = Some(sites.getter);
+
+        assert_eq!(
+            super::enable_patch(&mut memory, sites),
+            Err(super::RepeatQuestError::ReadBackMismatch)
+        );
+        assert_eq!(memory.bytes_at(sites.reset), super::RESET_ORIGINAL);
+        assert_eq!(memory.bytes_at(sites.getter), super::GETTER_ORIGINAL);
+    }
+
+    #[test]
+    fn unknown_bytes_are_never_overwritten() {
+        let sites = super::PatchSites {
+            reset: 0x1000,
+            getter: 0x2000,
+        };
+        let mut memory = FakePatchMemory::original(sites);
+        memory.set(sites.getter, [0x90; 3]);
+
+        assert_eq!(
+            super::enable_patch(&mut memory, sites),
+            Err(super::RepeatQuestError::UnexpectedBytes)
+        );
+        assert_eq!(
+            super::restore_patch(&mut memory, sites),
+            Err(super::RepeatQuestError::UnexpectedBytes)
+        );
+        assert!(memory.writes.is_empty());
+    }
+
+    #[test]
+    fn enable_and_restore_are_idempotent_at_the_requested_state() {
+        let sites = super::PatchSites {
+            reset: 0x1000,
+            getter: 0x2000,
+        };
+        let mut off = FakePatchMemory::original(sites);
+        assert_eq!(
+            super::restore_patch(&mut off, sites).unwrap(),
+            super::ObservedPatchState::Off
+        );
+        assert!(off.writes.is_empty());
+
+        let mut on = FakePatchMemory::original(sites);
+        on.set(sites.reset, super::RESET_PATCHED);
+        on.set(sites.getter, super::GETTER_PATCHED);
+        assert_eq!(
+            super::enable_patch(&mut on, sites).unwrap(),
+            super::ObservedPatchState::On
+        );
+        assert!(on.writes.is_empty());
+    }
+
+    #[test]
+    fn mixed_state_cannot_be_enabled() {
+        let sites = super::PatchSites {
+            reset: 0x1000,
+            getter: 0x2000,
+        };
+        let mut memory = FakePatchMemory::original(sites);
+        memory.set(sites.reset, super::RESET_PATCHED);
+
+        assert_eq!(
+            super::enable_patch(&mut memory, sites),
+            Err(super::RepeatQuestError::UnexpectedBytes)
+        );
+        assert!(memory.writes.is_empty());
+    }
+
+    #[test]
+    fn rollback_failure_is_reported_instead_of_the_original_write_error() {
+        let sites = super::PatchSites {
+            reset: 0x1000,
+            getter: 0x2000,
+        };
+        let mut memory = FakePatchMemory::original(sites);
+        memory.fail_write_once_at = Some(sites.getter);
+        memory.fail_write_value_once = Some((sites.reset, super::RESET_ORIGINAL));
+
+        assert_eq!(
+            super::enable_patch(&mut memory, sites),
+            Err(super::RepeatQuestError::Rollback)
         );
     }
 }
