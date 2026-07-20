@@ -89,7 +89,7 @@
 
 ## 외부 읽기 전용 리더 검증
 
-개발 전용 프로브를 `DJEETA_EXTERNAL_READER_PROBE=1`로 활성화하고, 훅이 보낸 스냅샷을 정답값으로 삼아 별도 프로세스의 `ReadProcessMemory` 결과와 비교했다. 외부 리더는 `PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ`만 요청하며 게임 메모리에 쓰지 않는다.
+개발 전용 프로브를 `DJEETA_EXTERNAL_READER_PROBE=1`로 활성화하고, 훅이 보낸 스냅샷을 정답값으로 삼아 별도 프로세스의 `ReadProcessMemory` 결과와 비교했다. 외부 리더는 `PROCESS_QUERY_INFORMATION | PROCESS_VM_READ`만 요청하며 게임 메모리에 쓰지 않는다.
 
 - 고정 EXE SHA-256: `63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F`
 - 고유 서명 일치 RVA: `0x2D7E60`

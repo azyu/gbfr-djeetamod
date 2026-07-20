@@ -55,8 +55,10 @@ it("exposes only the verified NSIS packaging command", () => {
 test("external equipment probe requests read-only process access", () => {
   const source = readRepositoryFile("src-tauri/src/equipment_probe/memory.rs");
   expect(source).toContain("PROCESS_VM_READ");
-  expect(source).toContain("PROCESS_QUERY_LIMITED_INFORMATION");
+  expect(source).toContain("PROCESS_QUERY_INFORMATION");
+  expect(source).not.toContain("PROCESS_QUERY_LIMITED_INFORMATION");
   expect(source).toContain("VirtualQueryEx");
+  expect(source).toMatch(/if queried == 0 \{\s*return Err/);
   for (const forbidden of [
     "PROCESS_VM_WRITE",
     "PROCESS_VM_OPERATION",
@@ -67,5 +69,25 @@ test("external equipment probe requests read-only process access", () => {
     "CreateRemoteThread",
   ]) {
     expect(source).not.toContain(forbidden);
+  }
+});
+
+test("inventory probe stays read-only and release-gated", () => {
+  const memory = readRepositoryFile("src-tauri/src/equipment_probe/memory.rs");
+  const inventory = readRepositoryFile("src-tauri/src/equipment_probe/inventory.rs");
+  expect(memory).toContain("PROCESS_QUERY_INFORMATION | PROCESS_VM_READ");
+  expect(memory).toContain("VirtualQueryEx");
+  expect(inventory).toContain('std::env::var("DJEETA_INVENTORY_PROBE")');
+  expect(inventory).toContain("cfg!(debug_assertions)");
+  for (const forbidden of [
+    "PROCESS_VM_WRITE",
+    "PROCESS_VM_OPERATION",
+    "PROCESS_CREATE_THREAD",
+    "PROCESS_CREATE_PROCESS",
+    "WriteProcessMemory",
+    "VirtualAllocEx",
+    "CreateRemoteThread",
+  ]) {
+    expect(memory + inventory).not.toContain(forbidden);
   }
 });

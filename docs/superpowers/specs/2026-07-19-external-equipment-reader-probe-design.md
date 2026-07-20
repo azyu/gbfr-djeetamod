@@ -15,7 +15,7 @@
 
 - 개발 빌드에서 `DJEETA_EXTERNAL_READER_PROBE=1`일 때만 외부 프로브 실행
 - 게임 PID, 모듈 베이스와 실행 파일 SHA-256 식별
-- `PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ` 범위의 읽기 전용 프로세스 접근
+- `PROCESS_QUERY_INFORMATION | PROCESS_VM_READ` 범위의 읽기 전용 프로세스 접근
 - 게임 모듈을 복사한 바이트에서 시그니처 검색
 - 플레이어 전역 루트에서 현재 로컬 캐릭터 장비 스냅샷까지의 독립적인 포인터 경로
 - 기존 훅과 외부 프로브가 공유하는 장비 스냅샷 디코더

@@ -12,7 +12,7 @@
 
 - Target only Granblue Fantasy: Relink Endless Ragnarok 2.0.2 on Windows x64.
 - Keep `requestedExecutionLevel level="asInvoker"` and NSIS `installMode: "currentUser"`.
-- Request only `PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ` for the external reader.
+- Request only `PROCESS_QUERY_INFORMATION | PROCESS_VM_READ` for the external reader.
 - Do not add game-memory writes, code patches, remote threads, or another DLL injection path.
 - Require both a debug build and `DJEETA_INVENTORY_PROBE=1`; every release invocation must fail before process access.
 - Pin the game executable to SHA-256 `63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F`.
@@ -932,7 +932,7 @@ Extend the existing test to read both `memory.rs` and `inventory.rs` and assert:
 test("inventory probe stays read-only and release-gated", () => {
   const memory = readRepositoryFile("src-tauri/src/equipment_probe/memory.rs");
   const inventory = readRepositoryFile("src-tauri/src/equipment_probe/inventory.rs");
-  expect(memory).toContain("PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ");
+  expect(memory).toContain("PROCESS_QUERY_INFORMATION | PROCESS_VM_READ");
   expect(memory).toContain("VirtualQueryEx");
   expect(inventory).toContain('std::env::var("DJEETA_INVENTORY_PROBE")');
   expect(inventory).toContain("cfg!(debug_assertions)");

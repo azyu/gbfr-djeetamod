@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   response: null as unknown,
   probeAvailable: false,
   captureError: null as string | null,
+  capturePromise: null as Promise<void> | null,
   listeners: new Map<string, (event: { payload: unknown }) => void>(),
 }));
 
@@ -20,6 +21,7 @@ vi.mock("@tauri-apps/api", () => ({
     if (command === "inventory_probe_available") return mocks.probeAvailable;
     if (command === "capture_inventory_probe") {
       if (mocks.captureError) throw mocks.captureError;
+      if (mocks.capturePromise) await mocks.capturePromise;
       return undefined;
     }
     throw new Error(`unexpected command: ${command}`);
@@ -87,6 +89,7 @@ beforeEach(() => {
   mocks.response = equipmentFixture;
   mocks.probeAvailable = false;
   mocks.captureError = null;
+  mocks.capturePromise = null;
   mocks.listeners.clear();
   useEquipmentAnalysisStore.getState().reset();
 });
@@ -213,10 +216,16 @@ it("shows the inventory probe only when the backend enables it", async () => {
 
 it("disables capture while running and reports completion without inventory data", async () => {
   mocks.probeAvailable = true;
+  let resolveCapture!: () => void;
+  mocks.capturePromise = new Promise<void>((resolve) => {
+    resolveCapture = resolve;
+  });
   renderPage();
   const button = await screen.findByRole("button", { name: "보유 진 캡처" });
   fireEvent.click(button);
   expect((button as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("alert")).toBeNull();
+  await act(async () => resolveCapture());
   const status = await screen.findByRole("alert");
   expect(within(status).getByText("캡처 완료 — 개발 로그 확인")).toBeTruthy();
   expect(within(status).queryByText(/0x[0-9a-f]+/i)).toBeNull();

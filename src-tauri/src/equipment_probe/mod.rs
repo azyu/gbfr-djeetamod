@@ -117,7 +117,7 @@ pub(crate) async fn run_if_enabled(app: AppHandle) {
         if hash != PINNED_GAME_SHA256 {
             if throttle.allows(format!("hash:{}", process.pid), Instant::now()) {
                 warn!(
-                    "PROBE UNAVAILABLE stage=executable-hash pid={} sha256={} module_base={:#x} rights=PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_VM_READ expected={}",
+                    "PROBE UNAVAILABLE stage=executable-hash pid={} sha256={} module_base={:#x} rights=PROCESS_QUERY_INFORMATION|PROCESS_VM_READ expected={}",
                     process.pid, hash, process.module_base, PINNED_GAME_SHA256
                 );
             }
@@ -126,7 +126,7 @@ pub(crate) async fn run_if_enabled(app: AppHandle) {
         }
         if announced_pid != Some(process.pid) {
             warn!(
-                "PROBE MATCH process pid={} sha256={} module_base={:#x} rights=PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_VM_READ",
+                "PROBE MATCH process pid={} sha256={} module_base={:#x} rights=PROCESS_QUERY_INFORMATION|PROCESS_VM_READ",
                 process.pid, hash, process.module_base
             );
             announced_pid = Some(process.pid);

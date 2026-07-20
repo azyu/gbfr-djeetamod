@@ -12,7 +12,7 @@
 
 - 대상은 `Granblue Fantasy: Relink Endless Ragnarok 2.0.2` Windows x64이고 검증 실행 파일 SHA-256은 `63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F`이다.
 - 외부 프로브는 `debug_assertions`가 활성화되고 `DJEETA_EXTERNAL_READER_PROBE=1`일 때만 실행한다.
-- 외부 프로세스 권한은 `PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ`만 요청한다.
+- 외부 프로세스 권한은 `PROCESS_QUERY_INFORMATION | PROCESS_VM_READ`만 요청한다.
 - 게임 메모리 쓰기, 코드 패치, 원격 스레드와 추가 DLL 주입을 구현하지 않는다.
 - 훅은 주소를 외부 프로브에 전달하지 않으며 기존 `LocalEquipmentSnapshot` 정답만 제공한다.
 - 외부 프로브는 사용자 UI, `HookStatus`, 미터 연결 상태와 `EquipmentStatus.connected`를 변경하지 않는다.
@@ -293,7 +293,7 @@ Enumerate processes with `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)` and c
 
 ```rust
 OpenProcess(
-    PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
+    PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
     false,
     pid,
 )
@@ -462,7 +462,7 @@ Extend `src/securityConfiguration.test.ts` with this exact source check:
 test("external equipment probe requests read-only process access", () => {
   const source = readRepositoryFile("src-tauri/src/equipment_probe/memory.rs");
   expect(source).toContain("PROCESS_VM_READ");
-  expect(source).toContain("PROCESS_QUERY_LIMITED_INFORMATION");
+  expect(source).toContain("PROCESS_QUERY_INFORMATION");
   for (const forbidden of [
     "PROCESS_VM_WRITE",
     "PROCESS_VM_OPERATION",

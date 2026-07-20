@@ -23,9 +23,7 @@ use windows::Win32::{
             },
         },
         Memory::{VirtualQueryEx, MEMORY_BASIC_INFORMATION},
-        Threading::{
-            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
-        },
+        Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ},
     },
 };
 
@@ -111,14 +109,9 @@ impl RemoteProcess {
             return Ok(None);
         };
         let (module_base, module_size, executable_path) = find_main_module(pid, name)?;
-        let handle = unsafe {
-            OpenProcess(
-                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
-                false,
-                pid,
-            )
-        }
-        .map_err(windows_error)?;
+        let handle =
+            unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid) }
+                .map_err(windows_error)?;
 
         Ok(Some(Self {
             handle: OwnedHandle(handle),
@@ -177,8 +170,13 @@ impl RemoteProcess {
                     std::mem::size_of_val(&info),
                 )
             };
-            if queried == 0 || info.RegionSize == 0 {
-                break;
+            if queried == 0 {
+                return Err(windows_error(windows::core::Error::from_win32()));
+            }
+            if info.RegionSize == 0 {
+                return Err(MemoryReadError::Windows(
+                    "VirtualQueryEx returned an empty region".to_owned(),
+                ));
             }
             if is_readable_private_region(info.State.0, info.Type.0, info.Protect.0) {
                 regions.push(MemoryRegion {

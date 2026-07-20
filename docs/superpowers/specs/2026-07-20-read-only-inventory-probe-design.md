@@ -27,7 +27,7 @@
 
 - 앱 manifest는 `asInvoker`를 유지한다.
 - NSIS 설치는 `currentUser`를 유지한다.
-- 외부 프로세스 핸들은 `PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ`만 요청한다.
+- 외부 프로세스 핸들은 `VirtualQueryEx`에 필요한 `PROCESS_QUERY_INFORMATION | PROCESS_VM_READ`만 요청한다.
 - 게임 메모리 쓰기, 코드 패치, 원격 스레드, 추가 DLL 주입을 사용하지 않는다.
 - 기존 데미지 훅, named pipe, 장착 진 분석 경로와 연결 상태를 변경하지 않는다.
 - 게임 실행 파일 SHA-256이 검증된 2.0.2 값과 다르면 메모리를 스캔하지 않는다.

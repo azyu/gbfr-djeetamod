@@ -152,7 +152,7 @@ fn capture_once() -> Result<(), InventoryProbeCode> {
         .map(|byte| format!("{byte:02X}"))
         .collect::<String>();
     log::warn!(
-        "INVENTORY PROBE process pid={} sha256={} rights=PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_VM_READ",
+        "INVENTORY PROBE process pid={} sha256={} rights=PROCESS_QUERY_INFORMATION|PROCESS_VM_READ",
         process.pid,
         executable_hash
     );
@@ -196,14 +196,14 @@ fn capture_once() -> Result<(), InventoryProbeCode> {
     };
 
     let first = read_candidate(&process, candidate, &catalog)
-        .map_err(|_| log_internal("candidate-first-read"))?;
+        .map_err(|error| map_candidate_read_error(&error, "candidate-first-read"))?;
     thread::sleep(INVENTORY_STABILITY_DELAY);
-    let second = read_candidate(&process, candidate, &catalog)
-        .map_err(|_| log_internal("candidate-second-read"))?;
-    if first != second {
+    let second = read_candidate_bytes(&process, candidate)
+        .map_err(|error| map_candidate_read_error(&error, "candidate-second-read"))?;
+    verify_candidate_snapshots(&first, &second).map_err(|_| {
         log_final_status(InventoryProbeCode::Unstable);
-        return Err(InventoryProbeCode::Unstable);
-    }
+        InventoryProbeCode::Unstable
+    })?;
 
     log::warn!(
         "INVENTORY PROBE candidate address={:#x} records={} occupied={} digest={}",
@@ -212,7 +212,7 @@ fn capture_once() -> Result<(), InventoryProbeCode> {
         candidate.occupied_count,
         snapshot_digest_prefix(&first)
     );
-    log::warn!("INVENTORY PROBE status=OK");
+    log::warn!("INVENTORY PROBE status=STABLE");
     Ok(())
 }
 
@@ -224,6 +224,15 @@ fn capture_once() -> Result<(), InventoryProbeCode> {
 fn log_internal(stage: &str) -> InventoryProbeCode {
     log::warn!("INVENTORY PROBE status=INTERNAL stage={stage}");
     InventoryProbeCode::Internal
+}
+
+fn map_candidate_read_error(error: &InventoryProbeError, stage: &str) -> InventoryProbeCode {
+    if matches!(error, InventoryProbeError::Memory(_)) {
+        log_final_status(InventoryProbeCode::Unavailable);
+        InventoryProbeCode::Unavailable
+    } else {
+        log_internal(stage)
+    }
 }
 
 fn log_final_status(code: InventoryProbeCode) {
@@ -369,7 +378,7 @@ pub(crate) fn scan_inventory<R: MemoryReader>(
 ) -> Result<(InventoryScanOutcome, ScanMetrics), InventoryProbeError> {
     let started = Instant::now();
     let mut requested_bytes = 0u64;
-    let mut candidates = Vec::new();
+    let mut candidates = Vec::<InventoryCandidate>::new();
 
     for region in regions {
         let mut runs = HashMap::<usize, RunState>::new();
@@ -410,9 +419,22 @@ pub(crate) fn scan_inventory<R: MemoryReader>(
                 ));
             }
 
-            let mut bytes = vec![0u8; read_len];
-            reader.read_exact(chunk_address, &mut bytes)?;
             requested_bytes = next_requested;
+            let mut bytes = vec![0u8; read_len];
+            if reader.read_exact(chunk_address, &mut bytes).is_err() {
+                candidates.retain(|candidate| {
+                    candidate
+                        .record_count
+                        .checked_mul(INVENTORY_RECORD_BYTES)
+                        .and_then(|size| candidate.base_address.checked_add(size))
+                        .is_some_and(|candidate_end| candidate_end <= chunk_address)
+                });
+                runs.clear();
+                chunk_address = chunk_address
+                    .checked_add(INVENTORY_SCAN_CHUNK_BYTES)
+                    .ok_or(InventoryProbeError::AddressOverflow)?;
+                continue;
+            }
 
             if bytes.len() >= INVENTORY_RECORD_BYTES {
                 for offset in (0..=bytes.len() - INVENTORY_RECORD_BYTES).step_by(4) {
@@ -460,6 +482,17 @@ pub(crate) fn read_candidate<R: MemoryReader>(
     candidate: InventoryCandidate,
     catalog: &InventoryCatalog,
 ) -> Result<Vec<u8>, InventoryProbeError> {
+    let bytes = read_candidate_bytes(reader, candidate)?;
+    for record in bytes.chunks_exact(INVENTORY_RECORD_BYTES) {
+        decode_inventory_record(record, catalog)?;
+    }
+    Ok(bytes)
+}
+
+pub(crate) fn read_candidate_bytes<R: MemoryReader>(
+    reader: &R,
+    candidate: InventoryCandidate,
+) -> Result<Vec<u8>, InventoryProbeError> {
     let byte_count = candidate
         .record_count
         .checked_mul(INVENTORY_RECORD_BYTES)
@@ -470,10 +503,18 @@ pub(crate) fn read_candidate<R: MemoryReader>(
         .ok_or(InventoryProbeError::AddressOverflow)?;
     let mut bytes = vec![0u8; byte_count];
     reader.read_exact(candidate.base_address, &mut bytes)?;
-    for record in bytes.chunks_exact(INVENTORY_RECORD_BYTES) {
-        decode_inventory_record(record, catalog)?;
-    }
     Ok(bytes)
+}
+
+pub(crate) fn verify_candidate_snapshots(
+    first: &[u8],
+    second: &[u8],
+) -> Result<(), InventoryProbeError> {
+    if first == second {
+        Ok(())
+    } else {
+        Err(InventoryProbeError::Unstable)
+    }
 }
 
 pub(crate) fn snapshot_digest_prefix(bytes: &[u8]) -> String {
@@ -490,9 +531,10 @@ mod tests {
     use equipment_core::{InventoryCatalog, INVENTORY_RECORD_BYTES};
 
     use super::{
-        inventory_probe_enabled, load_inventory_catalog, read_candidate, scan_inventory,
-        snapshot_digest_prefix, InventoryCandidate, InventoryProbeCode, InventoryProbeError,
-        InventoryProbeState, InventoryScanOutcome, ScanLimits, INVENTORY_SCAN_CHUNK_BYTES,
+        inventory_probe_enabled, load_inventory_catalog, map_candidate_read_error, read_candidate,
+        read_candidate_bytes, scan_inventory, snapshot_digest_prefix, verify_candidate_snapshots,
+        InventoryCandidate, InventoryProbeCode, InventoryProbeError, InventoryProbeState,
+        InventoryScanOutcome, ScanLimits, INVENTORY_SCAN_CHUNK_BYTES,
     };
     use crate::equipment_probe::memory::{MemoryReadError, MemoryReader, MemoryRegion};
 
@@ -650,11 +692,8 @@ mod tests {
             occupied_count: 6,
         };
         let first = read_candidate(&memory, candidate, &catalog())?;
-        let second = read_candidate(&memory, candidate, &catalog())?;
-        if first != second {
-            return Err(InventoryProbeError::Unstable);
-        }
-        Ok(())
+        let second = read_candidate_bytes(&memory, candidate)?;
+        verify_candidate_snapshots(&first, &second)
     }
 
     #[test]
@@ -692,6 +731,29 @@ mod tests {
     }
 
     #[test]
+    fn skips_a_region_that_becomes_unreadable_during_the_scan() {
+        let valid = records(13, 6);
+        let memory = FakeMemory {
+            regions: vec![
+                MemoryRegion {
+                    base_address: BASE,
+                    size: INVENTORY_RECORD_BYTES * 13,
+                },
+                MemoryRegion {
+                    base_address: SECOND_BASE,
+                    size: valid.len(),
+                },
+            ],
+            bytes: vec![(SECOND_BASE, valid)],
+        };
+
+        let InventoryScanOutcome::Unique(candidate) = scan_fixture(memory) else {
+            panic!()
+        };
+        assert_eq!(candidate.base_address, SECOND_BASE);
+    }
+
+    #[test]
     fn rejects_changed_second_read_and_enforces_limits() {
         assert!(matches!(
             verify_changed_fixture(),
@@ -699,6 +761,39 @@ mod tests {
         ));
         assert!(ScanLimits::new(16, Duration::from_secs(60)).exceeded(17, Duration::ZERO));
         assert!(ScanLimits::new(16, Duration::from_secs(60)).exceeded(1, Duration::from_secs(61)));
+    }
+
+    #[test]
+    fn reports_an_invalidated_second_snapshot_as_unstable() {
+        let first = records(13, 6);
+        let second = vec![0xFF; first.len()];
+        let memory = ChangingMemory {
+            address: BASE,
+            first,
+            second,
+            reads: Cell::new(0),
+        };
+        let candidate = InventoryCandidate {
+            base_address: BASE,
+            record_count: 13,
+            occupied_count: 6,
+        };
+
+        let first = read_candidate(&memory, candidate, &catalog()).unwrap();
+        let second = read_candidate_bytes(&memory, candidate).unwrap();
+        assert!(matches!(
+            verify_candidate_snapshots(&first, &second),
+            Err(InventoryProbeError::Unstable)
+        ));
+    }
+
+    #[test]
+    fn maps_an_unreadable_candidate_to_unavailable() {
+        let error = InventoryProbeError::Memory(MemoryReadError::Unavailable(BASE));
+        assert_eq!(
+            map_candidate_read_error(&error, "test"),
+            InventoryProbeCode::Unavailable
+        );
     }
 
     #[test]
