@@ -38,6 +38,7 @@ mod db;
 mod equipment;
 mod equipment_probe;
 mod parser;
+mod repeat_quest;
 
 struct ClickThrough(AtomicBool);
 struct DebugMode(AtomicBool);
