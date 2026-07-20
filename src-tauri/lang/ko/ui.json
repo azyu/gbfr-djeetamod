@@ -38,6 +38,23 @@
         "wrightstone": "가호석",
         "masterTrait": "마스터 특성",
         "summon": "소환석"
+      },
+      "inventory-probe": {
+        "button": "보유 진 캡처",
+        "hint": "게임에서 진 인벤토리 화면을 연 뒤 캡처하세요. 결과는 개발 로그에만 기록합니다.",
+        "running": "보유 진 정보를 확인하는 중입니다.",
+        "complete": "캡처 완료 — 개발 로그 확인",
+        "error": {
+          "DISABLED": "인벤토리 캡처가 비활성화되어 있습니다.",
+          "ALREADY_RUNNING": "인벤토리 캡처가 이미 진행 중입니다.",
+          "GAME_NOT_RUNNING": "게임이 실행 중이 아닙니다.",
+          "UNSUPPORTED_GAME": "지원하는 게임 2.0.2 실행 파일이 아닙니다.",
+          "UNAVAILABLE": "보유 진 정보를 찾지 못했습니다.",
+          "AMBIGUOUS": "보유 진 후보가 여러 개입니다.",
+          "UNSTABLE": "인벤토리가 변경 중이어서 캡처하지 않았습니다.",
+          "LIMIT_EXCEEDED": "안전 제한을 초과해 캡처를 중단했습니다.",
+          "INTERNAL": "인벤토리 캡처 중 내부 오류가 발생했습니다."
+        }
       }
     },
     "successful-save": "전투를 로그로 저장했습니다.",

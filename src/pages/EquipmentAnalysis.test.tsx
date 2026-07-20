@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import equipmentFixture from "@/fixtures/equipment-analysis-response.json";
@@ -9,11 +9,21 @@ import { EquipmentAnalysis } from "./EquipmentAnalysis";
 
 const mocks = vi.hoisted(() => ({
   response: null as unknown,
+  probeAvailable: false,
+  captureError: null as string | null,
   listeners: new Map<string, (event: { payload: unknown }) => void>(),
 }));
 
 vi.mock("@tauri-apps/api", () => ({
-  invoke: vi.fn(async () => mocks.response),
+  invoke: vi.fn(async (command: string) => {
+    if (command === "fetch_equipment_analysis") return mocks.response;
+    if (command === "inventory_probe_available") return mocks.probeAvailable;
+    if (command === "capture_inventory_probe") {
+      if (mocks.captureError) throw mocks.captureError;
+      return undefined;
+    }
+    throw new Error(`unexpected command: ${command}`);
+  }),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -45,6 +55,12 @@ vi.mock("react-i18next", () => ({
         "ui.equipment-analysis.sources": "기여 장비",
         "ui.equipment-analysis.source.sigilPrimary": "진 주 특성",
         "ui.equipment-analysis.source.sigilSecondary": "진 보조 특성",
+        "ui.equipment-analysis.inventory-probe.button": "보유 진 캡처",
+        "ui.equipment-analysis.inventory-probe.hint":
+          "게임에서 진 인벤토리 화면을 연 뒤 캡처하세요. 결과는 개발 로그에만 기록합니다.",
+        "ui.equipment-analysis.inventory-probe.running": "보유 진 정보를 확인하는 중입니다.",
+        "ui.equipment-analysis.inventory-probe.complete": "캡처 완료 — 개발 로그 확인",
+        "ui.equipment-analysis.inventory-probe.error.AMBIGUOUS": "보유 진 후보가 여러 개입니다.",
         "characters:Pl1400": "나루메아",
         "characters:Pl2400": "갈란차",
         "characters:Pl2500": "마길라프릴라",
@@ -69,6 +85,8 @@ beforeEach(() => {
     dispatchEvent: vi.fn(),
   }));
   mocks.response = equipmentFixture;
+  mocks.probeAvailable = false;
+  mocks.captureError = null;
   mocks.listeners.clear();
   useEquipmentAnalysisStore.getState().reset();
 });
@@ -180,4 +198,34 @@ it("shows disconnected and unsupported states without numeric traits", async () 
   });
   expect(await screen.findByText("장비 정보 미지원")).toBeTruthy();
   expect(view.queryByText(/\d+ \/ \d+/)).toBeNull();
+});
+
+it("shows the inventory probe only when the backend enables it", async () => {
+  const hidden = renderPage();
+  expect(await screen.findByText("진 특성 상한 분석")).toBeTruthy();
+  expect(hidden.queryByRole("button", { name: "보유 진 캡처" })).toBeNull();
+  hidden.unmount();
+
+  mocks.probeAvailable = true;
+  renderPage();
+  expect(await screen.findByRole("button", { name: "보유 진 캡처" })).toBeTruthy();
+});
+
+it("disables capture while running and reports completion without inventory data", async () => {
+  mocks.probeAvailable = true;
+  renderPage();
+  const button = await screen.findByRole("button", { name: "보유 진 캡처" });
+  fireEvent.click(button);
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  const status = await screen.findByRole("alert");
+  expect(within(status).getByText("캡처 완료 — 개발 로그 확인")).toBeTruthy();
+  expect(within(status).queryByText(/0x[0-9a-f]+/i)).toBeNull();
+});
+
+it("maps backend probe codes to limited Korean errors", async () => {
+  mocks.probeAvailable = true;
+  mocks.captureError = "AMBIGUOUS";
+  renderPage();
+  fireEvent.click(await screen.findByRole("button", { name: "보유 진 캡처" }));
+  expect(await screen.findByText("보유 진 후보가 여러 개입니다.")).toBeTruthy();
 });

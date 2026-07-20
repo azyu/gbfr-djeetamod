@@ -1,7 +1,7 @@
-import { Badge, Box, Center, Select, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Box, Button, Center, Select, Stack, Table, Text, Title } from "@mantine/core";
 import { invoke } from "@tauri-apps/api";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 
@@ -23,8 +23,23 @@ const STATE_ORDER: Record<TraitAnalysisState, number> = {
   unknown: 3,
 };
 
+const INVENTORY_PROBE_CODES = new Set([
+  "DISABLED",
+  "ALREADY_RUNNING",
+  "GAME_NOT_RUNNING",
+  "UNSUPPORTED_GAME",
+  "UNAVAILABLE",
+  "AMBIGUOUS",
+  "UNSTABLE",
+  "LIMIT_EXCEEDED",
+  "INTERNAL",
+]);
+
 export const EquipmentAnalysis = () => {
   const { t } = useTranslation();
+  const [probeAvailable, setProbeAvailable] = useState(false);
+  const [probeRunning, setProbeRunning] = useState(false);
+  const [probeMessage, setProbeMessage] = useState<string | null>(null);
   const { response, selectedCharacter, loadResponse, selectCharacter } = useEquipmentAnalysisStore(
     useShallow((state) => ({
       response: state.response,
@@ -38,6 +53,9 @@ export const EquipmentAnalysis = () => {
     void invoke<unknown>("fetch_equipment_analysis")
       .then((payload) => loadResponse(normalizeEquipmentAnalysisResponse(payload)))
       .catch(() => undefined);
+    void invoke<boolean>("inventory_probe_available")
+      .then(setProbeAvailable)
+      .catch(() => setProbeAvailable(false));
     const listener = listen<unknown>("equipment-analysis-update", (event) =>
       loadResponse(normalizeEquipmentAnalysisResponse(event.payload))
     );
@@ -53,12 +71,41 @@ export const EquipmentAnalysis = () => {
     label: characterLabel(character.characterType, t),
   }));
 
+  const captureInventory = async () => {
+    setProbeRunning(true);
+    setProbeMessage(null);
+    try {
+      await invoke("capture_inventory_probe");
+      setProbeMessage(t("ui.equipment-analysis.inventory-probe.complete"));
+    } catch (error) {
+      const code = typeof error === "string" && INVENTORY_PROBE_CODES.has(error) ? error : "INTERNAL";
+      setProbeMessage(t(`ui.equipment-analysis.inventory-probe.error.${code}`));
+    } finally {
+      setProbeRunning(false);
+    }
+  };
+
   return (
     <Stack gap="md">
       <Title order={2}>{t("ui.equipment-analysis.title")}</Title>
       <Text c="dimmed" size="sm">
         {t("ui.equipment-analysis.scope")}
       </Text>
+      {probeAvailable ? (
+        <Stack gap="xs" align="flex-start">
+          <Text c="dimmed" size="sm">
+            {t("ui.equipment-analysis.inventory-probe.hint")}
+          </Text>
+          <Button disabled={probeRunning} onClick={() => void captureInventory()}>
+            {t(
+              probeRunning
+                ? "ui.equipment-analysis.inventory-probe.running"
+                : "ui.equipment-analysis.inventory-probe.button"
+            )}
+          </Button>
+          {probeMessage ? <Alert>{probeMessage}</Alert> : null}
+        </Stack>
+      ) : null}
       {!response.connected ? (
         <StatusMessage>{t("ui.equipment-analysis.waiting-game")}</StatusMessage>
       ) : response.characters.length === 0 ? (

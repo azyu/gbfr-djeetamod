@@ -38,6 +38,23 @@
         "wrightstone": "Wrightstone",
         "masterTrait": "Master Trait",
         "summon": "Summon"
+      },
+      "inventory-probe": {
+        "button": "Capture owned sigils",
+        "hint": "Open the sigil inventory in the game, then capture. Results are written only to the development log.",
+        "running": "Checking owned sigil information.",
+        "complete": "Capture complete — check the development log",
+        "error": {
+          "DISABLED": "Inventory capture is disabled.",
+          "ALREADY_RUNNING": "Inventory capture is already running.",
+          "GAME_NOT_RUNNING": "The game is not running.",
+          "UNSUPPORTED_GAME": "This is not the supported game 2.0.2 executable.",
+          "UNAVAILABLE": "Owned sigil information could not be found.",
+          "AMBIGUOUS": "Multiple owned sigil candidates were found.",
+          "UNSTABLE": "The inventory was changing, so it was not captured.",
+          "LIMIT_EXCEEDED": "Capture stopped after reaching a safety limit.",
+          "INTERNAL": "An internal inventory capture error occurred."
+        }
       }
     },
     "successful-save": "Saved encounter to logs",
