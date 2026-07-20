@@ -26,6 +26,7 @@
 
 - Create `src-tauri/src/repeat_quest.rs`: pure patch model, Win32 integration, runtime state, Tauri commands, startup cleanup, and exit restoration.
 - Modify `src-tauri/src/equipment_probe/mod.rs`: expose the already-pinned process name and executable hash inside the crate without duplicating constants.
+- Modify `src-tauri/src/equipment_probe/mod.rs`: also expose its existing `memory` module as `pub(crate)` so the new root module can reuse `RemoteProcess` without copying process-discovery code.
 - Modify `src-tauri/src/main.rs`: register state/commands, run startup cleanup, and route the Tauri exit event through restoration.
 - Create `src/pages/useRepeatQuest.ts`: non-persistent frontend status and toggle state.
 - Modify `src/pages/Settings.tsx`: render the separate game-feature fieldset and switch.
@@ -357,6 +358,8 @@ Expected: Rust compilation fails for missing integration helpers, and the new se
 Change only the visibility of the existing constants in `equipment_probe/mod.rs`:
 
 ```rust
+pub(crate) mod memory;
+
 pub(crate) const GAME_PROCESS_NAME: &str = "granblue_fantasy_relink.exe";
 pub(crate) const PINNED_GAME_SHA256: &str =
     "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F";
