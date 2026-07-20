@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use aho_corasick::AhoCorasick;
 use equipment_core::{
     decode_inventory_record, InventoryCatalog, InventoryDecodeError, INVENTORY_RECORD_BYTES,
 };
@@ -18,6 +19,7 @@ use super::memory::{MemoryReadError, MemoryReader, MemoryRegion};
 use super::{memory::RemoteProcess, GAME_PROCESS_NAME, PINNED_GAME_SHA256};
 
 pub(crate) const INVENTORY_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
+const SIGIL_PATTERN_OVERLAP: usize = std::mem::size_of::<u32>() - 1;
 const MIN_RECORDS: usize = 13;
 const MIN_OCCUPIED: usize = 6;
 const INVENTORY_STABILITY_DELAY: Duration = Duration::from_millis(50);
@@ -269,6 +271,10 @@ pub(crate) enum InventoryProbeError {
     Decode(#[from] InventoryDecodeError),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Matcher(#[from] aho_corasick::BuildError),
+    #[error("inventory scan deadline exceeded")]
+    DeadlineExceeded,
     #[error("invalid inventory catalog key {0}")]
     InvalidCatalogKey(String),
     #[error("inventory address range overflow")]
@@ -310,6 +316,114 @@ pub(crate) fn load_inventory_catalog() -> Result<InventoryCatalog, InventoryProb
         parse_catalog_keys(include_str!("../../lang/en/sigils.json"))?,
         parse_catalog_keys(include_str!("../../lang/en/traits.json"))?,
     ))
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ScanDeadline {
+    pub max_duration: Duration,
+}
+
+impl ScanDeadline {
+    pub(crate) fn new(max_duration: Duration) -> Self {
+        Self { max_duration }
+    }
+
+    pub(crate) fn exceeded(self, elapsed: Duration) -> bool {
+        elapsed > self.max_duration
+    }
+}
+
+fn build_sigil_matcher(catalog: &InventoryCatalog) -> Result<AhoCorasick, InventoryProbeError> {
+    let patterns = catalog
+        .known_non_empty_sigil_ids()
+        .map(u32::to_le_bytes)
+        .collect::<Vec<_>>();
+    Ok(AhoCorasick::new(
+        patterns.iter().map(|pattern| pattern.as_slice()),
+    )?)
+}
+
+fn find_inventory_anchors(
+    bytes: &[u8],
+    chunk_base: usize,
+    region: MemoryRegion,
+    matcher: &AhoCorasick,
+) -> Result<Vec<usize>, InventoryProbeError> {
+    const SIGIL_FIELD_OFFSET: usize = 0x10;
+
+    let region_end = region.end().ok_or(InventoryProbeError::AddressOverflow)?;
+    let mut anchors = Vec::new();
+    for matched in matcher.find_overlapping_iter(bytes) {
+        let field_address = chunk_base
+            .checked_add(matched.start())
+            .ok_or(InventoryProbeError::AddressOverflow)?;
+        let Some(record_address) = field_address.checked_sub(SIGIL_FIELD_OFFSET) else {
+            continue;
+        };
+        let record_end = record_address
+            .checked_add(INVENTORY_RECORD_BYTES)
+            .ok_or(InventoryProbeError::AddressOverflow)?;
+        if record_address % 4 == 0
+            && record_address >= region.base_address
+            && record_end <= region_end
+        {
+            anchors.push(record_address);
+        }
+    }
+    anchors.sort_unstable();
+    anchors.dedup();
+    Ok(anchors)
+}
+
+fn discover_inventory_anchors<R: MemoryReader>(
+    reader: &R,
+    regions: &[MemoryRegion],
+    matcher: &AhoCorasick,
+    started: Instant,
+    deadline: ScanDeadline,
+) -> Result<(Vec<usize>, u64), InventoryProbeError> {
+    let mut anchors = Vec::new();
+    let mut requested_bytes = 0u64;
+    let max_read_len = INVENTORY_SCAN_CHUNK_BYTES
+        .checked_add(SIGIL_PATTERN_OVERLAP)
+        .ok_or(InventoryProbeError::AddressOverflow)?;
+
+    for region in regions {
+        let end = region.end().ok_or(InventoryProbeError::AddressOverflow)?;
+        let mut chunk_address = region.base_address;
+        while chunk_address < end {
+            if deadline.exceeded(started.elapsed()) {
+                return Err(InventoryProbeError::DeadlineExceeded);
+            }
+
+            let read_len = (end - chunk_address).min(max_read_len);
+            requested_bytes = requested_bytes
+                .checked_add(
+                    u64::try_from(read_len).map_err(|_| InventoryProbeError::AddressOverflow)?,
+                )
+                .ok_or(InventoryProbeError::AddressOverflow)?;
+            let mut bytes = vec![0u8; read_len];
+            if reader.read_exact(chunk_address, &mut bytes).is_ok() {
+                anchors.extend(find_inventory_anchors(
+                    &bytes,
+                    chunk_address,
+                    *region,
+                    matcher,
+                )?);
+                if deadline.exceeded(started.elapsed()) {
+                    return Err(InventoryProbeError::DeadlineExceeded);
+                }
+            }
+
+            chunk_address = chunk_address
+                .checked_add(INVENTORY_SCAN_CHUNK_BYTES)
+                .ok_or(InventoryProbeError::AddressOverflow)?;
+        }
+    }
+
+    anchors.sort_unstable();
+    anchors.dedup();
+    Ok((anchors, requested_bytes))
 }
 
 #[derive(Debug, Default)]
@@ -526,15 +640,19 @@ pub(crate) fn snapshot_digest_prefix(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, time::Duration};
+    use std::{
+        cell::Cell,
+        time::{Duration, Instant},
+    };
 
     use equipment_core::{InventoryCatalog, INVENTORY_RECORD_BYTES};
 
     use super::{
+        build_sigil_matcher, discover_inventory_anchors, find_inventory_anchors,
         inventory_probe_enabled, load_inventory_catalog, map_candidate_read_error, read_candidate,
         read_candidate_bytes, scan_inventory, snapshot_digest_prefix, verify_candidate_snapshots,
         InventoryCandidate, InventoryProbeCode, InventoryProbeError, InventoryProbeState,
-        InventoryScanOutcome, ScanLimits, INVENTORY_SCAN_CHUNK_BYTES,
+        InventoryScanOutcome, ScanDeadline, ScanLimits, INVENTORY_SCAN_CHUNK_BYTES,
     };
     use crate::equipment_probe::memory::{MemoryReadError, MemoryReader, MemoryRegion};
 
@@ -694,6 +812,55 @@ mod tests {
         let first = read_candidate(&memory, candidate, &catalog())?;
         let second = read_candidate_bytes(&memory, candidate)?;
         verify_candidate_snapshots(&first, &second)
+    }
+
+    #[test]
+    fn finds_only_aligned_known_sigil_anchors() {
+        let matcher = build_sigil_matcher(&catalog()).unwrap();
+        let region = MemoryRegion {
+            base_address: BASE,
+            size: 0x200,
+        };
+        let mut bytes = vec![0xA5; region.size];
+        let record = occupied_record();
+        bytes[0x40..0x40 + INVENTORY_RECORD_BYTES].copy_from_slice(&record);
+        bytes[0x81 + 0x10..0x81 + 0x14].copy_from_slice(&record[0x10..0x14]);
+
+        assert_eq!(
+            find_inventory_anchors(&bytes, BASE, region, &matcher).unwrap(),
+            vec![BASE + 0x40]
+        );
+    }
+
+    #[test]
+    fn finds_a_record_whose_sigil_field_starts_at_a_chunk_boundary_once() {
+        let run_offset = INVENTORY_SCAN_CHUNK_BYTES - 0x10;
+        let memory = boundary_fixture(run_offset);
+        let matcher = build_sigil_matcher(&catalog()).unwrap();
+        let deadline = ScanDeadline::new(Duration::from_secs(10));
+        let started = Instant::now();
+
+        let (anchors, requested_bytes) =
+            discover_inventory_anchors(&memory, &memory.regions, &matcher, started, deadline)
+                .unwrap();
+
+        assert_eq!(
+            anchors
+                .iter()
+                .filter(|address| **address == BASE + run_offset)
+                .count(),
+            1
+        );
+        assert!(requested_bytes > 0);
+    }
+
+    #[test]
+    fn deadline_has_no_byte_limit_and_expires_at_ten_seconds() {
+        let deadline = ScanDeadline::new(Duration::from_secs(10));
+
+        assert!(!deadline.exceeded(Duration::from_secs(9)));
+        assert!(!deadline.exceeded(Duration::from_secs(10)));
+        assert!(deadline.exceeded(Duration::from_secs(10) + Duration::from_nanos(1)));
     }
 
     #[test]
