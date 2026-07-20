@@ -23,6 +23,7 @@ use windows::Win32::{
             },
         },
         Memory::{VirtualQueryEx, MEMORY_BASIC_INFORMATION},
+        SystemInformation::{GetNativeSystemInfo, SYSTEM_INFO},
         Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ},
     },
 };
@@ -63,6 +64,10 @@ impl MemoryRegion {
     pub(crate) fn end(self) -> Option<usize> {
         self.base_address.checked_add(self.size)
     }
+}
+
+fn address_is_in_application_range(address: usize, minimum: usize, maximum: usize) -> bool {
+    minimum <= address && address <= maximum
 }
 
 pub(crate) fn is_readable_private_region(state: u32, kind: u32, protect: u32) -> bool {
@@ -156,11 +161,19 @@ impl RemoteProcess {
     }
 
     pub(crate) fn readable_private_regions(&self) -> Result<Vec<MemoryRegion>, MemoryReadError> {
-        const MAX_USER_ADDRESS: usize = 0x0000_7FFF_FFFF_FFFF;
+        let mut system_info = SYSTEM_INFO::default();
+        unsafe { GetNativeSystemInfo(&mut system_info) };
+        let minimum_address = system_info.lpMinimumApplicationAddress as usize;
+        let maximum_address = system_info.lpMaximumApplicationAddress as usize;
+        if minimum_address > maximum_address {
+            return Err(MemoryReadError::Windows(
+                "native application address range is invalid".to_owned(),
+            ));
+        }
 
         let mut regions = Vec::new();
-        let mut address = 0usize;
-        while address < MAX_USER_ADDRESS {
+        let mut address = minimum_address;
+        while address_is_in_application_range(address, minimum_address, maximum_address) {
             let mut info = MEMORY_BASIC_INFORMATION::default();
             let queried = unsafe {
                 VirtualQueryEx(
@@ -397,8 +410,8 @@ pub(crate) fn validate_read_count(
 #[cfg(test)]
 mod tests {
     use super::{
-        is_readable_private_region, parse_text_section, validate_read_count, MemoryReadError,
-        MemoryRegion, PeSection,
+        address_is_in_application_range, is_readable_private_region, parse_text_section,
+        validate_read_count, MemoryReadError, MemoryRegion, PeSection,
     };
 
     fn pe_fixture() -> Vec<u8> {
@@ -489,6 +502,25 @@ mod tests {
             committed,
             private,
             readwrite | 0x100
+        ));
+    }
+
+    #[test]
+    fn application_address_range_is_inclusive() {
+        let minimum = 0x1_0000;
+        let maximum = 0x7fff_fffe_ffff;
+
+        assert!(!address_is_in_application_range(
+            minimum - 1,
+            minimum,
+            maximum
+        ));
+        assert!(address_is_in_application_range(minimum, minimum, maximum));
+        assert!(address_is_in_application_range(maximum, minimum, maximum));
+        assert!(!address_is_in_application_range(
+            maximum + 1,
+            minimum,
+            maximum
         ));
     }
 
