@@ -1,3 +1,23 @@
+use crate::equipment_probe::{
+    memory::{MemoryReadError, MemoryReader, RemoteProcess},
+    GAME_PROCESS_NAME, PINNED_GAME_SHA256,
+};
+
+#[cfg(windows)]
+use std::ffi::c_void;
+#[cfg(windows)]
+use windows::Win32::{
+    Foundation::{CloseHandle, ERROR_ACCESS_DENIED, HANDLE},
+    System::{
+        Diagnostics::Debug::{FlushInstructionCache, WriteProcessMemory},
+        Memory::{VirtualProtectEx, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS},
+        Threading::{
+            OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ,
+            PROCESS_VM_WRITE,
+        },
+    },
+};
+
 const RESET_PREFIX: &[u8] = &[
     0x48, 0x83, 0xB8, 0x08, 0xC1, 0x01, 0x00, 0x00, 0xC7, 0x80, 0x24, 0xC1, 0x01, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x0F, 0x84,
@@ -26,6 +46,10 @@ enum PatchSiteName {
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 enum RepeatQuestError {
+    #[error("game is not running")]
+    GameNotRunning,
+    #[error("unsupported game executable")]
+    UnsupportedGame,
     #[error("{site:?} signature count was {count}")]
     SignatureCount { site: PatchSiteName, count: usize },
     #[error("patch address overflow")]
@@ -36,10 +60,45 @@ enum RepeatQuestError {
     Read { address: usize, detail: String },
     #[error("write failed at {address:#x}: {detail}")]
     Write { address: usize, detail: String },
+    #[error("write returned {actual} of {expected} bytes")]
+    PartialWrite { expected: usize, actual: usize },
+    #[error("page protection failed at {address:#x}: {detail}")]
+    Protection { address: usize, detail: String },
+    #[error("write and page-protection restoration both failed at {address:#x}")]
+    WriteAndProtectionRestore { address: usize },
+    #[error("instruction-cache flush failed at {address:#x}: {detail}")]
+    Flush { address: usize, detail: String },
     #[error("final byte read-back did not match the requested state")]
     ReadBackMismatch,
     #[error("enable failed and rollback did not restore OFF")]
     Rollback,
+    #[error("pinned SHA-256 constant is invalid")]
+    InvalidPinnedHash,
+    #[error("process access denied")]
+    AccessDenied,
+    #[error("process operation failed: {0}")]
+    Process(String),
+}
+
+fn parse_sha256(value: &str) -> Result<[u8; 32], RepeatQuestError> {
+    if value.len() != 64 || !value.is_ascii() {
+        return Err(RepeatQuestError::InvalidPinnedHash);
+    }
+    let mut output = [0u8; 32];
+    for (index, byte) in output.iter_mut().enumerate() {
+        let offset = index * 2;
+        *byte = u8::from_str_radix(&value[offset..offset + 2], 16)
+            .map_err(|_| RepeatQuestError::InvalidPinnedHash)?;
+    }
+    Ok(output)
+}
+
+fn verify_game_hash(actual: &[u8; 32]) -> Result<(), RepeatQuestError> {
+    if *actual == parse_sha256(PINNED_GAME_SHA256)? {
+        Ok(())
+    } else {
+        Err(RepeatQuestError::UnsupportedGame)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,6 +111,17 @@ struct PatchOffsets {
 struct PatchSites {
     reset: usize,
     getter: usize,
+}
+
+fn patch_sites(text_base: usize, offsets: PatchOffsets) -> Result<PatchSites, RepeatQuestError> {
+    Ok(PatchSites {
+        reset: text_base
+            .checked_add(offsets.reset)
+            .ok_or(RepeatQuestError::AddressOverflow)?,
+        getter: text_base
+            .checked_add(offsets.getter)
+            .ok_or(RepeatQuestError::AddressOverflow)?,
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -172,6 +242,252 @@ fn restore_patch(
         Ok(observed)
     } else {
         Err(RepeatQuestError::ReadBackMismatch)
+    }
+}
+
+#[cfg(windows)]
+fn map_memory_error(error: MemoryReadError, address: usize) -> RepeatQuestError {
+    let detail = error.to_string();
+    if detail.contains("0x80070005") {
+        RepeatQuestError::AccessDenied
+    } else {
+        RepeatQuestError::Read { address, detail }
+    }
+}
+
+#[cfg(windows)]
+fn resolve_process_sites() -> Result<(RemoteProcess, PatchSites), RepeatQuestError> {
+    let process = RemoteProcess::find(GAME_PROCESS_NAME)
+        .map_err(|error| map_memory_error(error, 0))?
+        .ok_or(RepeatQuestError::GameNotRunning)?;
+    let hash = process
+        .executable_sha256()
+        .map_err(|error| map_memory_error(error, process.module_base))?;
+    verify_game_hash(&hash)?;
+    let (text_base, text) = process
+        .read_text_section()
+        .map_err(|error| map_memory_error(error, process.module_base))?;
+    let sites = patch_sites(text_base, find_patch_offsets(&text)?)?;
+    if !process
+        .is_running()
+        .map_err(|error| map_memory_error(error, process.module_base))?
+    {
+        return Err(RepeatQuestError::GameNotRunning);
+    }
+    Ok((process, sites))
+}
+
+#[cfg(windows)]
+#[derive(Debug)]
+struct WritableHandle(HANDLE);
+
+#[cfg(windows)]
+impl Drop for WritableHandle {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
+    }
+}
+
+#[cfg(windows)]
+struct WritablePatchMemory<'a> {
+    handle: WritableHandle,
+    reader: &'a RemoteProcess,
+}
+
+#[cfg(windows)]
+impl<'a> WritablePatchMemory<'a> {
+    fn open(reader: &'a RemoteProcess) -> Result<Self, RepeatQuestError> {
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_INFORMATION
+                    | PROCESS_VM_READ
+                    | PROCESS_VM_WRITE
+                    | PROCESS_VM_OPERATION,
+                false,
+                reader.pid,
+            )
+        }
+        .map_err(map_open_error)?;
+        Ok(Self {
+            handle: WritableHandle(handle),
+            reader,
+        })
+    }
+
+    fn write_protected_once(&self, address: usize, bytes: [u8; 3]) -> Result<(), RepeatQuestError> {
+        let mut old = PAGE_PROTECTION_FLAGS::default();
+        unsafe {
+            VirtualProtectEx(
+                self.handle.0,
+                address as *const c_void,
+                bytes.len(),
+                PAGE_EXECUTE_READWRITE,
+                &mut old,
+            )
+        }
+        .map_err(|error| RepeatQuestError::Protection {
+            address,
+            detail: error.to_string(),
+        })?;
+
+        let mut written = 0usize;
+        let write_result = unsafe {
+            WriteProcessMemory(
+                self.handle.0,
+                address as *const c_void,
+                bytes.as_ptr().cast::<c_void>(),
+                bytes.len(),
+                Some(&mut written),
+            )
+        };
+        let flush_result = if write_result.is_ok() || written > 0 {
+            unsafe {
+                FlushInstructionCache(self.handle.0, Some(address as *const c_void), bytes.len())
+            }
+        } else {
+            Ok(())
+        };
+
+        let mut ignored = PAGE_PROTECTION_FLAGS::default();
+        let mut restore_result = unsafe {
+            VirtualProtectEx(
+                self.handle.0,
+                address as *const c_void,
+                bytes.len(),
+                old,
+                &mut ignored,
+            )
+        };
+        if restore_result.is_err() {
+            restore_result = unsafe {
+                VirtualProtectEx(
+                    self.handle.0,
+                    address as *const c_void,
+                    bytes.len(),
+                    old,
+                    &mut ignored,
+                )
+            };
+        }
+
+        match (write_result, restore_result) {
+            (Err(_), Err(_)) => {
+                return Err(RepeatQuestError::WriteAndProtectionRestore { address })
+            }
+            (Err(error), Ok(())) => {
+                return Err(RepeatQuestError::Write {
+                    address,
+                    detail: error.to_string(),
+                })
+            }
+            (Ok(()), Err(error)) => {
+                return Err(RepeatQuestError::Protection {
+                    address,
+                    detail: error.to_string(),
+                })
+            }
+            (Ok(()), Ok(())) => {}
+        }
+        if written != bytes.len() {
+            return Err(RepeatQuestError::PartialWrite {
+                expected: bytes.len(),
+                actual: written,
+            });
+        }
+        flush_result.map_err(|error| RepeatQuestError::Flush {
+            address,
+            detail: error.to_string(),
+        })?;
+        Ok(())
+    }
+
+    fn restore_previous(&self, address: usize, previous: [u8; 3]) -> Result<(), RepeatQuestError> {
+        self.write_protected_once(address, previous)?;
+        if self.read_site(address)? == previous {
+            Ok(())
+        } else {
+            Err(RepeatQuestError::Rollback)
+        }
+    }
+}
+
+#[cfg(windows)]
+impl PatchMemory for WritablePatchMemory<'_> {
+    fn read_site(&self, address: usize) -> Result<[u8; 3], RepeatQuestError> {
+        let mut bytes = [0u8; 3];
+        self.reader
+            .read_exact(address, &mut bytes)
+            .map_err(|error| map_memory_error(error, address))?;
+        Ok(bytes)
+    }
+
+    fn write_site(&mut self, address: usize, bytes: [u8; 3]) -> Result<(), RepeatQuestError> {
+        let previous = self.read_site(address)?;
+        if let Err(error) = self.write_protected_once(address, bytes) {
+            if self.read_site(address)? != previous {
+                self.restore_previous(address, previous)
+                    .map_err(|_| RepeatQuestError::Rollback)?;
+            }
+            return Err(error);
+        }
+        if self.read_site(address)? == bytes {
+            Ok(())
+        } else {
+            self.restore_previous(address, previous)?;
+            Err(RepeatQuestError::ReadBackMismatch)
+        }
+    }
+}
+
+#[cfg(windows)]
+fn map_open_error(error: windows::core::Error) -> RepeatQuestError {
+    if error.code() == ERROR_ACCESS_DENIED.to_hresult() {
+        RepeatQuestError::AccessDenied
+    } else {
+        RepeatQuestError::Process(error.to_string())
+    }
+}
+
+#[cfg(windows)]
+fn observe_current() -> Result<ObservedPatchState, RepeatQuestError> {
+    let (process, sites) = resolve_process_sites()?;
+    observe_patch(&RemotePatchReader(&process), sites)
+}
+
+#[cfg(windows)]
+fn enable_current() -> Result<ObservedPatchState, RepeatQuestError> {
+    let (process, sites) = resolve_process_sites()?;
+    let mut memory = WritablePatchMemory::open(&process)?;
+    enable_patch(&mut memory, sites)
+}
+
+#[cfg(windows)]
+fn restore_current() -> Result<ObservedPatchState, RepeatQuestError> {
+    let (process, sites) = resolve_process_sites()?;
+    let mut memory = WritablePatchMemory::open(&process)?;
+    restore_patch(&mut memory, sites)
+}
+
+#[cfg(windows)]
+struct RemotePatchReader<'a>(&'a RemoteProcess);
+
+#[cfg(windows)]
+impl PatchMemory for RemotePatchReader<'_> {
+    fn read_site(&self, address: usize) -> Result<[u8; 3], RepeatQuestError> {
+        let mut bytes = [0u8; 3];
+        self.0
+            .read_exact(address, &mut bytes)
+            .map_err(|error| map_memory_error(error, address))?;
+        Ok(bytes)
+    }
+
+    fn write_site(&mut self, address: usize, _bytes: [u8; 3]) -> Result<(), RepeatQuestError> {
+        Err(RepeatQuestError::Write {
+            address,
+            detail: "read-only process adapter".to_owned(),
+        })
     }
 }
 
@@ -513,6 +829,46 @@ mod tests {
         assert_eq!(
             super::enable_patch(&mut memory, sites),
             Err(super::RepeatQuestError::Rollback)
+        );
+    }
+
+    #[test]
+    fn accepts_only_the_pinned_game_hash() {
+        let pinned =
+            super::parse_sha256("63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F")
+                .unwrap();
+        assert_eq!(super::verify_game_hash(&pinned), Ok(()));
+        assert_eq!(
+            super::verify_game_hash(&[0; 32]),
+            Err(super::RepeatQuestError::UnsupportedGame)
+        );
+    }
+
+    #[test]
+    fn converts_text_offsets_to_checked_remote_addresses() {
+        assert_eq!(
+            super::patch_sites(
+                0x1_4000_1000,
+                super::PatchOffsets {
+                    reset: 0x28,
+                    getter: 0x112,
+                },
+            )
+            .unwrap(),
+            super::PatchSites {
+                reset: 0x1_4000_1028,
+                getter: 0x1_4000_1112,
+            }
+        );
+        assert_eq!(
+            super::patch_sites(
+                usize::MAX,
+                super::PatchOffsets {
+                    reset: 1,
+                    getter: 0,
+                },
+            ),
+            Err(super::RepeatQuestError::AddressOverflow)
         );
     }
 }

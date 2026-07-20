@@ -19,7 +19,7 @@ use self::{
 mod compare;
 pub(crate) mod inventory;
 mod locator;
-mod memory;
+pub(crate) mod memory;
 
 #[derive(Debug, Default)]
 pub(crate) struct ProbeState(Mutex<compare::ProbeComparator>);
@@ -40,8 +40,9 @@ pub(crate) fn begin_hook_session(app: &AppHandle) {
         .begin_hook_session();
 }
 
-const GAME_PROCESS_NAME: &str = "granblue_fantasy_relink.exe";
-const PINNED_GAME_SHA256: &str = "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F";
+pub(crate) const GAME_PROCESS_NAME: &str = "granblue_fantasy_relink.exe";
+pub(crate) const PINNED_GAME_SHA256: &str =
+    "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F";
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 const STABILITY_DELAY: Duration = Duration::from_millis(50);
 const DISCOVERY_DELAY: Duration = Duration::from_secs(1);

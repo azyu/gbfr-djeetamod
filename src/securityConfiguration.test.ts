@@ -91,3 +91,25 @@ test("inventory probe stays read-only and release-gated", () => {
     expect(memory + inventory).not.toContain(forbidden);
   }
 });
+
+test("repeat quest writes are isolated from the read-only probes", () => {
+  const repeatQuest = readRepositoryFile("src-tauri/src/repeat_quest.rs");
+  const readOnlyProbes =
+    readRepositoryFile("src-tauri/src/equipment_probe/memory.rs") +
+    readRepositoryFile("src-tauri/src/equipment_probe/inventory.rs");
+
+  for (const required of [
+    "PROCESS_VM_WRITE",
+    "PROCESS_VM_OPERATION",
+    "WriteProcessMemory",
+    "VirtualProtectEx",
+    "FlushInstructionCache",
+  ]) {
+    expect(repeatQuest).toContain(required);
+    expect(readOnlyProbes).not.toContain(required);
+  }
+
+  for (const forbidden of ["PROCESS_CREATE_THREAD", "VirtualAllocEx", "CreateRemoteThread"]) {
+    expect(repeatQuest).not.toContain(forbidden);
+  }
+});
