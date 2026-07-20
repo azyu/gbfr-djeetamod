@@ -17,7 +17,7 @@ use self::{
 };
 
 mod compare;
-mod inventory;
+pub(crate) mod inventory;
 mod locator;
 mod memory;
 

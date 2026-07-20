@@ -893,6 +893,7 @@ fn main() {
         .manage(DebugMode(AtomicBool::new(false)))
         .manage(ConnectionStatus(Mutex::new(ConnectionState::Searching)))
         .manage(equipment_probe::ProbeState::default())
+        .manage(equipment_probe::inventory::InventoryProbeState::default())
         .manage(EquipmentStatus(Mutex::new(
             equipment::EquipmentState::from_bundled_catalog()
                 .expect("bundled trait cap catalog must be valid"),
@@ -916,6 +917,8 @@ fn main() {
             reset_meter_geometry,
             get_connection_state,
             fetch_equipment_analysis,
+            equipment_probe::inventory::inventory_probe_available,
+            equipment_probe::inventory::capture_inventory_probe,
         ])
         .setup(|app| {
             if let Some(window) = app.get_window("main") {

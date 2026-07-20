@@ -1,5 +1,10 @@
 use std::{
     collections::{HashMap, HashSet},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread,
     time::{Duration, Instant},
 };
 
@@ -9,10 +14,221 @@ use equipment_core::{
 use sha2::{Digest, Sha256};
 
 use super::memory::{MemoryReadError, MemoryReader, MemoryRegion};
+#[cfg(windows)]
+use super::{memory::RemoteProcess, GAME_PROCESS_NAME, PINNED_GAME_SHA256};
 
 pub(crate) const INVENTORY_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 const MIN_RECORDS: usize = 13;
 const MIN_OCCUPIED: usize = 6;
+const INVENTORY_STABILITY_DELAY: Duration = Duration::from_millis(50);
+const INVENTORY_MAX_BYTES: u64 = 16 * 1024 * 1024 * 1024;
+const INVENTORY_MAX_DURATION: Duration = Duration::from_secs(60);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InventoryProbeCode {
+    Disabled,
+    AlreadyRunning,
+    GameNotRunning,
+    UnsupportedGame,
+    Unavailable,
+    Ambiguous,
+    Unstable,
+    LimitExceeded,
+    Internal,
+}
+
+impl InventoryProbeCode {
+    pub(crate) const ALL: [Self; 9] = [
+        Self::Disabled,
+        Self::AlreadyRunning,
+        Self::GameNotRunning,
+        Self::UnsupportedGame,
+        Self::Unavailable,
+        Self::Ambiguous,
+        Self::Unstable,
+        Self::LimitExceeded,
+        Self::Internal,
+    ];
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Disabled => "DISABLED",
+            Self::AlreadyRunning => "ALREADY_RUNNING",
+            Self::GameNotRunning => "GAME_NOT_RUNNING",
+            Self::UnsupportedGame => "UNSUPPORTED_GAME",
+            Self::Unavailable => "UNAVAILABLE",
+            Self::Ambiguous => "AMBIGUOUS",
+            Self::Unstable => "UNSTABLE",
+            Self::LimitExceeded => "LIMIT_EXCEEDED",
+            Self::Internal => "INTERNAL",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct InventoryProbeState {
+    running: Arc<AtomicBool>,
+}
+
+impl InventoryProbeState {
+    fn try_begin(&self) -> Result<InventoryProbeRunGuard, InventoryProbeCode> {
+        self.running
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| InventoryProbeCode::AlreadyRunning)?;
+        Ok(InventoryProbeRunGuard {
+            running: Arc::clone(&self.running),
+        })
+    }
+}
+
+#[derive(Debug)]
+struct InventoryProbeRunGuard {
+    running: Arc<AtomicBool>,
+}
+
+impl Drop for InventoryProbeRunGuard {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::Release);
+    }
+}
+
+pub(crate) fn inventory_probe_enabled(debug_build: bool, env_value: Option<&str>) -> bool {
+    debug_build && env_value == Some("1")
+}
+
+fn current_probe_enabled() -> bool {
+    let env_value = std::env::var("DJEETA_INVENTORY_PROBE").ok();
+    inventory_probe_enabled(cfg!(debug_assertions), env_value.as_deref())
+}
+
+#[tauri::command]
+pub(crate) fn inventory_probe_available() -> bool {
+    current_probe_enabled()
+}
+
+#[tauri::command]
+pub(crate) async fn capture_inventory_probe(
+    state: tauri::State<'_, InventoryProbeState>,
+) -> Result<(), String> {
+    if !current_probe_enabled() {
+        return Err(InventoryProbeCode::Disabled.as_str().to_string());
+    }
+    let guard = state
+        .try_begin()
+        .map_err(|code| code.as_str().to_string())?;
+    match tauri::async_runtime::spawn_blocking(move || {
+        let _guard = guard;
+        capture_once()
+    })
+    .await
+    {
+        Ok(result) => result.map_err(|code| code.as_str().to_string()),
+        Err(_) => {
+            log::warn!("INVENTORY PROBE status=INTERNAL stage=worker");
+            Err(InventoryProbeCode::Internal.as_str().to_string())
+        }
+    }
+}
+
+#[cfg(windows)]
+fn capture_once() -> Result<(), InventoryProbeCode> {
+    if !current_probe_enabled() {
+        return Err(InventoryProbeCode::Disabled);
+    }
+
+    let process = match RemoteProcess::find(GAME_PROCESS_NAME)
+        .map_err(|_| log_internal("process-discovery"))?
+    {
+        Some(process) => process,
+        None => {
+            log_final_status(InventoryProbeCode::GameNotRunning);
+            return Err(InventoryProbeCode::GameNotRunning);
+        }
+    };
+    let executable_hash = process
+        .executable_sha256()
+        .map_err(|_| log_internal("executable-hash"))?
+        .iter()
+        .map(|byte| format!("{byte:02X}"))
+        .collect::<String>();
+    log::warn!(
+        "INVENTORY PROBE process pid={} sha256={} rights=PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_VM_READ",
+        process.pid,
+        executable_hash
+    );
+    if executable_hash != PINNED_GAME_SHA256 {
+        log_final_status(InventoryProbeCode::UnsupportedGame);
+        return Err(InventoryProbeCode::UnsupportedGame);
+    }
+
+    let catalog = load_inventory_catalog().map_err(|_| log_internal("catalog"))?;
+    let regions = process
+        .readable_private_regions()
+        .map_err(|_| log_internal("region-enumeration"))?;
+    let (outcome, metrics) = scan_inventory(
+        &process,
+        &regions,
+        &catalog,
+        ScanLimits::new(INVENTORY_MAX_BYTES, INVENTORY_MAX_DURATION),
+    )
+    .map_err(|_| log_internal("scan"))?;
+    log::warn!(
+        "INVENTORY PROBE scan regions={} requested_bytes={} elapsed_ms={}",
+        metrics.region_count,
+        metrics.requested_bytes,
+        metrics.elapsed.as_millis()
+    );
+
+    let candidate = match outcome {
+        InventoryScanOutcome::Unique(candidate) => candidate,
+        InventoryScanOutcome::Unavailable => {
+            log_final_status(InventoryProbeCode::Unavailable);
+            return Err(InventoryProbeCode::Unavailable);
+        }
+        InventoryScanOutcome::Ambiguous { .. } => {
+            log_final_status(InventoryProbeCode::Ambiguous);
+            return Err(InventoryProbeCode::Ambiguous);
+        }
+        InventoryScanOutcome::LimitExceeded => {
+            log_final_status(InventoryProbeCode::LimitExceeded);
+            return Err(InventoryProbeCode::LimitExceeded);
+        }
+    };
+
+    let first = read_candidate(&process, candidate, &catalog)
+        .map_err(|_| log_internal("candidate-first-read"))?;
+    thread::sleep(INVENTORY_STABILITY_DELAY);
+    let second = read_candidate(&process, candidate, &catalog)
+        .map_err(|_| log_internal("candidate-second-read"))?;
+    if first != second {
+        log_final_status(InventoryProbeCode::Unstable);
+        return Err(InventoryProbeCode::Unstable);
+    }
+
+    log::warn!(
+        "INVENTORY PROBE candidate address={:#x} records={} occupied={} digest={}",
+        candidate.base_address,
+        candidate.record_count,
+        candidate.occupied_count,
+        snapshot_digest_prefix(&first)
+    );
+    log::warn!("INVENTORY PROBE status=OK");
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn capture_once() -> Result<(), InventoryProbeCode> {
+    Err(InventoryProbeCode::Internal)
+}
+
+fn log_internal(stage: &str) -> InventoryProbeCode {
+    log::warn!("INVENTORY PROBE status=INTERNAL stage={stage}");
+    InventoryProbeCode::Internal
+}
+
+fn log_final_status(code: InventoryProbeCode) {
+    log::warn!("INVENTORY PROBE status={}", code.as_str());
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct InventoryCandidate {
@@ -274,9 +490,9 @@ mod tests {
     use equipment_core::{InventoryCatalog, INVENTORY_RECORD_BYTES};
 
     use super::{
-        load_inventory_catalog, read_candidate, scan_inventory, snapshot_digest_prefix,
-        InventoryCandidate, InventoryProbeError, InventoryScanOutcome, ScanLimits,
-        INVENTORY_SCAN_CHUNK_BYTES,
+        inventory_probe_enabled, load_inventory_catalog, read_candidate, scan_inventory,
+        snapshot_digest_prefix, InventoryCandidate, InventoryProbeCode, InventoryProbeError,
+        InventoryProbeState, InventoryScanOutcome, ScanLimits, INVENTORY_SCAN_CHUNK_BYTES,
     };
     use crate::equipment_probe::memory::{MemoryReadError, MemoryReader, MemoryRegion};
 
@@ -497,5 +713,35 @@ mod tests {
         assert!(digest
             .chars()
             .all(|character| character.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn inventory_probe_requires_debug_build_and_exact_opt_in() {
+        assert!(inventory_probe_enabled(true, Some("1")));
+        assert!(!inventory_probe_enabled(true, None));
+        assert!(!inventory_probe_enabled(true, Some("true")));
+        assert!(!inventory_probe_enabled(true, Some("01")));
+        assert!(!inventory_probe_enabled(false, Some("1")));
+    }
+
+    #[test]
+    fn run_flag_rejects_overlap_and_recovers_after_drop() {
+        let state = InventoryProbeState::default();
+        let first = state.try_begin().unwrap();
+        assert_eq!(
+            state.try_begin().unwrap_err(),
+            InventoryProbeCode::AlreadyRunning
+        );
+        drop(first);
+        assert!(state.try_begin().is_ok());
+    }
+
+    #[test]
+    fn public_error_codes_do_not_contain_addresses_or_record_data() {
+        for code in InventoryProbeCode::ALL {
+            let value = code.as_str();
+            assert!(!value.contains("0x"));
+            assert!(!value.contains("sigil"));
+        }
     }
 }
