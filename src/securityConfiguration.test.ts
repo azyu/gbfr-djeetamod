@@ -56,10 +56,12 @@ test("external equipment probe requests read-only process access", () => {
   const source = readRepositoryFile("src-tauri/src/equipment_probe/memory.rs");
   expect(source).toContain("PROCESS_VM_READ");
   expect(source).toContain("PROCESS_QUERY_LIMITED_INFORMATION");
+  expect(source).toContain("VirtualQueryEx");
   for (const forbidden of [
     "PROCESS_VM_WRITE",
     "PROCESS_VM_OPERATION",
     "PROCESS_CREATE_THREAD",
+    "PROCESS_CREATE_PROCESS",
     "WriteProcessMemory",
     "VirtualAllocEx",
     "CreateRemoteThread",

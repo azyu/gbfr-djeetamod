@@ -22,6 +22,7 @@ use windows::Win32::{
                 TH32CS_SNAPPROCESS,
             },
         },
+        Memory::{VirtualQueryEx, MEMORY_BASIC_INFORMATION},
         Threading::{
             GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
         },
@@ -52,6 +53,32 @@ pub(crate) trait MemoryReader {
 pub(crate) struct PeSection {
     pub rva: usize,
     pub size: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MemoryRegion {
+    pub base_address: usize,
+    pub size: usize,
+}
+
+impl MemoryRegion {
+    pub(crate) fn end(self) -> Option<usize> {
+        self.base_address.checked_add(self.size)
+    }
+}
+
+pub(crate) fn is_readable_private_region(state: u32, kind: u32, protect: u32) -> bool {
+    const MEM_COMMIT_VALUE: u32 = 0x1000;
+    const MEM_PRIVATE_VALUE: u32 = 0x20000;
+    const PAGE_NOACCESS_VALUE: u32 = 0x01;
+    const PAGE_GUARD_VALUE: u32 = 0x100;
+    const READABLE: [u32; 6] = [0x02, 0x04, 0x08, 0x20, 0x40, 0x80];
+
+    state == MEM_COMMIT_VALUE
+        && kind == MEM_PRIVATE_VALUE
+        && protect & PAGE_GUARD_VALUE == 0
+        && protect & 0xFF != PAGE_NOACCESS_VALUE
+        && READABLE.contains(&(protect & 0xFF))
 }
 
 #[cfg(windows)]
@@ -133,6 +160,37 @@ impl RemoteProcess {
         let mut exit_code = 0;
         unsafe { GetExitCodeProcess(self.handle.0, &mut exit_code) }.map_err(windows_error)?;
         Ok(exit_code == STILL_ACTIVE.0 as u32)
+    }
+
+    pub(crate) fn readable_private_regions(&self) -> Result<Vec<MemoryRegion>, MemoryReadError> {
+        const MAX_USER_ADDRESS: usize = 0x0000_7FFF_FFFF_FFFF;
+
+        let mut regions = Vec::new();
+        let mut address = 0usize;
+        while address < MAX_USER_ADDRESS {
+            let mut info = MEMORY_BASIC_INFORMATION::default();
+            let queried = unsafe {
+                VirtualQueryEx(
+                    self.handle.0,
+                    Some(address as *const c_void),
+                    &mut info,
+                    std::mem::size_of_val(&info),
+                )
+            };
+            if queried == 0 || info.RegionSize == 0 {
+                break;
+            }
+            if is_readable_private_region(info.State.0, info.Type.0, info.Protect.0) {
+                regions.push(MemoryRegion {
+                    base_address: info.BaseAddress as usize,
+                    size: info.RegionSize,
+                });
+            }
+            address = (info.BaseAddress as usize)
+                .checked_add(info.RegionSize)
+                .ok_or(MemoryReadError::InvalidPe("memory region range overflow"))?;
+        }
+        Ok(regions)
     }
 }
 
@@ -340,7 +398,10 @@ pub(crate) fn validate_read_count(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_text_section, validate_read_count, MemoryReadError, PeSection};
+    use super::{
+        is_readable_private_region, parse_text_section, validate_read_count, MemoryReadError,
+        MemoryRegion, PeSection,
+    };
 
     fn pe_fixture() -> Vec<u8> {
         let mut bytes = vec![0u8; 0x1B0];
@@ -414,6 +475,42 @@ mod tests {
                 expected: 16,
                 actual: 8,
             })
+        );
+    }
+
+    #[test]
+    fn includes_only_committed_private_readable_regions() {
+        let committed = 0x1000;
+        let private = 0x20000;
+        let readwrite = 0x04;
+        assert!(is_readable_private_region(committed, private, readwrite));
+        assert!(!is_readable_private_region(0x10000, private, readwrite));
+        assert!(!is_readable_private_region(committed, 0x40000, readwrite));
+        assert!(!is_readable_private_region(committed, private, 0x01));
+        assert!(!is_readable_private_region(
+            committed,
+            private,
+            readwrite | 0x100
+        ));
+    }
+
+    #[test]
+    fn memory_region_rejects_overflowing_end_addresses() {
+        assert_eq!(
+            MemoryRegion {
+                base_address: 0x1000,
+                size: 0x2000,
+            }
+            .end(),
+            Some(0x3000)
+        );
+        assert_eq!(
+            MemoryRegion {
+                base_address: usize::MAX,
+                size: 2,
+            }
+            .end(),
+            None
         );
     }
 }
