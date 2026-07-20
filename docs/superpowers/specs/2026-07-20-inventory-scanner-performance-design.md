@@ -27,7 +27,7 @@ Use a two-phase known-ID search followed by complete validation of every discove
 1. Expose a read-only iterator over the inventory catalog's known, non-empty sigil IDs.
 2. Convert each ID to its 4-byte little-endian representation.
 3. Build one `aho-corasick` multi-pattern matcher for those byte sequences.
-4. Read every enumerated readable private region in the existing 4 MiB chunks, with a 3-byte overlap so a 4-byte ID split across a chunk boundary is still found.
+4. Read every enumerated readable private region in the existing 4 MiB chunks, with a 3-byte overlap so raw four-byte matching remains complete at chunk edges. Valid anchors remain subject to the separate 4-byte alignment check.
 5. For each match, subtract the verified sigil field offset `0x10` to obtain a possible record address.
 6. Reject underflow, record ranges that are not fully inside the source region, and addresses that are not 4-byte aligned.
 7. Sort and deduplicate the possible record addresses.
@@ -38,7 +38,7 @@ The empty IDs `0` and `EMPTY_HASH` are excluded from the matcher. Empty memory t
 
 For each deduplicated anchor:
 
-1. Skip it if it already falls inside a previously validated record run.
+1. Skip it only if it falls on the same `0x24` record phase inside a previously validated run. An overlapping anchor on a different phase is validated independently.
 2. Read a 64 KiB window around the anchor, clamped to the containing enumerated region.
 3. Fully decode the anchor with the existing shared inventory decoder.
 4. Walk backward and forward at the verified `0x24` stride, decoding every record. When the next record is outside the current window, read the next adjacent 64 KiB window and continue.
@@ -115,7 +115,8 @@ Use test-driven development and avoid wall-clock performance assertions in unit 
 
 - A known sigil ID at record offset `0x10` produces the correct anchor.
 - Unknown values and unaligned matches do not produce anchors.
-- A four-byte ID split across a chunk boundary is found exactly once.
+- A record whose sigil field begins exactly at a chunk boundary is found exactly once.
+- An overlapping raw-byte match is deduplicated and cannot bypass record alignment.
 - Repeated matches deduplicate deterministically.
 
 ### Candidate-validation tests
@@ -174,4 +175,4 @@ An unbounded scan can appear hung after an environmental or algorithmic regressi
 - The 16 GiB and 60-second limits are gone; one 10-second deadline is enforced.
 - Existing read-only security and fail-closed result semantics remain intact.
 - Automated tests pass.
-- The actual-game capture completes within 10 seconds and reaches a result suitable for the next manual validation step.
+- The actual-game capture reaches `STABLE` within 10 seconds; any other terminal status returns to root-cause investigation instead of completing this stage.
