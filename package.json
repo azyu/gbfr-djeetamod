@@ -1,7 +1,7 @@
 {
   "name": "djeeta-mod",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "cargo build --release --package hook --features hook/console && vite",

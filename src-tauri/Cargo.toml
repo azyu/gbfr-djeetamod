@@ -1,6 +1,6 @@
 [package]
 name = "gbfr-logs"
-version = "0.1.0"
+version = "0.1.1"
 default-run = "gbfr-logs"
 description = "Djeeta MOD for Granblue Fantasy: Relink"
 authors = ["Djeeta MOD contributors", "onelittlechildawa", "False Spring"]
