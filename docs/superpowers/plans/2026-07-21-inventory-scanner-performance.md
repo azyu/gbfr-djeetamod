@@ -6,7 +6,7 @@
 
 **Architecture:** Expose the catalog's known non-empty sigil IDs, build one Aho-Corasick matcher, and scan every readable private memory region for occupied-record anchors. Fully expand and validate every distinct anchor phase through cached 64 KiB record windows, then preserve the existing zero/one/many candidate classification and stable reread.
 
-**Tech Stack:** Rust 2021, `aho-corasick`, existing `equipment-core`, Win32 read-only `ReadProcessMemory`, Tauri debug runtime, Vitest security assertions.
+**Tech Stack:** Rust 2021, DFA-backed `aho-corasick`, dev package optimization for the debug-only backend hot path, existing `equipment-core`, Win32 read-only `ReadProcessMemory`, Tauri debug runtime, Vitest security assertions.
 
 ## Global Constraints
 
@@ -116,7 +116,7 @@ git commit -m "feat: expose inventory sigil search ids"
 - Modify: `src-tauri/src/equipment_probe/inventory.rs:1-30,237-320,529-842`
 
 **Interfaces:**
-- Consumes: `InventoryCatalog::known_non_empty_sigil_ids()` from Task 1, `MemoryRegion`, and 4 MiB remote chunks.
+- Consumes: `InventoryCatalog::known_non_empty_sigil_ids()` from Task 1, `MemoryRegion`, and 8 MiB remote chunks.
 - Produces:
   - `fn build_sigil_matcher(catalog: &InventoryCatalog) -> Result<AhoCorasick, InventoryProbeError>`
   - `fn find_inventory_anchors(bytes: &[u8], chunk_base: usize, region: MemoryRegion, matcher: &AhoCorasick) -> Result<Vec<usize>, InventoryProbeError>`
@@ -182,7 +182,7 @@ fn deadline_has_no_byte_limit_and_expires_at_ten_seconds() {
 }
 ```
 
-Import `Instant` in the test module. The boundary test deliberately places the record start at `4 MiB - 0x10`, so its known sigil field begins exactly at the next chunk and the record itself spans the boundary.
+Import `Instant` in the test module. The boundary test deliberately places the record start at `8 MiB - 0x10`, so its known sigil field begins exactly at the next chunk and the record itself spans the boundary.
 
 - [ ] **Step 2: Run the focused tests and verify RED**
 
@@ -205,7 +205,7 @@ aho-corasick = "1.1"
 Import the matcher:
 
 ```rust
-use aho_corasick::AhoCorasick;
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 ```
 
 Add to `InventoryProbeError`:
@@ -258,9 +258,9 @@ fn build_sigil_matcher(
         .known_non_empty_sigil_ids()
         .map(u32::to_le_bytes)
         .collect::<Vec<_>>();
-    Ok(AhoCorasick::new(
-        patterns.iter().map(|pattern| pattern.as_slice()),
-    )?)
+    Ok(AhoCorasickBuilder::new()
+        .kind(Some(AhoCorasickKind::DFA))
+        .build(patterns.iter().map(|pattern| pattern.as_slice()))?)
 }
 
 fn find_inventory_anchors(
@@ -273,7 +273,9 @@ fn find_inventory_anchors(
     let region_end = region.end().ok_or(InventoryProbeError::AddressOverflow)?;
     let mut anchors = Vec::new();
 
-    for matched in matcher.find_overlapping_iter(bytes) {
+    for matched in matcher.find_iter(bytes) {
+        // Recheck the following three starts so an unaligned match cannot
+        // hide an overlapping aligned four-byte ID.
         let field_address = chunk_base
             .checked_add(matched.start())
             .ok_or(InventoryProbeError::AddressOverflow)?;
@@ -302,13 +304,14 @@ Implement `discover_inventory_anchors` so it:
 
 1. Checks `deadline.exceeded(started.elapsed())` before every read and returns `InventoryProbeError::DeadlineExceeded`.
 2. Reads `min(remaining, INVENTORY_SCAN_CHUNK_BYTES + SIGIL_PATTERN_OVERLAP)` bytes.
-3. Adds the requested length to a local `requested_bytes: u64` with checked arithmetic before `read_exact`.
-4. Skips a chunk whose read becomes unavailable, matching current scan behavior.
-5. Calls `find_inventory_anchors` for successful chunks.
-6. Advances by exactly `INVENTORY_SCAN_CHUNK_BYTES`.
-7. Checks the deadline again after each buffer search so local matcher work cannot overrun the terminal deadline unnoticed.
-8. Sorts and deduplicates anchors across all chunks and regions.
-9. Returns `(anchors, requested_bytes)`.
+3. Reuses one `Vec<u8>` across every region and chunk, resizing it to the requested length before `read_exact`.
+4. Adds the requested length to the metrics byte counter with checked arithmetic before `read_exact`.
+5. Skips a chunk whose read becomes unavailable, matching current scan behavior.
+6. Calls `find_inventory_anchors` for successful chunks.
+7. Advances by exactly `INVENTORY_SCAN_CHUNK_BYTES`.
+8. Checks the deadline again after each buffer search so local matcher work cannot overrun the terminal deadline unnoticed.
+9. Sorts and deduplicates anchors across all chunks and regions.
+10. Returns the anchors while retaining partial metrics on deadline expiry.
 
 - [ ] **Step 7: Run the focused tests and verify GREEN**
 
@@ -346,6 +349,7 @@ git commit -m "perf: discover inventory anchors by sigil id"
 ### Task 3: Expand and classify every distinct candidate phase
 
 **Files:**
+- Modify: `Cargo.toml:9-15`
 - Modify: `src-tauri/src/equipment_probe/inventory.rs:237-529,529-842`
 
 **Interfaces:**
@@ -363,7 +367,7 @@ Add a large decoy test and strengthen the duplicate-anchor fixture:
 #[test]
 fn validates_records_only_around_discovered_anchors() {
     let mut memory = inventory_fixture(13, 6);
-    let mut decoy = vec![0xA5; 16 * 1024 * 1024];
+    let mut decoy = vec![0xA5; 144 * 1024 * 1024];
     decoy.extend_from_slice(&memory.bytes[0].1);
     memory.regions[0].size = decoy.len();
     memory.bytes[0].1 = decoy;
@@ -410,6 +414,18 @@ cargo test --locked --package gbfr-logs equipment_probe::inventory::tests::valid
 Expected: compilation fails because `validated_record_count` and the candidate-only scanner are not complete.
 
 - [ ] **Step 3: Add a cached 64 KiB record window**
+
+Configure only the two debug hot-path packages in the workspace root:
+
+```toml
+[profile.dev.package.aho-corasick]
+opt-level = 3
+
+[profile.dev.package.gbfr-logs]
+opt-level = 3
+```
+
+Keep debug assertions and the debug-only environment gate enabled. Set `INVENTORY_SCAN_CHUNK_BYTES` to `8 * 1024 * 1024` and reuse one discovery buffer across all regions.
 
 Add:
 
@@ -483,12 +499,14 @@ fn validate_inventory_anchor<R: MemoryReader>(
 Required behavior:
 
 1. Fully decode the anchor and require `record.is_occupied()`.
-2. Walk backward until `decode_record_at` returns `None`; count valid occupied records and retain the earliest address.
+2. Walk backward until `decode_record_at` returns `None`; retain the earliest occupied address and count occupied records.
 3. Reset or reuse the window, then walk forward from `anchor + INVENTORY_RECORD_BYTES` until `None`.
-4. Return `None` unless `record_count >= MIN_RECORDS` and `occupied_count >= MIN_OCCUPIED`.
-5. Return the exact earliest address, total valid records, and occupied count in `InventoryCandidate`.
-6. Propagate deadline expiry.
-7. Let the caller catch a memory-read error and discard this anchor; do not turn a partial expansion into a candidate.
+4. Track the latest occupied address while walking forward; exclude valid leading and trailing empty records.
+5. Compute `record_count` from the first occupied address through the last occupied address, preserving internal empty records.
+6. Return `None` unless `record_count >= MIN_RECORDS` and `occupied_count >= MIN_OCCUPIED`.
+7. Return the first occupied address, candidate record count, and occupied count in `InventoryCandidate`.
+8. Propagate deadline expiry.
+9. Let the caller catch a memory-read error and discard this anchor; do not turn a partial expansion into a candidate.
 
 - [ ] **Step 5: Replace exhaustive phase maps with anchor validation**
 
@@ -609,13 +627,13 @@ Run:
 ```powershell
 rustfmt --edition 2021 src-tauri/src/equipment_probe/inventory.rs
 git diff --check
-git diff -- src-tauri/src/equipment_probe/inventory.rs src/securityConfiguration.test.ts
+git diff -- Cargo.toml src-tauri/src/equipment_probe/inventory.rs src/securityConfiguration.test.ts docs/superpowers
 ```
 
 Stage only files changed for candidate validation and commit:
 
 ```powershell
-git add -- src-tauri/src/equipment_probe/inventory.rs src/securityConfiguration.test.ts
+git add -- Cargo.toml src-tauri/src/equipment_probe/inventory.rs src/securityConfiguration.test.ts docs/superpowers/specs/2026-07-20-inventory-scanner-performance-design.md docs/superpowers/plans/2026-07-21-inventory-scanner-performance.md
 git commit -m "perf: validate inventory candidates around anchors"
 ```
 

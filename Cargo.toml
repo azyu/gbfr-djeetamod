@@ -8,3 +8,9 @@ members = [
 
 [profile.release.package.hook]
 strip = true
+
+[profile.dev.package.aho-corasick]
+opt-level = 3
+
+[profile.dev.package.gbfr-logs]
+opt-level = 3

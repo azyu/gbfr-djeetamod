@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use aho_corasick::AhoCorasick;
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 use equipment_core::{
     decode_inventory_record, InventoryCatalog, InventoryDecodeError, INVENTORY_RECORD_BYTES,
 };
@@ -18,13 +18,13 @@ use super::memory::{MemoryReadError, MemoryReader, MemoryRegion};
 #[cfg(windows)]
 use super::{memory::RemoteProcess, GAME_PROCESS_NAME, PINNED_GAME_SHA256};
 
-pub(crate) const INVENTORY_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
+pub(crate) const INVENTORY_SCAN_CHUNK_BYTES: usize = 8 * 1024 * 1024;
 const SIGIL_PATTERN_OVERLAP: usize = std::mem::size_of::<u32>() - 1;
 const MIN_RECORDS: usize = 13;
 const MIN_OCCUPIED: usize = 6;
 const INVENTORY_STABILITY_DELAY: Duration = Duration::from_millis(50);
-const INVENTORY_MAX_BYTES: u64 = 16 * 1024 * 1024 * 1024;
-const INVENTORY_MAX_DURATION: Duration = Duration::from_secs(60);
+const INVENTORY_SCAN_DEADLINE: Duration = Duration::from_secs(10);
+const INVENTORY_VALIDATION_WINDOW_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InventoryProbeCode {
@@ -171,13 +171,15 @@ fn capture_once() -> Result<(), InventoryProbeCode> {
         &process,
         &regions,
         &catalog,
-        ScanLimits::new(INVENTORY_MAX_BYTES, INVENTORY_MAX_DURATION),
+        ScanDeadline::new(INVENTORY_SCAN_DEADLINE),
     )
     .map_err(|_| log_internal("scan"))?;
     log::warn!(
-        "INVENTORY PROBE scan regions={} requested_bytes={} elapsed_ms={}",
+        "INVENTORY PROBE scan regions={} requested_bytes={} anchors={} validated_runs={} elapsed_ms={}",
         metrics.region_count,
         metrics.requested_bytes,
+        metrics.anchor_count,
+        metrics.validated_run_count,
         metrics.elapsed.as_millis()
     );
 
@@ -260,7 +262,23 @@ pub(crate) enum InventoryScanOutcome {
 pub(crate) struct ScanMetrics {
     pub region_count: usize,
     pub requested_bytes: u64,
+    pub anchor_count: usize,
+    pub validated_run_count: usize,
+    pub validated_record_count: usize,
     pub elapsed: Duration,
+}
+
+impl ScanMetrics {
+    fn new(region_count: usize) -> Self {
+        Self {
+            region_count,
+            requested_bytes: 0,
+            anchor_count: 0,
+            validated_run_count: 0,
+            validated_record_count: 0,
+            elapsed: Duration::ZERO,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -281,25 +299,6 @@ pub(crate) enum InventoryProbeError {
     AddressOverflow,
     #[error("inventory changed between stable reads")]
     Unstable,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ScanLimits {
-    pub max_bytes: u64,
-    pub max_duration: Duration,
-}
-
-impl ScanLimits {
-    pub(crate) fn new(max_bytes: u64, max_duration: Duration) -> Self {
-        Self {
-            max_bytes,
-            max_duration,
-        }
-    }
-
-    pub(crate) fn exceeded(self, bytes: u64, elapsed: Duration) -> bool {
-        bytes > self.max_bytes || elapsed > self.max_duration
-    }
 }
 
 fn parse_catalog_keys(source: &str) -> Result<HashSet<u32>, InventoryProbeError> {
@@ -338,9 +337,9 @@ fn build_sigil_matcher(catalog: &InventoryCatalog) -> Result<AhoCorasick, Invent
         .known_non_empty_sigil_ids()
         .map(u32::to_le_bytes)
         .collect::<Vec<_>>();
-    Ok(AhoCorasick::new(
-        patterns.iter().map(|pattern| pattern.as_slice()),
-    )?)
+    Ok(AhoCorasickBuilder::new()
+        .kind(Some(AhoCorasickKind::DFA))
+        .build(patterns.iter().map(|pattern| pattern.as_slice()))?)
 }
 
 fn find_inventory_anchors(
@@ -352,10 +351,29 @@ fn find_inventory_anchors(
     const SIGIL_FIELD_OFFSET: usize = 0x10;
 
     let region_end = region.end().ok_or(InventoryProbeError::AddressOverflow)?;
+    let mut match_starts = Vec::new();
+    for matched in matcher.find_iter(bytes) {
+        match_starts.push(matched.start());
+        for delta in 1..std::mem::size_of::<u32>() {
+            let Some(start) = matched.start().checked_add(delta) else {
+                break;
+            };
+            let Some(end) = start.checked_add(std::mem::size_of::<u32>()) else {
+                break;
+            };
+            if end > bytes.len() {
+                break;
+            }
+            if matcher.is_match(&bytes[start..end]) {
+                match_starts.push(start);
+            }
+        }
+    }
+
     let mut anchors = Vec::new();
-    for matched in matcher.find_overlapping_iter(bytes) {
+    for matched_start in match_starts {
         let field_address = chunk_base
-            .checked_add(matched.start())
+            .checked_add(matched_start)
             .ok_or(InventoryProbeError::AddressOverflow)?;
         let Some(record_address) = field_address.checked_sub(SIGIL_FIELD_OFFSET) else {
             continue;
@@ -381,9 +399,10 @@ fn discover_inventory_anchors<R: MemoryReader>(
     matcher: &AhoCorasick,
     started: Instant,
     deadline: ScanDeadline,
-) -> Result<(Vec<usize>, u64), InventoryProbeError> {
+    metrics: &mut ScanMetrics,
+) -> Result<Vec<usize>, InventoryProbeError> {
     let mut anchors = Vec::new();
-    let mut requested_bytes = 0u64;
+    let mut bytes = Vec::new();
     let max_read_len = INVENTORY_SCAN_CHUNK_BYTES
         .checked_add(SIGIL_PATTERN_OVERLAP)
         .ok_or(InventoryProbeError::AddressOverflow)?;
@@ -397,12 +416,13 @@ fn discover_inventory_anchors<R: MemoryReader>(
             }
 
             let read_len = (end - chunk_address).min(max_read_len);
-            requested_bytes = requested_bytes
+            metrics.requested_bytes = metrics
+                .requested_bytes
                 .checked_add(
                     u64::try_from(read_len).map_err(|_| InventoryProbeError::AddressOverflow)?,
                 )
                 .ok_or(InventoryProbeError::AddressOverflow)?;
-            let mut bytes = vec![0u8; read_len];
+            bytes.resize(read_len, 0);
             if reader.read_exact(chunk_address, &mut bytes).is_ok() {
                 anchors.extend(find_inventory_anchors(
                     &bytes,
@@ -423,155 +443,276 @@ fn discover_inventory_anchors<R: MemoryReader>(
 
     anchors.sort_unstable();
     anchors.dedup();
-    Ok((anchors, requested_bytes))
+    metrics.anchor_count = anchors.len();
+    Ok(anchors)
 }
 
 #[derive(Debug, Default)]
-struct RunState {
-    last_tested: Option<usize>,
-    first_occupied: Option<usize>,
-    last_occupied: Option<usize>,
-    occupied_count: usize,
+struct ValidationWindow {
+    base_address: usize,
+    bytes: Vec<u8>,
 }
 
-impl RunState {
-    fn finish(&mut self, candidates: &mut Vec<InventoryCandidate>) {
-        if let (Some(first), Some(last)) = (self.first_occupied, self.last_occupied) {
-            let record_count = (last - first) / INVENTORY_RECORD_BYTES + 1;
-            if record_count >= MIN_RECORDS && self.occupied_count >= MIN_OCCUPIED {
-                candidates.push(InventoryCandidate {
-                    base_address: first,
-                    record_count,
-                    occupied_count: self.occupied_count,
-                });
-            }
-        }
-        self.first_occupied = None;
-        self.last_occupied = None;
-        self.occupied_count = 0;
+impl ValidationWindow {
+    fn contains_record(&self, address: usize) -> bool {
+        address >= self.base_address
+            && address
+                .checked_add(INVENTORY_RECORD_BYTES)
+                .is_some_and(|end| {
+                    self.base_address
+                        .checked_add(self.bytes.len())
+                        .is_some_and(|window_end| end <= window_end)
+                })
+    }
+}
+
+fn decode_record_at<R: MemoryReader>(
+    reader: &R,
+    region: MemoryRegion,
+    address: usize,
+    catalog: &InventoryCatalog,
+    started: Instant,
+    deadline: ScanDeadline,
+    metrics: &mut ScanMetrics,
+    window: &mut ValidationWindow,
+) -> Result<Option<equipment_core::InventorySigilRecord>, InventoryProbeError> {
+    if deadline.exceeded(started.elapsed()) {
+        return Err(InventoryProbeError::DeadlineExceeded);
     }
 
-    fn observe(
-        &mut self,
-        address: usize,
-        occupied: Option<bool>,
-        candidates: &mut Vec<InventoryCandidate>,
-    ) -> Result<(), InventoryProbeError> {
-        if self.last_tested.is_some_and(|last| address <= last) {
-            return Ok(());
-        }
-        if self
-            .last_tested
-            .is_some_and(|last| last.checked_add(INVENTORY_RECORD_BYTES) != Some(address))
-        {
-            self.finish(candidates);
-        }
-        self.last_tested = Some(address);
-
-        match occupied {
-            Some(true) => {
-                self.first_occupied.get_or_insert(address);
-                self.last_occupied = Some(address);
-                self.occupied_count = self
-                    .occupied_count
-                    .checked_add(1)
-                    .ok_or(InventoryProbeError::AddressOverflow)?;
-            }
-            Some(false) => {}
-            None => self.finish(candidates),
-        }
-        Ok(())
+    let region_end = region.end().ok_or(InventoryProbeError::AddressOverflow)?;
+    let Some(record_end) = address.checked_add(INVENTORY_RECORD_BYTES) else {
+        return Err(InventoryProbeError::AddressOverflow);
+    };
+    if address < region.base_address || record_end > region_end {
+        return Ok(None);
     }
+
+    if !window.contains_record(address) {
+        let relative = address
+            .checked_sub(region.base_address)
+            .ok_or(InventoryProbeError::AddressOverflow)?;
+        let window_offset = (relative / INVENTORY_VALIDATION_WINDOW_BYTES)
+            .checked_mul(INVENTORY_VALIDATION_WINDOW_BYTES)
+            .ok_or(InventoryProbeError::AddressOverflow)?;
+        let window_base = region
+            .base_address
+            .checked_add(window_offset)
+            .ok_or(InventoryProbeError::AddressOverflow)?;
+        let max_read_len = INVENTORY_VALIDATION_WINDOW_BYTES
+            .checked_add(INVENTORY_RECORD_BYTES - 1)
+            .ok_or(InventoryProbeError::AddressOverflow)?;
+        let read_len = (region_end - window_base).min(max_read_len);
+        metrics.requested_bytes = metrics
+            .requested_bytes
+            .checked_add(u64::try_from(read_len).map_err(|_| InventoryProbeError::AddressOverflow)?)
+            .ok_or(InventoryProbeError::AddressOverflow)?;
+        let mut bytes = vec![0u8; read_len];
+        reader.read_exact(window_base, &mut bytes)?;
+        window.base_address = window_base;
+        window.bytes = bytes;
+    }
+
+    if deadline.exceeded(started.elapsed()) {
+        return Err(InventoryProbeError::DeadlineExceeded);
+    }
+    let offset = address
+        .checked_sub(window.base_address)
+        .ok_or(InventoryProbeError::AddressOverflow)?;
+    metrics.validated_record_count = metrics
+        .validated_record_count
+        .checked_add(1)
+        .ok_or(InventoryProbeError::AddressOverflow)?;
+    match decode_inventory_record(&window.bytes[offset..], catalog) {
+        Ok(record) => Ok(Some(record)),
+        Err(_) => Ok(None),
+    }
+}
+
+fn validate_inventory_anchor<R: MemoryReader>(
+    reader: &R,
+    region: MemoryRegion,
+    anchor: usize,
+    catalog: &InventoryCatalog,
+    started: Instant,
+    deadline: ScanDeadline,
+    metrics: &mut ScanMetrics,
+) -> Result<Option<InventoryCandidate>, InventoryProbeError> {
+    let mut window = ValidationWindow::default();
+    let Some(anchor_record) = decode_record_at(
+        reader,
+        region,
+        anchor,
+        catalog,
+        started,
+        deadline,
+        metrics,
+        &mut window,
+    )?
+    else {
+        return Ok(None);
+    };
+    if !anchor_record.is_occupied() {
+        return Ok(None);
+    }
+
+    let mut first_occupied = anchor;
+    let mut last_occupied = anchor;
+    let mut occupied_count = 1usize;
+    let mut current = anchor;
+    while let Some(previous) = current.checked_sub(INVENTORY_RECORD_BYTES) {
+        let Some(record) = decode_record_at(
+            reader,
+            region,
+            previous,
+            catalog,
+            started,
+            deadline,
+            metrics,
+            &mut window,
+        )?
+        else {
+            break;
+        };
+        current = previous;
+        if record.is_occupied() {
+            first_occupied = previous;
+            occupied_count = occupied_count
+                .checked_add(1)
+                .ok_or(InventoryProbeError::AddressOverflow)?;
+        }
+    }
+
+    current = anchor;
+    loop {
+        let next = current
+            .checked_add(INVENTORY_RECORD_BYTES)
+            .ok_or(InventoryProbeError::AddressOverflow)?;
+        let Some(record) = decode_record_at(
+            reader,
+            region,
+            next,
+            catalog,
+            started,
+            deadline,
+            metrics,
+            &mut window,
+        )?
+        else {
+            break;
+        };
+        current = next;
+        if record.is_occupied() {
+            last_occupied = next;
+            occupied_count = occupied_count
+                .checked_add(1)
+                .ok_or(InventoryProbeError::AddressOverflow)?;
+        }
+    }
+
+    let record_count = last_occupied
+        .checked_sub(first_occupied)
+        .ok_or(InventoryProbeError::AddressOverflow)?
+        / INVENTORY_RECORD_BYTES
+        + 1;
+    if record_count < MIN_RECORDS || occupied_count < MIN_OCCUPIED {
+        return Ok(None);
+    }
+    Ok(Some(InventoryCandidate {
+        base_address: first_occupied,
+        record_count,
+        occupied_count,
+    }))
+}
+
+fn candidate_contains_anchor(candidate: InventoryCandidate, anchor: usize) -> bool {
+    let Some(size) = candidate.record_count.checked_mul(INVENTORY_RECORD_BYTES) else {
+        return false;
+    };
+    let Some(end) = candidate.base_address.checked_add(size) else {
+        return false;
+    };
+    anchor >= candidate.base_address
+        && anchor < end
+        && (anchor - candidate.base_address) % INVENTORY_RECORD_BYTES == 0
+}
+
+fn region_containing_record(regions: &[MemoryRegion], address: usize) -> Option<MemoryRegion> {
+    let record_end = address.checked_add(INVENTORY_RECORD_BYTES)?;
+    regions.iter().copied().find(|region| {
+        region
+            .end()
+            .is_some_and(|region_end| address >= region.base_address && record_end <= region_end)
+    })
 }
 
 pub(crate) fn scan_inventory<R: MemoryReader>(
     reader: &R,
     regions: &[MemoryRegion],
     catalog: &InventoryCatalog,
-    limits: ScanLimits,
+    deadline: ScanDeadline,
 ) -> Result<(InventoryScanOutcome, ScanMetrics), InventoryProbeError> {
     let started = Instant::now();
-    let mut requested_bytes = 0u64;
+    let mut metrics = ScanMetrics::new(regions.len());
     let mut candidates = Vec::<InventoryCandidate>::new();
 
-    for region in regions {
-        let mut runs = HashMap::<usize, RunState>::new();
-        let end = region.end().ok_or(InventoryProbeError::AddressOverflow)?;
-        let mut chunk_address = region.base_address;
-        while chunk_address < end {
-            let elapsed = started.elapsed();
-            if limits.exceeded(requested_bytes, elapsed) {
-                return Ok((
-                    InventoryScanOutcome::LimitExceeded,
-                    ScanMetrics {
-                        region_count: regions.len(),
-                        requested_bytes,
-                        elapsed,
-                    },
-                ));
-            }
-
-            let remaining = end - chunk_address;
-            let read_len = remaining.min(
-                INVENTORY_SCAN_CHUNK_BYTES
-                    .checked_add(INVENTORY_RECORD_BYTES - 1)
-                    .ok_or(InventoryProbeError::AddressOverflow)?,
-            );
-            let next_requested = requested_bytes
-                .checked_add(
-                    u64::try_from(read_len).map_err(|_| InventoryProbeError::AddressOverflow)?,
-                )
-                .ok_or(InventoryProbeError::AddressOverflow)?;
-            if limits.exceeded(next_requested, elapsed) {
-                return Ok((
-                    InventoryScanOutcome::LimitExceeded,
-                    ScanMetrics {
-                        region_count: regions.len(),
-                        requested_bytes,
-                        elapsed,
-                    },
-                ));
-            }
-
-            requested_bytes = next_requested;
-            let mut bytes = vec![0u8; read_len];
-            if reader.read_exact(chunk_address, &mut bytes).is_err() {
-                candidates.retain(|candidate| {
-                    candidate
-                        .record_count
-                        .checked_mul(INVENTORY_RECORD_BYTES)
-                        .and_then(|size| candidate.base_address.checked_add(size))
-                        .is_some_and(|candidate_end| candidate_end <= chunk_address)
-                });
-                runs.clear();
-                chunk_address = chunk_address
-                    .checked_add(INVENTORY_SCAN_CHUNK_BYTES)
-                    .ok_or(InventoryProbeError::AddressOverflow)?;
-                continue;
-            }
-
-            if bytes.len() >= INVENTORY_RECORD_BYTES {
-                for offset in (0..=bytes.len() - INVENTORY_RECORD_BYTES).step_by(4) {
-                    let address = chunk_address
-                        .checked_add(offset)
-                        .ok_or(InventoryProbeError::AddressOverflow)?;
-                    let phase = address % INVENTORY_RECORD_BYTES;
-                    let occupied = decode_inventory_record(&bytes[offset..], catalog)
-                        .ok()
-                        .map(|record| record.is_occupied());
-                    runs.entry(phase)
-                        .or_default()
-                        .observe(address, occupied, &mut candidates)?;
+    let matcher = build_sigil_matcher(catalog)?;
+    let anchors = match discover_inventory_anchors(
+        reader,
+        regions,
+        &matcher,
+        started,
+        deadline,
+        &mut metrics,
+    ) {
+        Ok(result) => result,
+        Err(InventoryProbeError::DeadlineExceeded) => {
+            metrics.elapsed = started.elapsed();
+            return Ok((InventoryScanOutcome::LimitExceeded, metrics));
+        }
+        Err(error) => return Err(error),
+    };
+    for anchor in anchors {
+        if candidates
+            .iter()
+            .copied()
+            .any(|candidate| candidate_contains_anchor(candidate, anchor))
+        {
+            continue;
+        }
+        let Some(region) = region_containing_record(regions, anchor) else {
+            continue;
+        };
+        match validate_inventory_anchor(
+            reader,
+            region,
+            anchor,
+            catalog,
+            started,
+            deadline,
+            &mut metrics,
+        ) {
+            Ok(Some(candidate)) => {
+                if !candidates.iter().any(|existing| {
+                    existing.base_address == candidate.base_address
+                        && existing.record_count == candidate.record_count
+                }) {
+                    candidates.push(candidate);
                 }
             }
+            Ok(None) | Err(InventoryProbeError::Memory(_)) => {}
+            Err(InventoryProbeError::DeadlineExceeded) => {
+                metrics.elapsed = started.elapsed();
+                return Ok((InventoryScanOutcome::LimitExceeded, metrics));
+            }
+            Err(error) => return Err(error),
+        }
+    }
 
-            chunk_address = chunk_address
-                .checked_add(INVENTORY_SCAN_CHUNK_BYTES)
-                .ok_or(InventoryProbeError::AddressOverflow)?;
-        }
-        for run in runs.values_mut() {
-            run.finish(&mut candidates);
-        }
+    metrics.validated_run_count = candidates.len();
+    if deadline.exceeded(started.elapsed()) {
+        metrics.elapsed = started.elapsed();
+        return Ok((InventoryScanOutcome::LimitExceeded, metrics));
     }
 
     let outcome = match candidates.as_slice() {
@@ -581,14 +722,8 @@ pub(crate) fn scan_inventory<R: MemoryReader>(
             count: candidates.len(),
         },
     };
-    Ok((
-        outcome,
-        ScanMetrics {
-            region_count: regions.len(),
-            requested_bytes,
-            elapsed: started.elapsed(),
-        },
-    ))
+    metrics.elapsed = started.elapsed();
+    Ok((outcome, metrics))
 }
 
 pub(crate) fn read_candidate<R: MemoryReader>(
@@ -652,7 +787,7 @@ mod tests {
         inventory_probe_enabled, load_inventory_catalog, map_candidate_read_error, read_candidate,
         read_candidate_bytes, scan_inventory, snapshot_digest_prefix, verify_candidate_snapshots,
         InventoryCandidate, InventoryProbeCode, InventoryProbeError, InventoryProbeState,
-        InventoryScanOutcome, ScanDeadline, ScanLimits, INVENTORY_SCAN_CHUNK_BYTES,
+        InventoryScanOutcome, ScanDeadline, ScanMetrics, INVENTORY_SCAN_CHUNK_BYTES,
     };
     use crate::equipment_probe::memory::{MemoryReadError, MemoryReader, MemoryRegion};
 
@@ -788,7 +923,7 @@ mod tests {
             &memory,
             &memory.regions,
             &catalog(),
-            ScanLimits::new(32 * 1024 * 1024, Duration::from_secs(60)),
+            ScanDeadline::new(Duration::from_secs(10)),
         )
         .unwrap()
         .0
@@ -833,16 +968,46 @@ mod tests {
     }
 
     #[test]
+    fn an_unaligned_match_does_not_hide_an_overlapping_aligned_anchor() {
+        let first = u32::from_le_bytes([1, 2, 3, 4]);
+        let second = u32::from_le_bytes([4, 5, 6, 7]);
+        let catalog = InventoryCatalog::new(
+            std::collections::HashSet::from([first, second]),
+            std::collections::HashSet::new(),
+        );
+        let matcher = build_sigil_matcher(&catalog).unwrap();
+        let region = MemoryRegion {
+            base_address: BASE,
+            size: 0x100,
+        };
+        let mut bytes = vec![0xA5; region.size];
+        bytes[0x4D..0x51].copy_from_slice(&first.to_le_bytes());
+        bytes[0x50..0x54].copy_from_slice(&second.to_le_bytes());
+
+        assert_eq!(
+            find_inventory_anchors(&bytes, BASE, region, &matcher).unwrap(),
+            vec![BASE + 0x40]
+        );
+    }
+
+    #[test]
     fn finds_a_record_whose_sigil_field_starts_at_a_chunk_boundary_once() {
         let run_offset = INVENTORY_SCAN_CHUNK_BYTES - 0x10;
         let memory = boundary_fixture(run_offset);
         let matcher = build_sigil_matcher(&catalog()).unwrap();
         let deadline = ScanDeadline::new(Duration::from_secs(10));
         let started = Instant::now();
+        let mut metrics = ScanMetrics::new(memory.regions.len());
 
-        let (anchors, requested_bytes) =
-            discover_inventory_anchors(&memory, &memory.regions, &matcher, started, deadline)
-                .unwrap();
+        let anchors = discover_inventory_anchors(
+            &memory,
+            &memory.regions,
+            &matcher,
+            started,
+            deadline,
+            &mut metrics,
+        )
+        .unwrap();
 
         assert_eq!(
             anchors
@@ -851,7 +1016,7 @@ mod tests {
                 .count(),
             1
         );
-        assert!(requested_bytes > 0);
+        assert!(metrics.requested_bytes > 0);
     }
 
     #[test]
@@ -861,6 +1026,76 @@ mod tests {
         assert!(!deadline.exceeded(Duration::from_secs(9)));
         assert!(!deadline.exceeded(Duration::from_secs(10)));
         assert!(deadline.exceeded(Duration::from_secs(10) + Duration::from_nanos(1)));
+    }
+
+    #[test]
+    fn validates_records_only_around_discovered_anchors() {
+        let mut memory = inventory_fixture(13, 6);
+        let mut decoy = vec![0xA5; 144 * 1024 * 1024];
+        decoy.extend_from_slice(&memory.bytes[0].1);
+        memory.regions[0].size = decoy.len();
+        memory.bytes[0].1 = decoy;
+
+        let (outcome, metrics) = scan_inventory(
+            &memory,
+            &memory.regions,
+            &catalog(),
+            ScanDeadline::new(Duration::from_secs(10)),
+        )
+        .unwrap();
+
+        assert!(
+            matches!(outcome, InventoryScanOutcome::Unique(_)),
+            "outcome={outcome:?} metrics={metrics:?}"
+        );
+        assert!(metrics.anchor_count >= 6);
+        assert!(metrics.validated_record_count < 1_000);
+    }
+
+    #[test]
+    fn multiple_anchors_in_one_run_produce_one_candidate() {
+        let memory = inventory_fixture(30, 20);
+        let (outcome, metrics) = scan_inventory(
+            &memory,
+            &memory.regions,
+            &catalog(),
+            ScanDeadline::new(Duration::from_secs(10)),
+        )
+        .unwrap();
+
+        assert!(matches!(outcome, InventoryScanOutcome::Unique(_)));
+        assert_eq!(metrics.validated_run_count, 1);
+    }
+
+    #[test]
+    fn candidate_range_starts_and_ends_on_occupied_records() {
+        let mut bytes = vec![0u8; 20 * INVENTORY_RECORD_BYTES];
+        for index in [3, 4, 5, 6, 7, 8, 15] {
+            let start = index * INVENTORY_RECORD_BYTES;
+            bytes[start..start + INVENTORY_RECORD_BYTES].copy_from_slice(&occupied_record());
+        }
+        let memory = FakeMemory {
+            regions: vec![MemoryRegion {
+                base_address: BASE,
+                size: bytes.len(),
+            }],
+            bytes: vec![(BASE, bytes)],
+        };
+
+        let (outcome, _) = scan_inventory(
+            &memory,
+            &memory.regions,
+            &catalog(),
+            ScanDeadline::new(Duration::from_secs(10)),
+        )
+        .unwrap();
+        let InventoryScanOutcome::Unique(candidate) = outcome else {
+            panic!("expected one candidate, got {outcome:?}");
+        };
+
+        assert_eq!(candidate.base_address, BASE + 3 * INVENTORY_RECORD_BYTES);
+        assert_eq!(candidate.record_count, 13);
+        assert_eq!(candidate.occupied_count, 7);
     }
 
     #[test]
@@ -921,13 +1156,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_changed_second_read_and_enforces_limits() {
+    fn rejects_changed_second_read() {
         assert!(matches!(
             verify_changed_fixture(),
             Err(InventoryProbeError::Unstable)
         ));
-        assert!(ScanLimits::new(16, Duration::from_secs(60)).exceeded(17, Duration::ZERO));
-        assert!(ScanLimits::new(16, Duration::from_secs(60)).exceeded(1, Duration::from_secs(61)));
     }
 
     #[test]

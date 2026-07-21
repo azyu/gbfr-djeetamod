@@ -27,7 +27,7 @@ Use a two-phase known-ID search followed by complete validation of every discove
 1. Expose a read-only iterator over the inventory catalog's known, non-empty sigil IDs.
 2. Convert each ID to its 4-byte little-endian representation.
 3. Build one `aho-corasick` multi-pattern matcher for those byte sequences.
-4. Read every enumerated readable private region in the existing 4 MiB chunks, with a 3-byte overlap so raw four-byte matching remains complete at chunk edges. Valid anchors remain subject to the separate 4-byte alignment check.
+4. Read every enumerated readable private region in 8 MiB chunks, with a 3-byte overlap so raw four-byte matching remains complete at chunk edges. Reuse one read buffer across all regions, and keep valid anchors subject to the separate 4-byte alignment check.
 5. For each match, subtract the verified sigil field offset `0x10` to obtain a possible record address.
 6. Reject underflow, record ranges that are not fully inside the source region, and addresses that are not 4-byte aligned.
 7. Sort and deduplicate the possible record addresses.
@@ -43,8 +43,9 @@ For each deduplicated anchor:
 3. Fully decode the anchor with the existing shared inventory decoder.
 4. Walk backward and forward at the verified `0x24` stride, decoding every record. When the next record is outside the current window, read the next adjacent 64 KiB window and continue.
 5. Stop a direction at the first invalid record, the region boundary, an unavailable read, or the shared deadline.
-6. Accept the run only when it still satisfies the existing minimum of 13 records and six occupied records.
-7. Merge duplicate reports of the same address range.
+6. Define the candidate from its first occupied record through its last occupied record, preserving internal empty records while excluding leading and trailing empty storage.
+7. Accept the run only when that candidate still satisfies the existing minimum of 13 records and six occupied records.
+8. Merge duplicate reports of the same address range.
 
 After all anchors have been checked, zero accepted runs produces `UNAVAILABLE`, one produces the existing stable-read path, and more than one produces `AMBIGUOUS`. The scanner must not select the largest run or return after the first valid run.
 
@@ -78,7 +79,7 @@ The production scan still receives only a `MemoryReader`, enumerated `MemoryRegi
 
 ### Dependency
 
-Add `aho-corasick` as a direct backend dependency. It is already present in `Cargo.lock` through existing dependencies, but direct use must be declared explicitly.
+Add `aho-corasick` as a direct backend dependency and build its automaton as a DFA. Because the probe exists only in debug builds, compile `aho-corasick` and the `gbfr-logs` backend at dev `opt-level = 3`; debug assertions and the exact environment opt-in remain enabled. The 144 MiB synthetic scan must remain comfortably below the 10-second deadline.
 
 ## Data and Logging
 
@@ -121,7 +122,7 @@ Use test-driven development and avoid wall-clock performance assertions in unit 
 
 ### Candidate-validation tests
 
-- A qualifying run with leading, internal, and trailing empty records expands to the same range as the current scanner.
+- A qualifying run excludes leading and trailing empty records while preserving empty records between its first and last occupied records, matching the current scanner.
 - A 12-record equipment snapshot remains excluded.
 - Two distinct qualifying runs remain `AMBIGUOUS`.
 - Multiple occupied anchors inside one run produce one candidate.
@@ -130,7 +131,7 @@ Use test-driven development and avoid wall-clock performance assertions in unit 
 
 ### Work-bounding tests
 
-Add diagnostic counters to the scan result and use a large decoy buffer containing one valid run. Assert that complete record validation is limited to discovered-anchor neighborhoods instead of every 4-byte position. Test the pure deadline decision separately rather than sleeping.
+Add diagnostic counters to the scan result and use a 144 MiB decoy buffer containing one valid run. Assert that the scan completes before the 10-second deadline and complete record validation is limited to discovered-anchor neighborhoods instead of every 4-byte position. Test the pure deadline decision separately rather than sleeping.
 
 ### Verification
 
