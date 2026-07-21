@@ -10,11 +10,19 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Mutex,
     },
+    time::{Duration, Instant},
 };
 
 use anyhow::Context;
 use db::logs::LogEntry;
-use dll_syringe::{process::OwnedProcess, Syringe};
+use dll_syringe::{
+    process::{OwnedProcess, Process},
+    Syringe,
+};
+use game_search::{
+    pipe_wait_decision, GameSearchState, PipeWaitDecision, ProcessSearchBudget,
+    ProcessSearchDecision, PIPE_CONNECT_INTERVAL, PROCESS_SEARCH_INTERVAL,
+};
 use interprocess::os::windows::named_pipe::tokio::RecvPipeStream;
 use log::{info, warn, LevelFilter};
 use parser::{
@@ -69,6 +77,11 @@ enum ConnectionState {
     Connected,
     Disconnected,
     Unsupported,
+    NotFound,
+}
+
+fn retry_allowed(state: ConnectionState) -> bool {
+    state == ConnectionState::NotFound
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -553,13 +566,52 @@ fn delete_logs(ids: Vec<u64>) -> Result<(), String> {
     Ok(())
 }
 
-// Continuously check for the game process and inject the DLL when found.
+fn spawn_game_search(app: AppHandle, delay: Duration) {
+    let search_state = app.state::<GameSearchState>().inner().clone();
+    let Some(run) = search_state.try_begin() else {
+        return;
+    };
+
+    if delay.is_zero() {
+        emit_connection_state(&app, ConnectionState::Searching);
+    }
+
+    tauri::async_runtime::spawn(async move {
+        if !delay.is_zero() {
+            tokio::time::sleep(delay).await;
+            emit_connection_state(&app, ConnectionState::Searching);
+        }
+
+        check_and_perform_hook(app).await;
+        drop(run);
+    });
+}
+
+#[tauri::command]
+fn retry_game_search(app: AppHandle, state: State<ConnectionStatus>) -> bool {
+    if !retry_allowed(*state.0.lock().unwrap()) {
+        return false;
+    }
+
+    spawn_game_search(app, Duration::ZERO);
+    true
+}
+
+// Check for the game process up to the configured attempt limit and inject the DLL when found.
 async fn check_and_perform_hook(app: AppHandle) {
-    emit_connection_state(&app, ConnectionState::Searching);
+    let mut budget = ProcessSearchBudget::new();
 
     loop {
         match OwnedProcess::find_first_by_name("granblue_fantasy_relink.exe") {
             Some(target) => {
+                let pipe_target = match target.try_clone() {
+                    Ok(target) => target,
+                    Err(error) => {
+                        warn!("Could not duplicate game process handle: {:?}", error);
+                        emit_connection_state(&app, ConnectionState::Unsupported);
+                        return;
+                    }
+                };
                 let syringe = Syringe::for_process(target);
                 let debug_dll_path = Path::new("hook-dbg.dll");
                 let mut dll_path = Path::new("hook.dll");
@@ -590,19 +642,25 @@ async fn check_and_perform_hook(app: AppHandle) {
                     }
                 }
 
-                connect_and_run_parser(app);
-
-                break;
+                connect_and_run_parser(app, pipe_target);
+                return;
             }
-            None => {
-                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-            }
+            None => match budget.record(false) {
+                ProcessSearchDecision::Retry => {
+                    tokio::time::sleep(PROCESS_SEARCH_INTERVAL).await;
+                }
+                ProcessSearchDecision::NotFound => {
+                    emit_connection_state(&app, ConnectionState::NotFound);
+                    return;
+                }
+                ProcessSearchDecision::Found => unreachable!("missing process cannot be found"),
+            },
         }
     }
 }
 
 // Connect to the game hook event channel and listen for damage events.
-fn connect_and_run_parser(app: AppHandle) {
+fn connect_and_run_parser(app: AppHandle, target: OwnedProcess) {
     let window = app.get_window("main").expect("Window not found");
     let logs_window = app.get_window("logs").expect("Logs window not found");
 
@@ -610,9 +668,17 @@ fn connect_and_run_parser(app: AppHandle) {
     let mut state = v1::Parser::new(app.clone(), window.clone(), database);
 
     tauri::async_runtime::spawn(async move {
+        let pipe_wait_started = Instant::now();
+
         loop {
-            match RecvPipeStream::connect_by_path(protocol::PIPE_NAME).await {
-                Ok(stream) => {
+            let connection = RecvPipeStream::connect_by_path(protocol::PIPE_NAME).await;
+            match pipe_wait_decision(
+                connection.is_ok(),
+                target.is_alive(),
+                pipe_wait_started.elapsed(),
+            ) {
+                PipeWaitDecision::Connected => {
+                    let stream = connection.expect("connected pipe decision requires a stream");
                     info!("Connected to the game pipe; awaiting hook status");
                     equipment_probe::begin_hook_session(&app);
 
@@ -751,15 +817,26 @@ fn connect_and_run_parser(app: AppHandle) {
                     let _ = app.emit_all("error-alert", "Game connection closed");
                     break;
                 }
-                Err(_) => {
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                PipeWaitDecision::Retry => {
+                    tokio::time::sleep(PIPE_CONNECT_INTERVAL).await;
+                }
+                PipeWaitDecision::ProcessExited => {
+                    state.on_connection_lost();
+                    update_equipment_connection(&app, false);
+                    emit_connection_state(&app, ConnectionState::Disconnected);
+                    spawn_game_search(app, PROCESS_SEARCH_INTERVAL);
+                    return;
+                }
+                PipeWaitDecision::TimedOut => {
+                    update_equipment_connection(&app, false);
+                    emit_connection_state(&app, ConnectionState::Unsupported);
+                    return;
                 }
             }
         }
 
         // Check for the game process again.
-        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-        tauri::async_runtime::spawn(check_and_perform_hook(app));
+        spawn_game_search(app, PROCESS_SEARCH_INTERVAL);
     });
 }
 
@@ -894,6 +971,7 @@ fn main() {
         .manage(ClickThrough(AtomicBool::new(DEFAULT_CLICK_THROUGH)))
         .manage(DebugMode(AtomicBool::new(false)))
         .manage(ConnectionStatus(Mutex::new(ConnectionState::Searching)))
+        .manage(GameSearchState::default())
         .manage(equipment_probe::ProbeState::default())
         .manage(equipment_probe::inventory::InventoryProbeState::default())
         .manage(repeat_quest::RepeatQuestState::default())
@@ -919,6 +997,7 @@ fn main() {
             set_debug_mode,
             reset_meter_geometry,
             get_connection_state,
+            retry_game_search,
             fetch_equipment_analysis,
             equipment_probe::inventory::inventory_probe_available,
             equipment_probe::inventory::capture_inventory_probe,
@@ -937,7 +1016,7 @@ fn main() {
             }
 
             // Perform the game hook check in a separate thread.
-            tauri::async_runtime::spawn(check_and_perform_hook(app.handle()));
+            spawn_game_search(app.handle(), Duration::ZERO);
             tauri::async_runtime::spawn(equipment_probe::run_if_enabled(app.handle()));
 
             Ok(())
@@ -956,8 +1035,9 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        accept_hook_message, meter_geometry, meter_window_action, HookHandshakeState, HookStatus,
-        Message, MeterGeometry, MeterWindowAction, DEFAULT_CLICK_THROUGH,
+        accept_hook_message, meter_geometry, meter_window_action, retry_allowed, ConnectionState,
+        HookHandshakeState, HookStatus, Message, MeterGeometry, MeterWindowAction,
+        DEFAULT_CLICK_THROUGH,
     };
 
     #[test]
@@ -1010,5 +1090,22 @@ mod tests {
     #[test]
     fn click_through_starts_disabled_for_dragging() {
         assert!(!DEFAULT_CLICK_THROUGH);
+    }
+
+    #[test]
+    fn not_found_connection_state_uses_the_frontend_wire_name() {
+        assert_eq!(
+            serde_json::to_string(&ConnectionState::NotFound).unwrap(),
+            "\"not-found\""
+        );
+    }
+
+    #[test]
+    fn retry_is_only_allowed_after_search_exhaustion() {
+        assert!(retry_allowed(ConnectionState::NotFound));
+        assert!(!retry_allowed(ConnectionState::Searching));
+        assert!(!retry_allowed(ConnectionState::Connected));
+        assert!(!retry_allowed(ConnectionState::Disconnected));
+        assert!(!retry_allowed(ConnectionState::Unsupported));
     }
 }
