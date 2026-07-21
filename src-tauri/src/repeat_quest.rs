@@ -2,6 +2,11 @@ use crate::equipment_probe::{
     memory::{MemoryReadError, MemoryReader, RemoteProcess},
     GAME_PROCESS_NAME, PINNED_GAME_SHA256,
 };
+use serde::Serialize;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 
 #[cfg(windows)]
 use std::ffi::c_void;
@@ -470,6 +475,262 @@ fn restore_current() -> Result<ObservedPatchState, RepeatQuestError> {
     restore_patch(&mut memory, sites)
 }
 
+trait RepeatQuestBackend: Send + Sync {
+    fn observe(&self) -> Result<ObservedPatchState, RepeatQuestError>;
+    fn enable(&self) -> Result<ObservedPatchState, RepeatQuestError>;
+    fn restore(&self) -> Result<ObservedPatchState, RepeatQuestError>;
+}
+
+struct LiveRepeatQuestBackend;
+
+impl RepeatQuestBackend for LiveRepeatQuestBackend {
+    fn observe(&self) -> Result<ObservedPatchState, RepeatQuestError> {
+        observe_current()
+    }
+
+    fn enable(&self) -> Result<ObservedPatchState, RepeatQuestError> {
+        enable_current()
+    }
+
+    fn restore(&self) -> Result<ObservedPatchState, RepeatQuestError> {
+        restore_current()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RepeatQuestStatus {
+    pub state: RepeatQuestStatusKind,
+    pub reason: Option<RepeatQuestReason>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum RepeatQuestStatusKind {
+    Unavailable,
+    Off,
+    On,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum RepeatQuestReason {
+    Busy,
+    GameNotRunning,
+    UnsupportedGame,
+    SignatureMissing,
+    SignatureAmbiguous,
+    UnexpectedBytes,
+    AccessDenied,
+    PatchFailed,
+    RestoreFailed,
+    Internal,
+}
+
+impl RepeatQuestStatus {
+    fn busy() -> Self {
+        Self {
+            state: RepeatQuestStatusKind::Unavailable,
+            reason: Some(RepeatQuestReason::Busy),
+        }
+    }
+
+    fn internal() -> Self {
+        Self {
+            state: RepeatQuestStatusKind::Unavailable,
+            reason: Some(RepeatQuestReason::Internal),
+        }
+    }
+
+    fn observed(state: ObservedPatchState) -> Self {
+        match state {
+            ObservedPatchState::Off => Self {
+                state: RepeatQuestStatusKind::Off,
+                reason: None,
+            },
+            ObservedPatchState::On => Self {
+                state: RepeatQuestStatusKind::On,
+                reason: None,
+            },
+            ObservedPatchState::Mixed | ObservedPatchState::Unknown => Self {
+                state: RepeatQuestStatusKind::Unavailable,
+                reason: Some(RepeatQuestReason::UnexpectedBytes),
+            },
+        }
+    }
+
+    fn error(error: &RepeatQuestError) -> Self {
+        let reason = match error {
+            RepeatQuestError::GameNotRunning => RepeatQuestReason::GameNotRunning,
+            RepeatQuestError::UnsupportedGame => RepeatQuestReason::UnsupportedGame,
+            RepeatQuestError::SignatureCount { count: 0, .. } => {
+                RepeatQuestReason::SignatureMissing
+            }
+            RepeatQuestError::SignatureCount { .. } => RepeatQuestReason::SignatureAmbiguous,
+            RepeatQuestError::UnexpectedBytes => RepeatQuestReason::UnexpectedBytes,
+            RepeatQuestError::AccessDenied => RepeatQuestReason::AccessDenied,
+            _ => RepeatQuestReason::Internal,
+        };
+        Self {
+            state: RepeatQuestStatusKind::Unavailable,
+            reason: Some(reason),
+        }
+    }
+
+    fn operation_error(error: &RepeatQuestError, enabling: bool) -> RepeatQuestReason {
+        match error {
+            RepeatQuestError::GameNotRunning => RepeatQuestReason::GameNotRunning,
+            RepeatQuestError::UnsupportedGame => RepeatQuestReason::UnsupportedGame,
+            RepeatQuestError::SignatureCount { count: 0, .. } => {
+                RepeatQuestReason::SignatureMissing
+            }
+            RepeatQuestError::SignatureCount { .. } => RepeatQuestReason::SignatureAmbiguous,
+            RepeatQuestError::UnexpectedBytes => RepeatQuestReason::UnexpectedBytes,
+            RepeatQuestError::AccessDenied => RepeatQuestReason::AccessDenied,
+            RepeatQuestError::Rollback => RepeatQuestReason::RestoreFailed,
+            _ if enabling => RepeatQuestReason::PatchFailed,
+            _ => RepeatQuestReason::RestoreFailed,
+        }
+    }
+}
+
+struct RepeatQuestInner {
+    backend: Arc<dyn RepeatQuestBackend>,
+    operation: Mutex<()>,
+    may_be_patched: AtomicBool,
+    cleanup_started: AtomicBool,
+}
+
+#[derive(Clone)]
+pub(crate) struct RepeatQuestState(Arc<RepeatQuestInner>);
+
+impl Default for RepeatQuestState {
+    fn default() -> Self {
+        Self::with_backend(Arc::new(LiveRepeatQuestBackend))
+    }
+}
+
+impl RepeatQuestState {
+    fn with_backend(backend: Arc<dyn RepeatQuestBackend>) -> Self {
+        Self(Arc::new(RepeatQuestInner {
+            backend,
+            operation: Mutex::new(()),
+            may_be_patched: AtomicBool::new(false),
+            cleanup_started: AtomicBool::new(false),
+        }))
+    }
+
+    fn status(&self) -> RepeatQuestStatus {
+        let Ok(_operation) = self.0.operation.lock() else {
+            return RepeatQuestStatus::internal();
+        };
+        match self.0.backend.observe() {
+            Ok(observed) => RepeatQuestStatus::observed(observed),
+            Err(error) => RepeatQuestStatus::error(&error),
+        }
+    }
+
+    pub(crate) fn restore_on_startup(&self) {
+        let Ok(_operation) = self.0.operation.lock() else {
+            return;
+        };
+        match self.0.backend.restore() {
+            Ok(ObservedPatchState::Off) | Err(RepeatQuestError::GameNotRunning) => {
+                self.0.may_be_patched.store(false, Ordering::Release);
+            }
+            Ok(_) | Err(_) => {
+                self.0.may_be_patched.store(true, Ordering::Release);
+            }
+        }
+    }
+
+    fn set_enabled(&self, enabled: bool) -> RepeatQuestStatus {
+        let Ok(_operation) = self.0.operation.try_lock() else {
+            return RepeatQuestStatus::busy();
+        };
+        let result = if enabled {
+            self.0.backend.enable()
+        } else {
+            self.0.backend.restore()
+        };
+        match result {
+            Ok(observed) => {
+                self.0.may_be_patched.store(
+                    matches!(observed, ObservedPatchState::On | ObservedPatchState::Mixed),
+                    Ordering::Release,
+                );
+                RepeatQuestStatus::observed(observed)
+            }
+            Err(error) => {
+                let reason = RepeatQuestStatus::operation_error(&error, enabled);
+                let mut status = match self.0.backend.observe() {
+                    Ok(observed) => {
+                        self.0.may_be_patched.store(
+                            matches!(observed, ObservedPatchState::On | ObservedPatchState::Mixed),
+                            Ordering::Release,
+                        );
+                        RepeatQuestStatus::observed(observed)
+                    }
+                    Err(observe_error) => RepeatQuestStatus::error(&observe_error),
+                };
+                status.reason = Some(reason);
+                status
+            }
+        }
+    }
+
+    pub(crate) fn restore_on_exit(&self) {
+        if !self.0.may_be_patched.load(Ordering::Acquire)
+            || self.0.cleanup_started.swap(true, Ordering::AcqRel)
+        {
+            return;
+        }
+        let Ok(_operation) = self.0.operation.lock() else {
+            log::warn!("REPEAT QUEST restore stage=exit-lock result=failed");
+            return;
+        };
+        match self.0.backend.restore() {
+            Ok(ObservedPatchState::Off) => {
+                self.0.may_be_patched.store(false, Ordering::Release);
+            }
+            Ok(observed) => {
+                log::warn!("REPEAT QUEST restore stage=exit result={observed:?}");
+            }
+            Err(error) => {
+                log::warn!("REPEAT QUEST restore stage=exit error={error}");
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn lock_operation_for_test(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.0.operation.lock().unwrap()
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn get_repeat_quest_status(
+    state: tauri::State<'_, RepeatQuestState>,
+) -> Result<RepeatQuestStatus, ()> {
+    let state = state.inner().clone();
+    Ok(tauri::async_runtime::spawn_blocking(move || state.status())
+        .await
+        .unwrap_or_else(|_| RepeatQuestStatus::internal()))
+}
+
+#[tauri::command]
+pub(crate) async fn set_repeat_quest_enabled(
+    state: tauri::State<'_, RepeatQuestState>,
+    enabled: bool,
+) -> Result<RepeatQuestStatus, ()> {
+    let state = state.inner().clone();
+    Ok(
+        tauri::async_runtime::spawn_blocking(move || state.set_enabled(enabled))
+            .await
+            .unwrap_or_else(|_| RepeatQuestStatus::internal()),
+    )
+}
+
 #[cfg(windows)]
 struct RemotePatchReader<'a>(&'a RemoteProcess);
 
@@ -532,7 +793,13 @@ fn find_patch_offsets(text: &[u8]) -> Result<PatchOffsets, RepeatQuestError> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{
+        collections::HashMap,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc, Mutex,
+        },
+    };
 
     const RESET_SIGNATURE: &[u8] = &[
         0x48, 0x83, 0xB8, 0x08, 0xC1, 0x01, 0x00, 0x00, 0xC7, 0x80, 0x24, 0xC1, 0x01, 0x00, 0x00,
@@ -629,6 +896,52 @@ mod tests {
             }
             self.bytes.insert(address, bytes);
             Ok(())
+        }
+    }
+
+    struct FakeBackend {
+        observed: Mutex<super::ObservedPatchState>,
+        enable_calls: AtomicUsize,
+        restore_calls: AtomicUsize,
+    }
+
+    impl FakeBackend {
+        fn patched() -> Self {
+            Self {
+                observed: Mutex::new(super::ObservedPatchState::On),
+                enable_calls: AtomicUsize::new(0),
+                restore_calls: AtomicUsize::new(0),
+            }
+        }
+
+        fn original() -> Self {
+            Self {
+                observed: Mutex::new(super::ObservedPatchState::Off),
+                enable_calls: AtomicUsize::new(0),
+                restore_calls: AtomicUsize::new(0),
+            }
+        }
+
+        fn restore_calls(&self) -> usize {
+            self.restore_calls.load(Ordering::Acquire)
+        }
+    }
+
+    impl super::RepeatQuestBackend for FakeBackend {
+        fn observe(&self) -> Result<super::ObservedPatchState, super::RepeatQuestError> {
+            Ok(*self.observed.lock().unwrap())
+        }
+
+        fn enable(&self) -> Result<super::ObservedPatchState, super::RepeatQuestError> {
+            self.enable_calls.fetch_add(1, Ordering::AcqRel);
+            *self.observed.lock().unwrap() = super::ObservedPatchState::On;
+            Ok(super::ObservedPatchState::On)
+        }
+
+        fn restore(&self) -> Result<super::ObservedPatchState, super::RepeatQuestError> {
+            self.restore_calls.fetch_add(1, Ordering::AcqRel);
+            *self.observed.lock().unwrap() = super::ObservedPatchState::Off;
+            Ok(super::ObservedPatchState::Off)
         }
     }
 
@@ -870,5 +1183,83 @@ mod tests {
             ),
             Err(super::RepeatQuestError::AddressOverflow)
         );
+    }
+
+    #[test]
+    fn every_new_runtime_restores_off_on_startup() {
+        let backend = Arc::new(FakeBackend::patched());
+        let state = super::RepeatQuestState::with_backend(backend.clone());
+
+        state.restore_on_startup();
+
+        assert_eq!(backend.restore_calls(), 1);
+        assert_eq!(state.status().state, super::RepeatQuestStatusKind::Off);
+    }
+
+    #[test]
+    fn normal_exit_restores_once_only_after_successful_enable() {
+        let backend = Arc::new(FakeBackend::original());
+        let state = super::RepeatQuestState::with_backend(backend.clone());
+
+        assert_eq!(
+            state.set_enabled(true).state,
+            super::RepeatQuestStatusKind::On
+        );
+        state.restore_on_exit();
+        state.restore_on_exit();
+
+        assert_eq!(backend.enable_calls.load(Ordering::Acquire), 1);
+        assert_eq!(backend.restore_calls(), 1);
+    }
+
+    #[test]
+    fn a_busy_operation_returns_busy_without_a_second_write() {
+        let backend = Arc::new(FakeBackend::original());
+        let state = super::RepeatQuestState::with_backend(backend.clone());
+        let _operation = state.lock_operation_for_test();
+
+        assert_eq!(
+            state.set_enabled(true).reason,
+            Some(super::RepeatQuestReason::Busy)
+        );
+        assert_eq!(backend.enable_calls.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn maps_backend_failures_to_stable_frontend_reasons() {
+        assert_eq!(
+            super::RepeatQuestStatus::error(&super::RepeatQuestError::GameNotRunning).reason,
+            Some(super::RepeatQuestReason::GameNotRunning)
+        );
+        assert_eq!(
+            super::RepeatQuestStatus::error(&super::RepeatQuestError::SignatureCount {
+                site: super::PatchSiteName::Reset,
+                count: 0,
+            })
+            .reason,
+            Some(super::RepeatQuestReason::SignatureMissing)
+        );
+        assert_eq!(
+            super::RepeatQuestStatus::operation_error(&super::RepeatQuestError::Rollback, true),
+            super::RepeatQuestReason::RestoreFailed
+        );
+        assert_eq!(
+            super::RepeatQuestStatus::operation_error(
+                &super::RepeatQuestError::ReadBackMismatch,
+                true,
+            ),
+            super::RepeatQuestReason::PatchFailed
+        );
+    }
+
+    #[test]
+    fn serializes_status_for_the_tauri_frontend_contract() {
+        let value = serde_json::to_value(super::RepeatQuestStatus {
+            state: super::RepeatQuestStatusKind::Unavailable,
+            reason: Some(super::RepeatQuestReason::AccessDenied),
+        })
+        .unwrap();
+        assert_eq!(value["state"], "unavailable");
+        assert_eq!(value["reason"], "accessDenied");
     }
 }

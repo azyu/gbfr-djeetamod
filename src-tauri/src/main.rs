@@ -895,6 +895,7 @@ fn main() {
         .manage(ConnectionStatus(Mutex::new(ConnectionState::Searching)))
         .manage(equipment_probe::ProbeState::default())
         .manage(equipment_probe::inventory::InventoryProbeState::default())
+        .manage(repeat_quest::RepeatQuestState::default())
         .manage(EquipmentStatus(Mutex::new(
             equipment::EquipmentState::from_bundled_catalog()
                 .expect("bundled trait cap catalog must be valid"),
@@ -920,8 +921,13 @@ fn main() {
             fetch_equipment_analysis,
             equipment_probe::inventory::inventory_probe_available,
             equipment_probe::inventory::capture_inventory_probe,
+            repeat_quest::get_repeat_quest_status,
+            repeat_quest::set_repeat_quest_enabled,
         ])
         .setup(|app| {
+            app.state::<repeat_quest::RepeatQuestState>()
+                .restore_on_startup();
+
             if let Some(window) = app.get_window("main") {
                 window.set_skip_taskbar(true)?;
                 window.set_always_on_top(true)?;
@@ -935,8 +941,15 @@ fn main() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                handle
+                    .state::<repeat_quest::RepeatQuestState>()
+                    .restore_on_exit();
+            }
+        });
 }
 
 #[cfg(test)]
