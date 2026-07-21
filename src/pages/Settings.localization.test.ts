@@ -123,6 +123,7 @@ const expectedEnglishConnection = {
   connected: "Connected to the game",
   disconnected: "The game is not running",
   unsupported: "This game version is not supported",
+  "not-found": "Could not find the game.",
 };
 
 const expectedKoreanConnection = {
@@ -130,6 +131,17 @@ const expectedKoreanConnection = {
   connected: "게임에 연결되었습니다",
   disconnected: "게임 실행 중이 아닙니다",
   unsupported: "지원하지 않는 게임 버전입니다",
+  "not-found": "게임을 찾지 못했습니다.",
+};
+
+const expectedEnglishGameSearch = {
+  retry: "Retry",
+  "retry-label": "Find game again",
+};
+
+const expectedKoreanGameSearch = {
+  retry: "재시도",
+  "retry-label": "게임 다시 찾기",
 };
 
 describe("Korean settings localization", () => {
@@ -176,6 +188,8 @@ describe("Korean settings localization", () => {
   it("provides the approved management header connection labels", () => {
     expect(english["connection"]).toEqual(expectedEnglishConnection);
     expect(korean["connection"]).toEqual(expectedKoreanConnection);
+    expect(english["game-search"]).toEqual(expectedEnglishGameSearch);
+    expect(korean["game-search"]).toEqual(expectedKoreanGameSearch);
 
     const source = readFileSync(resolve(process.cwd(), "src/pages/Logs.tsx"), "utf8");
     expect(source).toContain("t(`ui.connection.${connectionState}`)");

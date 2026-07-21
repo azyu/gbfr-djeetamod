@@ -13,7 +13,12 @@
       "searching": "Looking for the game",
       "connected": "Connected to the game",
       "disconnected": "The game is not running",
-      "unsupported": "This game version is not supported"
+      "unsupported": "This game version is not supported",
+      "not-found": "Could not find the game."
+    },
+    "game-search": {
+      "retry": "Retry",
+      "retry-label": "Find game again"
     },
     "game-features": {
       "title": "Game Features",

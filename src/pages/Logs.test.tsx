@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   connectionState: "searching" as ConnectionState,
   meterEnabled: true,
   setMeterEnabled: vi.fn(),
+  invoke: vi.fn(),
 }));
 
 vi.mock("./useConnectionState", () => ({
@@ -29,6 +30,10 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => vi.fn()),
 }));
 
+vi.mock("@tauri-apps/api/tauri", () => ({
+  invoke: mocks.invoke,
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) =>
@@ -41,6 +46,9 @@ vi.mock("react-i18next", () => ({
         "ui.connection.connected": "게임에 연결되었습니다",
         "ui.connection.disconnected": "게임 실행 중이 아닙니다",
         "ui.connection.unsupported": "지원하지 않는 게임 버전입니다",
+        "ui.connection.not-found": "게임을 찾지 못했습니다.",
+        "ui.game-search.retry": "재시도",
+        "ui.game-search.retry-label": "게임 다시 찾기",
       })[key] ?? key,
   }),
 }));
@@ -50,6 +58,8 @@ beforeEach(() => {
   mocks.meterEnabled = true;
   mocks.setMeterEnabled.mockReset();
   mocks.setMeterEnabled.mockResolvedValue(undefined);
+  mocks.invoke.mockReset();
+  mocks.invoke.mockResolvedValue(true);
   globalThis.ResizeObserver = class ResizeObserver {
     observe() {}
     unobserve() {}
@@ -116,6 +126,7 @@ it.each([
   ["connected", "게임에 연결되었습니다"],
   ["disconnected", "게임 실행 중이 아닙니다"],
   ["unsupported", "지원하지 않는 게임 버전입니다"],
+  ["not-found", "게임을 찾지 못했습니다."],
 ] as const)("shows the %s game state in the management header", (state, label) => {
   mocks.connectionState = state;
   renderLayout();
@@ -123,6 +134,49 @@ it.each([
   const header = screen.getByRole("banner");
   expect(within(header).getByText("Djeeta MOD")).toBeTruthy();
   expect(within(header).getByText(label)).toBeTruthy();
+});
+
+it("shows retry only after the game search is exhausted", () => {
+  mocks.connectionState = "not-found";
+  const { rerender } = renderLayout();
+
+  expect(screen.getByRole("button", { name: "게임 다시 찾기" })).toBeTruthy();
+
+  mocks.connectionState = "searching";
+  rerender(
+    <MantineProvider>
+      <MemoryRouter initialEntries={["/logs"]}>
+        <Routes>
+          <Route path="/logs" element={<Layout />}>
+            <Route index element={<div>content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </MantineProvider>
+  );
+  expect(screen.queryByRole("button", { name: "게임 다시 찾기" })).toBeNull();
+});
+
+it("starts only one retry while the command is pending", async () => {
+  let finishRetry: ((value: boolean) => void) | undefined;
+  mocks.invoke.mockReturnValue(
+    new Promise<boolean>((resolve) => {
+      finishRetry = resolve;
+    })
+  );
+  mocks.connectionState = "not-found";
+  renderLayout();
+
+  const retry = screen.getByRole("button", { name: "게임 다시 찾기" });
+  fireEvent.click(retry);
+  fireEvent.click(retry);
+
+  expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  expect(mocks.invoke).toHaveBeenCalledWith("retry_game_search");
+  expect((retry as HTMLButtonElement).disabled).toBe(true);
+
+  finishRetry?.(true);
+  await waitFor(() => expect((retry as HTMLButtonElement).disabled).toBe(false));
 });
 
 it("keeps the title and status at opposite sides of the header", () => {

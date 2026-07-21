@@ -1,11 +1,12 @@
 import { useMeterSettingsStore } from "@/stores/useMeterSettingsStore";
 import "./Logs.css";
 
-import { AppShell, Burger, Group, NavLink, ScrollArea, Switch, Text } from "@mantine/core";
+import { AppShell, Burger, Button, Group, NavLink, ScrollArea, Switch, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { ChartBar, Gauge, Gear, House } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/tauri";
+import { useEffect, useState } from "react";
 import { Toaster } from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useNavigate } from "react-router-dom";
@@ -19,10 +20,22 @@ const Layout = () => {
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const { open_log_on_save } = useMeterSettingsStore((state) => ({ open_log_on_save: state.open_log_on_save }));
   const connectionState = useConnectionState();
+  const [retryPending, setRetryPending] = useState(false);
   const { meterEnabled, setMeterEnabled } = useMeterVisibility();
   const repeatQuest = useRepeatQuest();
 
   const navigate = useNavigate();
+
+  const retryGameSearch = async () => {
+    if (retryPending) return;
+
+    setRetryPending(true);
+    try {
+      await invoke("retry_game_search");
+    } finally {
+      setRetryPending(false);
+    }
+  };
 
   useEffect(() => {
     const debugListener = listen("debug-event", (event: { payload: unknown }) => {
@@ -59,9 +72,22 @@ const Layout = () => {
               <Burger opened={desktopOpened} onClick={toggleDesktop} visibleFrom="sm" size="sm" />
               <Text>Djeeta MOD</Text>
             </Group>
-            <Text size="sm" ta="right" truncate>
-              {t(`ui.connection.${connectionState}`)}
-            </Text>
+            <Group gap="xs" wrap="nowrap" justify="flex-end">
+              <Text size="sm" ta="right" truncate>
+                {t(`ui.connection.${connectionState}`)}
+              </Text>
+              {connectionState === "not-found" && (
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  aria-label={t("ui.game-search.retry-label")}
+                  disabled={retryPending}
+                  onClick={() => void retryGameSearch()}
+                >
+                  {t("ui.game-search.retry")}
+                </Button>
+              )}
+            </Group>
           </Group>
         </AppShell.Header>
         <AppShell.Navbar p="sm">

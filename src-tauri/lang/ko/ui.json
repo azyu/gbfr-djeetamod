@@ -13,7 +13,12 @@
       "searching": "게임을 찾는 중입니다",
       "connected": "게임에 연결되었습니다",
       "disconnected": "게임 실행 중이 아닙니다",
-      "unsupported": "지원하지 않는 게임 버전입니다"
+      "unsupported": "지원하지 않는 게임 버전입니다",
+      "not-found": "게임을 찾지 못했습니다."
+    },
+    "game-search": {
+      "retry": "재시도",
+      "retry-label": "게임 다시 찾기"
     },
     "game-features": {
       "title": "게임 기능",
