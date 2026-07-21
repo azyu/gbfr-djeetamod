@@ -15,6 +15,25 @@
       "disconnected": "게임 연결 끊김",
       "unsupported": "게임 2.0.2 훅을 찾을 수 없습니다"
     },
+    "game-features": {
+      "title": "게임 기능",
+      "repeat-quest": {
+        "label": "무한 퀘스트 반복",
+        "description": "퀘스트 반복 횟수 제한을 해제합니다.",
+        "reason": {
+          "busy": "이전 변경 작업이 아직 진행 중입니다.",
+          "gameNotRunning": "게임이 실행 중이 아닙니다.",
+          "unsupportedGame": "지원하는 게임 2.0.2 실행 파일이 아닙니다.",
+          "signatureMissing": "무한 퀘스트 반복 코드를 찾지 못했습니다.",
+          "signatureAmbiguous": "무한 퀘스트 반복 코드 후보가 여러 개입니다.",
+          "unexpectedBytes": "게임 코드가 예상 상태와 달라 변경하지 않았습니다.",
+          "accessDenied": "현재 권한으로 게임 코드를 변경할 수 없습니다.",
+          "patchFailed": "무한 퀘스트 반복을 켜지 못했습니다.",
+          "restoreFailed": "원본 게임 코드를 복원하지 못했습니다.",
+          "internal": "무한 퀘스트 반복 처리 중 내부 오류가 발생했습니다."
+        }
+      }
+    },
     "equipment-analysis": {
       "title": "진 특성 상한 분석",
       "scope": "현재는 장착 진 12개의 주·보조 특성만 합산합니다. 무기·가호석·소환석·마스터 특성은 아직 포함되지 않습니다.",

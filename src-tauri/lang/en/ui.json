@@ -15,6 +15,25 @@
       "disconnected": "Game disconnected",
       "unsupported": "The game 2.0.2 hook was not found"
     },
+    "game-features": {
+      "title": "Game Features",
+      "repeat-quest": {
+        "label": "Unlimited Repeat Quest",
+        "description": "Removes the quest repeat-count limit.",
+        "reason": {
+          "busy": "The previous change is still in progress.",
+          "gameNotRunning": "The game is not running.",
+          "unsupportedGame": "This is not the supported game 2.0.2 executable.",
+          "signatureMissing": "The unlimited repeat quest code was not found.",
+          "signatureAmbiguous": "Multiple unlimited repeat quest code candidates were found.",
+          "unexpectedBytes": "The game code was not changed because it was in an unexpected state.",
+          "accessDenied": "The game code cannot be changed with the current permissions.",
+          "patchFailed": "Unlimited Repeat Quest could not be enabled.",
+          "restoreFailed": "The original game code could not be restored.",
+          "internal": "An internal error occurred while processing Unlimited Repeat Quest."
+        }
+      }
+    },
     "equipment-analysis": {
       "title": "Sigil Trait Cap Analysis",
       "scope": "Currently, only primary and secondary traits from the 12 equipped sigils are totaled. Weapon and wrightstone, summons, and master traits are not included yet.",

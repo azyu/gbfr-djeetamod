@@ -58,6 +58,22 @@ const expectedKorean = {
   "debug-mode-description": "원시 이벤트 데이터를 확인할 수 있도록 개발자 콘솔을 엽니다.",
 };
 
+const expectedEnglishGameFeatures = {
+  title: "Game Features",
+  "repeat-quest": {
+    label: "Unlimited Repeat Quest",
+    description: "Removes the quest repeat-count limit.",
+  },
+};
+
+const expectedKoreanGameFeatures = {
+  title: "게임 기능",
+  "repeat-quest": {
+    label: "무한 퀘스트 반복",
+    description: "퀘스트 반복 횟수 제한을 해제합니다.",
+  },
+};
+
 const expectedEnglishColumns = {
   name: "Name",
   dps: "DPS",
@@ -111,6 +127,8 @@ describe("Korean settings localization", () => {
     expect(korean).toMatchObject(expectedKorean);
     expect(english["meter-columns"]).toEqual(expectedEnglishColumns);
     expect(korean["meter-columns"]).toEqual(expectedKoreanColumns);
+    expect(english["game-features"]).toMatchObject(expectedEnglishGameFeatures);
+    expect(korean["game-features"]).toMatchObject(expectedKoreanGameFeatures);
   });
 
   it("uses translation keys instead of hardcoded settings labels", () => {
@@ -121,6 +139,9 @@ describe("Korean settings localization", () => {
     }
     expect(source).toContain("t(`ui.meter-columns.${item}`)");
     expect(source).toContain("t(`ui.meter-columns.${item}-description`)");
+    expect(source).toContain('t("ui.game-features.title")');
+    expect(source).toContain('t("ui.game-features.repeat-quest.label")');
+    expect(source).toContain('t("ui.game-features.repeat-quest.description")');
   });
 
   it("keeps the approved meter abbreviations in both languages", () => {
