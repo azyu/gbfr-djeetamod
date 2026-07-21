@@ -60,11 +60,11 @@ pub(crate) enum LocateError {
     InvalidGetterLayout,
 }
 
-fn checked_address(base: usize, offset: usize) -> Result<usize, LocateError> {
+pub(super) fn checked_address(base: usize, offset: usize) -> Result<usize, LocateError> {
     base.checked_add(offset).ok_or(LocateError::AddressOverflow)
 }
 
-fn validate_pointer(address: usize) -> Result<usize, LocateError> {
+pub(super) fn validate_pointer(address: usize) -> Result<usize, LocateError> {
     if (MIN_USER_ADDRESS..=MAX_USER_ADDRESS).contains(&address) {
         Ok(address)
     } else {
@@ -72,14 +72,17 @@ fn validate_pointer(address: usize) -> Result<usize, LocateError> {
     }
 }
 
-fn read_u32<R: MemoryReader>(reader: &R, address: usize) -> Result<u32, LocateError> {
+pub(super) fn read_u32<R: MemoryReader>(reader: &R, address: usize) -> Result<u32, LocateError> {
     validate_pointer(address)?;
     let mut bytes = [0u8; 4];
     reader.read_exact(address, &mut bytes)?;
     Ok(u32::from_le_bytes(bytes))
 }
 
-fn read_usize<R: MemoryReader>(reader: &R, address: usize) -> Result<usize, LocateError> {
+pub(super) fn read_usize<R: MemoryReader>(
+    reader: &R,
+    address: usize,
+) -> Result<usize, LocateError> {
     validate_pointer(address)?;
     let mut bytes = [0u8; std::mem::size_of::<usize>()];
     reader.read_exact(address, &mut bytes)?;

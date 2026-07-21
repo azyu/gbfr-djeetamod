@@ -20,6 +20,7 @@ mod compare;
 pub(crate) mod inventory;
 mod locator;
 pub(crate) mod memory;
+mod roster_probe;
 
 #[derive(Debug, Default)]
 pub(crate) struct ProbeState(Mutex<compare::ProbeComparator>);
