@@ -14,7 +14,12 @@ use self::{
     compare::{snapshot_digest_prefix, CompareDecision, DeferredReason},
     locator::{locate_from_globals_slot, resolve_roots, LocateError},
     memory::{MemoryReadError, MemoryReader, RemoteProcess},
+    roster_probe::{
+        classify_candidate_snapshot, inspect_candidate_manager, CandidateSnapshotStatus,
+        RosterProbeError,
+    },
 };
+use crate::parser::constants::is_known_equipment_character_hash;
 
 mod compare;
 pub(crate) mod inventory;
@@ -48,6 +53,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(250);
 const STABILITY_DELAY: Duration = Duration::from_millis(50);
 const DISCOVERY_DELAY: Duration = Duration::from_secs(1);
 const LOG_REPEAT_INTERVAL: Duration = Duration::from_secs(5);
+const ROSTER_INSPECTION_INTERVAL: Duration = Duration::from_secs(5);
 
 #[derive(Debug, thiserror::Error)]
 enum CandidateReadError {
@@ -166,6 +172,7 @@ async fn probe_process(
         roots.match_rva, local_key_rva, manager_rva
     );
 
+    let mut next_roster_inspection = Instant::now();
     loop {
         let deadline = Instant::now() + POLL_INTERVAL;
         for slot in 0..4 {
@@ -205,7 +212,107 @@ async fn probe_process(
             log_decision(throttle, first_location.character_key, &first, decision);
         }
 
+        if Instant::now() >= next_roster_inspection {
+            if let Err(error) = probe_candidate_roster(process, roots.manager_global).await {
+                log_unavailable(throttle, "roster-inspection", &error);
+            }
+            next_roster_inspection = Instant::now() + ROSTER_INSPECTION_INTERVAL;
+        }
+
         sleep(deadline.saturating_duration_since(Instant::now())).await;
+    }
+}
+
+async fn probe_candidate_roster(
+    process: &RemoteProcess,
+    manager_global: usize,
+) -> Result<(), RosterProbeError> {
+    let first_inspection = inspect_candidate_manager(process, manager_global)?;
+    let known_count = first_inspection
+        .records
+        .iter()
+        .filter(|record| is_known_equipment_character_hash(record.character_key))
+        .count();
+    warn!(
+        "ROSTER PROBE CANDIDATE buckets={} known={} unknown={} duplicates={} rejected={}",
+        first_inspection.candidate_bucket_count,
+        known_count,
+        first_inspection.records.len().saturating_sub(known_count),
+        first_inspection.duplicate_keys.len(),
+        first_inspection.rejected_record_count
+    );
+
+    let first_reads = first_inspection
+        .records
+        .iter()
+        .filter(|record| is_known_equipment_character_hash(record.character_key))
+        .map(|record| {
+            (
+                record.character_key,
+                record.snapshot_address,
+                read_roster_snapshot(process, record.snapshot_address),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    sleep(STABILITY_DELAY).await;
+    let second_inspection = inspect_candidate_manager(process, manager_global)?;
+    let second_records = second_inspection
+        .records
+        .into_iter()
+        .map(|record| (record.character_key, record))
+        .collect::<HashMap<_, _>>();
+
+    for (character_key, first_address, first) in first_reads {
+        let status = match second_records.get(&character_key) {
+            Some(second_record) if second_record.snapshot_address == first_address => {
+                let second = read_roster_snapshot(process, second_record.snapshot_address);
+                classify_candidate_snapshot(
+                    character_key,
+                    first.as_ref().map(|bytes| bytes.as_slice()),
+                    second.as_ref().map(|bytes| bytes.as_slice()),
+                )
+            }
+            Some(_) => CandidateSnapshotStatus::Unstable,
+            None => CandidateSnapshotStatus::Unavailable,
+        };
+        log_roster_status(character_key, status);
+    }
+
+    Ok(())
+}
+
+fn read_roster_snapshot(
+    process: &RemoteProcess,
+    snapshot_address: Option<usize>,
+) -> Option<[u8; SIGIL_ARRAY_BYTES]> {
+    let snapshot_address = snapshot_address?;
+    let mut snapshot = [0u8; SIGIL_ARRAY_BYTES];
+    process.read_exact(snapshot_address, &mut snapshot).ok()?;
+    Some(snapshot)
+}
+
+fn log_roster_status(character_key: u32, status: CandidateSnapshotStatus) {
+    match status {
+        CandidateSnapshotStatus::Stable {
+            source_count,
+            digest,
+        } => warn!(
+            "ROSTER PROBE CANDIDATE character_key={:#010x} status=stable sources={} digest={}",
+            character_key, source_count, digest
+        ),
+        CandidateSnapshotStatus::Unavailable => warn!(
+            "ROSTER PROBE CANDIDATE character_key={:#010x} status=unavailable sources=0 digest=none",
+            character_key
+        ),
+        CandidateSnapshotStatus::Unstable => warn!(
+            "ROSTER PROBE CANDIDATE character_key={:#010x} status=unstable sources=0 digest=none",
+            character_key
+        ),
+        CandidateSnapshotStatus::Invalid => warn!(
+            "ROSTER PROBE CANDIDATE character_key={:#010x} status=invalid sources=0 digest=none",
+            character_key
+        ),
     }
 }
 

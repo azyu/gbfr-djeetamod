@@ -92,6 +92,24 @@ test("inventory probe stays read-only and release-gated", () => {
   }
 });
 
+test("full-roster validation stays read-only and development-gated", () => {
+  const runner = readRepositoryFile("src-tauri/src/equipment_probe/mod.rs");
+  const roster = readRepositoryFile("src-tauri/src/equipment_probe/roster_probe.rs");
+  const memory = readRepositoryFile("src-tauri/src/equipment_probe/memory.rs");
+  expect(runner).toContain('std::env::var("DJEETA_EXTERNAL_READER_PROBE")');
+  expect(runner).toContain("cfg!(debug_assertions)");
+  expect(memory).toContain("PROCESS_QUERY_INFORMATION | PROCESS_VM_READ");
+  for (const forbidden of [
+    "PROCESS_VM_WRITE",
+    "PROCESS_VM_OPERATION",
+    "WriteProcessMemory",
+    "VirtualAllocEx",
+    "CreateRemoteThread",
+  ]) {
+    expect(memory + runner + roster).not.toContain(forbidden);
+  }
+});
+
 test("repeat quest writes are isolated from the read-only probes", () => {
   const repeatQuest = readRepositoryFile("src-tauri/src/repeat_quest.rs");
   const readOnlyProbes =

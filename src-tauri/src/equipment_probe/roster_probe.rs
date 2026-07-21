@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use equipment_core::decode_snapshot;
+
 use super::{
+    compare::snapshot_digest_prefix,
     locator::{checked_address, read_u32, read_usize, validate_pointer, LocateError},
     memory::MemoryReader,
 };
@@ -33,6 +36,35 @@ pub(crate) enum RosterProbeError {
     LinkedListCycle(usize),
     #[error("candidate manager traversal exceeded 1024 nodes")]
     TraversalLimit,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CandidateSnapshotStatus {
+    Stable { source_count: usize, digest: String },
+    Unavailable,
+    Unstable,
+    Invalid,
+}
+
+pub(crate) fn classify_candidate_snapshot(
+    character_key: u32,
+    first: Option<&[u8]>,
+    second: Option<&[u8]>,
+) -> CandidateSnapshotStatus {
+    let (Some(first), Some(second)) = (first, second) else {
+        return CandidateSnapshotStatus::Unavailable;
+    };
+    if first != second {
+        return CandidateSnapshotStatus::Unstable;
+    }
+    let Ok(snapshot) = decode_snapshot(first, character_key) else {
+        return CandidateSnapshotStatus::Invalid;
+    };
+
+    CandidateSnapshotStatus::Stable {
+        source_count: snapshot.sources.len(),
+        digest: snapshot_digest_prefix(first),
+    }
 }
 
 pub(crate) fn inspect_candidate_manager<R: MemoryReader>(
@@ -116,8 +148,12 @@ pub(crate) fn inspect_candidate_manager<R: MemoryReader>(
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{inspect_candidate_manager, RosterProbeError};
+    use super::{
+        classify_candidate_snapshot, inspect_candidate_manager, CandidateSnapshotStatus,
+        RosterProbeError,
+    };
     use crate::equipment_probe::memory::{MemoryReadError, MemoryReader};
+    use equipment_core::{EMPTY_HASH, SIGIL_ARRAY_BYTES};
 
     const MANAGER_GLOBAL: usize = 0x2000_0000;
     const MANAGER: usize = 0x2100_0000;
@@ -183,6 +219,22 @@ mod tests {
     fn write_record(memory: &mut FakeMemory, record: usize, key: u32, snapshot: usize) {
         memory.write_usize(record + 0x5E60, snapshot);
         memory.write_u32(record + 0x5EA8, key);
+    }
+
+    fn equipment_fixture(character_key: u32) -> Vec<u8> {
+        let mut bytes = vec![0u8; SIGIL_ARRAY_BYTES];
+        for slot in 0..12 {
+            let base = slot * 0x24;
+            bytes[base..base + 4].copy_from_slice(&EMPTY_HASH.to_le_bytes());
+            bytes[base + 0x08..base + 0x0C].copy_from_slice(&EMPTY_HASH.to_le_bytes());
+            bytes[base + 0x10..base + 0x14].copy_from_slice(&EMPTY_HASH.to_le_bytes());
+            bytes[base + 0x14..base + 0x18].copy_from_slice(&EMPTY_HASH.to_le_bytes());
+        }
+        bytes[0..4].copy_from_slice(&0xDC58_4F60_u32.to_le_bytes());
+        bytes[4..8].copy_from_slice(&15_u32.to_le_bytes());
+        bytes[0x10..0x14].copy_from_slice(&0xEE73_2781_u32.to_le_bytes());
+        bytes[0x14..0x18].copy_from_slice(&character_key.to_le_bytes());
+        bytes
     }
 
     fn manager_fixture_with_three_known_records() -> FakeMemory {
@@ -314,5 +366,30 @@ mod tests {
 
         assert!(result.records.is_empty());
         assert_eq!(result.rejected_record_count, 1);
+    }
+
+    #[test]
+    fn classifies_stable_unavailable_unstable_and_invalid_snapshots() {
+        let valid = equipment_fixture(0xE705_3919);
+        let mut changed = valid.clone();
+        changed[4..8].copy_from_slice(&16_u32.to_le_bytes());
+        let short = &valid[..valid.len() - 1];
+
+        assert!(matches!(
+            classify_candidate_snapshot(0xE705_3919, Some(&valid), Some(&valid)),
+            CandidateSnapshotStatus::Stable { .. }
+        ));
+        assert_eq!(
+            classify_candidate_snapshot(0xE705_3919, None, None),
+            CandidateSnapshotStatus::Unavailable
+        );
+        assert_eq!(
+            classify_candidate_snapshot(0xE705_3919, Some(&valid), Some(&changed)),
+            CandidateSnapshotStatus::Unstable
+        );
+        assert_eq!(
+            classify_candidate_snapshot(0xE705_3919, Some(short), Some(short)),
+            CandidateSnapshotStatus::Invalid
+        );
     }
 }
