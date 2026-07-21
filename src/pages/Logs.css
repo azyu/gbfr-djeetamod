@@ -1,5 +1,12 @@
 .log-window {
+  height: 100vh;
+  overflow: hidden;
   background-color: #252525;
+}
+
+.log-main {
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .log-window .player-table {

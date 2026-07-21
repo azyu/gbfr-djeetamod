@@ -1,7 +1,7 @@
 import { useMeterSettingsStore } from "@/stores/useMeterSettingsStore";
 import "./Logs.css";
 
-import { AppShell, Burger, Group, NavLink, Switch, Text } from "@mantine/core";
+import { AppShell, Burger, Group, NavLink, ScrollArea, Switch, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { ChartBar, Gauge, Gear, House } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
@@ -58,7 +58,7 @@ const Layout = () => {
           </Group>
         </AppShell.Header>
         <AppShell.Navbar p="sm">
-          <AppShell.Section grow>
+          <AppShell.Section grow component={ScrollArea}>
             <NavLink
               label={t("ui.navigation.damage-meter")}
               leftSection={<Gauge size="1rem" />}
@@ -113,7 +113,7 @@ const Layout = () => {
             />
           </AppShell.Section>
         </AppShell.Navbar>
-        <AppShell.Main>
+        <AppShell.Main className="log-main">
           <Outlet />
         </AppShell.Main>
       </AppShell>

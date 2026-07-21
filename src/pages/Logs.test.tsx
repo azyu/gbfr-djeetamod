@@ -99,3 +99,19 @@ it("starts with mobile navigation closed and desktop navigation open", () => {
   expect(source).toMatch(/mobileOpened[\s\S]*useDisclosure\(\)/);
   expect(source).toMatch(/desktopOpened[\s\S]*useDisclosure\(true\)/);
 });
+
+it("keeps settings below the scrollable navigation section", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/pages/Logs.tsx"), "utf8");
+
+  expect(source).toContain("<AppShell.Section grow component={ScrollArea}>");
+  expect(source.indexOf('to="/logs/settings"')).toBeGreaterThan(source.indexOf("</AppShell.Section>"));
+});
+
+it("gives management content its own vertical scrollbar", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/pages/Logs.tsx"), "utf8");
+  const css = readFileSync(resolve(process.cwd(), "src/pages/Logs.css"), "utf8");
+
+  expect(source).toContain('<AppShell.Main className="log-main">');
+  expect(css).toMatch(/\.log-window\s*\{[^}]*height:\s*100vh;[^}]*overflow:\s*hidden;/s);
+  expect(css).toMatch(/\.log-main\s*\{[^}]*height:\s*100vh;[^}]*overflow-y:\s*auto;/s);
+});
