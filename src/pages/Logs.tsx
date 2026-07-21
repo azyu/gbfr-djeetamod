@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { Toaster } from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useNavigate } from "react-router-dom";
+import useConnectionState from "./useConnectionState";
 import useMeterVisibility from "./useMeterVisibility";
 import useRepeatQuest from "./useRepeatQuest";
 
@@ -17,6 +18,7 @@ const Layout = () => {
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const { open_log_on_save } = useMeterSettingsStore((state) => ({ open_log_on_save: state.open_log_on_save }));
+  const connectionState = useConnectionState();
   const { meterEnabled, setMeterEnabled } = useMeterVisibility();
   const repeatQuest = useRepeatQuest();
 
@@ -51,10 +53,15 @@ const Layout = () => {
         padding="sm"
       >
         <AppShell.Header>
-          <Group h="100%" px="sm">
-            <Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" />
-            <Burger opened={desktopOpened} onClick={toggleDesktop} visibleFrom="sm" size="sm" />
-            <Text>Djeeta MOD</Text>
+          <Group h="100%" px="sm" justify="space-between" wrap="nowrap">
+            <Group gap="sm" wrap="nowrap">
+              <Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" />
+              <Burger opened={desktopOpened} onClick={toggleDesktop} visibleFrom="sm" size="sm" />
+              <Text>Djeeta MOD</Text>
+            </Group>
+            <Text size="sm" ta="right" truncate>
+              {t(`ui.connection.${connectionState}`)}
+            </Text>
           </Group>
         </AppShell.Header>
         <AppShell.Navbar p="sm">

@@ -10,10 +10,10 @@
       "settings": "설정"
     },
     "connection": {
-      "searching": "게임 연결 대기 중",
-      "connected": "게임 연결됨",
-      "disconnected": "게임 연결 끊김",
-      "unsupported": "게임 2.0.2 훅을 찾을 수 없습니다"
+      "searching": "게임을 찾는 중입니다",
+      "connected": "게임에 연결되었습니다",
+      "disconnected": "게임 실행 중이 아닙니다",
+      "unsupported": "지원하지 않는 게임 버전입니다"
     },
     "game-features": {
       "title": "게임 기능",

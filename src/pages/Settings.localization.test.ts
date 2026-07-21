@@ -118,6 +118,20 @@ const expectedKoreanNavigation = {
   settings: "설정",
 };
 
+const expectedEnglishConnection = {
+  searching: "Looking for the game",
+  connected: "Connected to the game",
+  disconnected: "The game is not running",
+  unsupported: "This game version is not supported",
+};
+
+const expectedKoreanConnection = {
+  searching: "게임을 찾는 중입니다",
+  connected: "게임에 연결되었습니다",
+  disconnected: "게임 실행 중이 아닙니다",
+  unsupported: "지원하지 않는 게임 버전입니다",
+};
+
 describe("Korean settings localization", () => {
   const korean = readJson("../../src-tauri/lang/ko/ui.json").ui;
   const english = readJson("../../src-tauri/lang/en/ui.json").ui;
@@ -157,6 +171,14 @@ describe("Korean settings localization", () => {
     expect(source).toContain('t("ui.navigation.damage-meter")');
     expect(source).toContain('t("ui.navigation.battle-records")');
     expect(source).toContain('t("ui.navigation.settings")');
+  });
+
+  it("provides the approved management header connection labels", () => {
+    expect(english["connection"]).toEqual(expectedEnglishConnection);
+    expect(korean["connection"]).toEqual(expectedKoreanConnection);
+
+    const source = readFileSync(resolve(process.cwd(), "src/pages/Logs.tsx"), "utf8");
+    expect(source).toContain("t(`ui.connection.${connectionState}`)");
   });
 
   it("uses DPS for the Korean damage-per-second graph label", () => {

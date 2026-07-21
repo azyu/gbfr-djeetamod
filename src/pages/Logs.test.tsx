@@ -1,15 +1,21 @@
 import { MantineProvider } from "@mantine/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { ConnectionState } from "@/types";
 import Layout from "./Logs";
 
 const mocks = vi.hoisted(() => ({
+  connectionState: "searching" as ConnectionState,
   meterEnabled: true,
   setMeterEnabled: vi.fn(),
+}));
+
+vi.mock("./useConnectionState", () => ({
+  default: () => mocks.connectionState,
 }));
 
 vi.mock("./useMeterVisibility", () => ({
@@ -31,11 +37,16 @@ vi.mock("react-i18next", () => ({
         "ui.navigation.battle-records": "전투 기록",
         "ui.navigation.settings": "설정",
         "ui.equipment-analysis.title": "진 특성 상한 분석",
+        "ui.connection.searching": "게임을 찾는 중입니다",
+        "ui.connection.connected": "게임에 연결되었습니다",
+        "ui.connection.disconnected": "게임 실행 중이 아닙니다",
+        "ui.connection.unsupported": "지원하지 않는 게임 버전입니다",
       })[key] ?? key,
   }),
 }));
 
 beforeEach(() => {
+  mocks.connectionState = "searching";
   mocks.meterEnabled = true;
   mocks.setMeterEnabled.mockReset();
   mocks.setMeterEnabled.mockResolvedValue(undefined);
@@ -98,6 +109,26 @@ it("starts with mobile navigation closed and desktop navigation open", () => {
 
   expect(source).toMatch(/mobileOpened[\s\S]*useDisclosure\(\)/);
   expect(source).toMatch(/desktopOpened[\s\S]*useDisclosure\(true\)/);
+});
+
+it.each([
+  ["searching", "게임을 찾는 중입니다"],
+  ["connected", "게임에 연결되었습니다"],
+  ["disconnected", "게임 실행 중이 아닙니다"],
+  ["unsupported", "지원하지 않는 게임 버전입니다"],
+] as const)("shows the %s game state in the management header", (state, label) => {
+  mocks.connectionState = state;
+  renderLayout();
+
+  const header = screen.getByRole("banner");
+  expect(within(header).getByText("Djeeta MOD")).toBeTruthy();
+  expect(within(header).getByText(label)).toBeTruthy();
+});
+
+it("keeps the title and status at opposite sides of the header", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/pages/Logs.tsx"), "utf8");
+
+  expect(source).toContain('<Group h="100%" px="sm" justify="space-between" wrap="nowrap">');
 });
 
 it("keeps settings below the scrollable navigation section", () => {

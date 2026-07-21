@@ -10,10 +10,10 @@
       "settings": "Settings"
     },
     "connection": {
-      "searching": "Waiting for the game",
-      "connected": "Game connected",
-      "disconnected": "Game disconnected",
-      "unsupported": "The game 2.0.2 hook was not found"
+      "searching": "Looking for the game",
+      "connected": "Connected to the game",
+      "disconnected": "The game is not running",
+      "unsupported": "This game version is not supported"
     },
     "game-features": {
       "title": "Game Features",
