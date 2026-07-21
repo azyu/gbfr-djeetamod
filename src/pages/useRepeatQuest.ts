@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 
 export type RepeatQuestReason =
@@ -18,28 +19,40 @@ export type RepeatQuestStatus = {
   reason: RepeatQuestReason | null;
 };
 
-export default function useRepeatQuest(connectionState: string) {
+export default function useRepeatQuest() {
   const [status, setStatus] = useState<RepeatQuestStatus | null>(null);
   const [pending, setPending] = useState(true);
 
   useEffect(() => {
-    let active = true;
-    setPending(true);
-    void invoke<RepeatQuestStatus>("get_repeat_quest_status")
-      .then((nextStatus) => {
-        if (active) setStatus(nextStatus);
-      })
-      .catch(() => {
-        if (active) setStatus({ state: "unavailable", reason: "internal" });
-      })
-      .finally(() => {
-        if (active) setPending(false);
-      });
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+
+    const refresh = async () => {
+      setPending(true);
+      try {
+        const nextStatus = await invoke<RepeatQuestStatus>("get_repeat_quest_status");
+        if (!disposed) setStatus(nextStatus);
+      } catch {
+        if (!disposed) setStatus({ state: "unavailable", reason: "internal" });
+      } finally {
+        if (!disposed) setPending(false);
+      }
+    };
+
+    void refresh();
+    void listen("connection-state", () => void refresh()).then((unlisten) => {
+      if (disposed) {
+        unlisten();
+      } else {
+        unsubscribe = unlisten;
+      }
+    });
 
     return () => {
-      active = false;
+      disposed = true;
+      unsubscribe?.();
     };
-  }, [connectionState]);
+  }, []);
 
   const setEnabled = useCallback(async (enabled: boolean) => {
     setPending(true);

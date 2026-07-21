@@ -12,7 +12,6 @@ import {
   Select,
   Slider,
   Stack,
-  Switch,
   Text,
   Tooltip,
 } from "@mantine/core";
@@ -20,7 +19,6 @@ import { DotsSixVertical } from "@phosphor-icons/react";
 import { invoke } from "@tauri-apps/api";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import useRepeatQuest from "./useRepeatQuest";
 import useSettings from "./useSettings";
 
 const SettingsPage = () => {
@@ -48,7 +46,6 @@ const SettingsPage = () => {
     removeOverlayColumn,
     open_log_on_save,
   } = useSettings();
-  const repeatQuest = useRepeatQuest(connectionState);
 
   const toggleDebugMode = () => {
     const enabled = !debugMode;
@@ -201,24 +198,6 @@ const SettingsPage = () => {
               )}
             </Droppable>
           </DragDropContext>
-        </Stack>
-      </Fieldset>
-      <Fieldset legend={t("ui.game-features.title")} mt="md">
-        <Stack gap="xs">
-          <Switch
-            label={t("ui.game-features.repeat-quest.label")}
-            checked={repeatQuest.status?.state === "on"}
-            disabled={repeatQuest.pending || repeatQuest.status === null || repeatQuest.status.state === "unavailable"}
-            onChange={(event) => void repeatQuest.setEnabled(event.currentTarget.checked)}
-          />
-          <Text size="sm" c="dimmed">
-            {t("ui.game-features.repeat-quest.description")}
-          </Text>
-          {repeatQuest.status?.reason && (
-            <Text size="sm" c="red">
-              {t(`ui.game-features.repeat-quest.reason.${repeatQuest.status.reason}`)}
-            </Text>
-          )}
         </Stack>
       </Fieldset>
     </Box>

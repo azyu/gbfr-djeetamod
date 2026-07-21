@@ -10,6 +10,7 @@ import { Toaster } from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import useMeterVisibility from "./useMeterVisibility";
+import useRepeatQuest from "./useRepeatQuest";
 
 const Layout = () => {
   const { t } = useTranslation();
@@ -17,6 +18,7 @@ const Layout = () => {
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const { open_log_on_save } = useMeterSettingsStore((state) => ({ open_log_on_save: state.open_log_on_save }));
   const { meterEnabled, setMeterEnabled } = useMeterVisibility();
+  const repeatQuest = useRepeatQuest();
 
   const navigate = useNavigate();
 
@@ -70,6 +72,25 @@ const Layout = () => {
               }
               onClick={() => void setMeterEnabled(!meterEnabled).catch(() => undefined)}
             />
+            <NavLink
+              label={t("ui.game-features.repeat-quest.label")}
+              rightSection={
+                <Switch
+                  aria-label={t("ui.game-features.repeat-quest.label")}
+                  checked={repeatQuest.status?.state === "on"}
+                  disabled={
+                    repeatQuest.pending || repeatQuest.status === null || repeatQuest.status.state === "unavailable"
+                  }
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => void repeatQuest.setEnabled(event.currentTarget.checked)}
+                />
+              }
+            />
+            {repeatQuest.status?.reason && (
+              <Text size="xs" c="red" px="sm" pb="xs">
+                {t(`ui.game-features.repeat-quest.reason.${repeatQuest.status.reason}`)}
+              </Text>
+            )}
             <NavLink
               label={t("ui.equipment-analysis.title")}
               leftSection={<ChartBar size="1rem" />}

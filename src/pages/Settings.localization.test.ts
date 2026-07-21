@@ -133,15 +133,14 @@ describe("Korean settings localization", () => {
 
   it("uses translation keys instead of hardcoded settings labels", () => {
     const source = readFileSync(resolve(process.cwd(), "src/pages/Settings.tsx"), "utf8");
+    const layoutSource = readFileSync(resolve(process.cwd(), "src/pages/Logs.tsx"), "utf8");
 
     for (const key of Object.keys(expectedKorean)) {
       expect(source).toContain(`t("ui.${key}")`);
     }
     expect(source).toContain("t(`ui.meter-columns.${item}`)");
     expect(source).toContain("t(`ui.meter-columns.${item}-description`)");
-    expect(source).toContain('t("ui.game-features.title")');
-    expect(source).toContain('t("ui.game-features.repeat-quest.label")');
-    expect(source).toContain('t("ui.game-features.repeat-quest.description")');
+    expect(layoutSource).toContain('t("ui.game-features.repeat-quest.label")');
   });
 
   it("keeps the approved meter abbreviations in both languages", () => {
