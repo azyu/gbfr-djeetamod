@@ -33,12 +33,10 @@ beforeEach(() => {
   mocks.invoke.mockResolvedValue("connected");
   mocks.unlisten.mockReset();
   mocks.listen.mockReset();
-  mocks.listen.mockImplementation(
-    async (name: string, callback: (event: { payload: ConnectionState }) => void) => {
-      mocks.listeners.set(name, callback);
-      return mocks.unlisten;
-    }
-  );
+  mocks.listen.mockImplementation(async (name: string, callback: (event: { payload: ConnectionState }) => void) => {
+    mocks.listeners.set(name, callback);
+    return mocks.unlisten;
+  });
 });
 
 it("reads the current state after registering the listener", async () => {
