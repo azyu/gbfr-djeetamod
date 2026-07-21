@@ -93,7 +93,7 @@ const Layout = () => {
                 />
               }
             />
-            {repeatQuest.status?.reason && (
+            {repeatQuest.status?.reason && repeatQuest.status.reason !== "gameNotRunning" && (
               <Text size="xs" c="red" px="sm" pb="xs">
                 {t(`ui.game-features.repeat-quest.reason.${repeatQuest.status.reason}`)}
               </Text>

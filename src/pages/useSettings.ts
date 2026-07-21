@@ -1,10 +1,7 @@
 import { SUPPORTED_LANGUAGES } from "@/i18n";
 import { useMeterSettingsStore } from "@/stores/useMeterSettingsStore";
-import { ConnectionState, MeterColumns } from "@/types";
+import { MeterColumns } from "@/types";
 import { DropResult } from "@hello-pangea/dnd";
-import { invoke } from "@tauri-apps/api";
-import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const reorder = <TList extends unknown[]>(list: TList, startIndex: number, endIndex: number): TList => {
@@ -16,7 +13,6 @@ const reorder = <TList extends unknown[]>(list: TList, startIndex: number, endIn
 };
 
 export default function useSettings() {
-  const [connectionState, setConnectionState] = useState<ConnectionState>("searching");
   const {
     color_1,
     color_2,
@@ -46,27 +42,6 @@ export default function useSettings() {
   }));
 
   const { i18n } = useTranslation();
-
-  useEffect(() => {
-    let disposed = false;
-    let unsubscribe: (() => void) | undefined;
-    void listen<ConnectionState>("connection-state", (event) => setConnectionState(event.payload)).then(
-      async (unlisten) => {
-        if (disposed) {
-          unlisten();
-          return;
-        }
-        unsubscribe = unlisten;
-        const currentState = await invoke<ConnectionState>("get_connection_state");
-        if (!disposed) setConnectionState(currentState);
-      }
-    );
-
-    return () => {
-      disposed = true;
-      unsubscribe?.();
-    };
-  }, []);
 
   const handleLanguageChange = (language: string | null) => {
     i18n.changeLanguage(language as string);
@@ -101,7 +76,6 @@ export default function useSettings() {
   );
 
   return {
-    connectionState,
     color_1,
     color_2,
     color_3,

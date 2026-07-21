@@ -181,6 +181,17 @@ describe("Korean settings localization", () => {
     expect(source).toContain("t(`ui.connection.${connectionState}`)");
   });
 
+  it("keeps management connection state out of settings", () => {
+    const settingsSource = readFileSync(resolve(process.cwd(), "src/pages/Settings.tsx"), "utf8");
+    const settingsHookSource = readFileSync(resolve(process.cwd(), "src/pages/useSettings.ts"), "utf8");
+
+    for (const source of [settingsSource, settingsHookSource]) {
+      expect(source).not.toContain("connectionState");
+      expect(source).not.toContain("connection-state");
+      expect(source).not.toContain("get_connection_state");
+    }
+  });
+
   it("uses DPS for the Korean damage-per-second graph label", () => {
     const logs = korean.logs as Record<string, string>;
 

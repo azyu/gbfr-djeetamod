@@ -26,7 +26,6 @@ const SettingsPage = () => {
   const [debugMode, setDebugMode] = useState(false);
 
   const {
-    connectionState,
     color_1,
     color_2,
     color_3,
@@ -60,9 +59,6 @@ const SettingsPage = () => {
         <Text fw={700}>Djeeta MOD</Text>
         <Text size="sm" c="dimmed">
           GBFR Logs와 Awa Edition을 기반으로 제작되었습니다.
-        </Text>
-        <Text size="sm" c="dimmed">
-          {t(`ui.connection.${connectionState}`)}
         </Text>
       </Stack>
       <Fieldset legend={t("ui.meter-settings")}>

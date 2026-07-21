@@ -41,6 +41,7 @@ vi.mock("react-i18next", () => ({
         "ui.equipment-analysis.title": "진 특성 상한 분석",
         "ui.game-features.repeat-quest.label": "무한 퀘스트 반복",
         "ui.game-features.repeat-quest.reason.gameNotRunning": "게임이 실행 중이 아닙니다.",
+        "ui.game-features.repeat-quest.reason.accessDenied": "현재 권한으로 게임 코드를 변경할 수 없습니다.",
       })[key] ?? key,
   }),
 }));
@@ -97,12 +98,19 @@ it("changes repeat quest only through its switch", () => {
   expect(mocks.setRepeatEnabled).toHaveBeenCalledWith(true);
 });
 
-it("shows an unavailable reason below the sidebar control", () => {
+it("leaves the common game-not-running state to the header", () => {
   mocks.repeatStatus = { state: "unavailable", reason: "gameNotRunning" };
   renderLayout();
 
-  expect(screen.getByText("게임이 실행 중이 아닙니다.")).toBeTruthy();
+  expect(screen.queryByText("게임이 실행 중이 아닙니다.")).toBeNull();
   expect((screen.getByRole("switch", { name: "무한 퀘스트 반복" }) as HTMLInputElement).disabled).toBe(true);
+});
+
+it("keeps a repeat-quest-specific failure below the switch", () => {
+  mocks.repeatStatus = { state: "unavailable", reason: "accessDenied" };
+  renderLayout();
+
+  expect(screen.getByText("현재 권한으로 게임 코드를 변경할 수 없습니다.")).toBeTruthy();
 });
 
 it("keeps SettingsPage free of a duplicate repeat-quest control", () => {
