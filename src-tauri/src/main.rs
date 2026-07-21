@@ -37,6 +37,7 @@ use tokio_util::codec::FramedRead;
 mod db;
 mod equipment;
 mod equipment_probe;
+mod game_search;
 mod parser;
 mod repeat_quest;
 
