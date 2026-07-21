@@ -143,6 +143,43 @@ impl CharacterType {
     }
 }
 
+const EQUIPMENT_CHARACTER_HASHES: [u32; 30] = [
+    0x2A26_B1B2,
+    0xA4AC_BA76,
+    0x18E2_F9F9,
+    0x079D_F0CC,
+    0x4D0A_60C3,
+    0xDD7A_151E,
+    0xC861_6284,
+    0xC3FF_D418,
+    0x22E4_37E5,
+    0x2EBE_91D5,
+    0xBDEF_7181,
+    0x627B_CB0D,
+    0xFD3B_E362,
+    0xFC6C_DF7B,
+    0xE705_3919,
+    0x978E_4B18,
+    0x0D21_B430,
+    0xF0EB_77EF,
+    0xAA66_178A,
+    0xA3A3_CB2F,
+    0xF92C_7821,
+    0x718E_1A14,
+    0x2964_71BE,
+    0xBAD1_6E3B,
+    0x1BB3_7EF0,
+    0x25D4_6F4B,
+    0x9A8A_F295,
+    0x9B15_CFB1,
+    0x646C_3168,
+    0x74DD_4C79,
+];
+
+pub(crate) fn is_known_equipment_character_hash(hash: u32) -> bool {
+    EQUIPMENT_CHARACTER_HASHES.contains(&hash)
+}
+
 #[cfg(test)]
 mod tests {
     use super::CharacterType;
@@ -163,6 +200,16 @@ mod tests {
         assert_eq!(CharacterType::from_hash(0xDD7A_151E), CharacterType::Pl0500);
         assert_eq!(CharacterType::from_hash(0xE705_3919), CharacterType::Pl1400);
         assert_eq!(CharacterType::from_hash(0x9B15_CFB1), CharacterType::Pl2700);
+    }
+
+    #[test]
+    fn equipment_hash_filter_rejects_actor_and_pet_hashes() {
+        assert!(super::is_known_equipment_character_hash(0x2A26_B1B2));
+        assert!(super::is_known_equipment_character_hash(0x74DD_4C79));
+        assert!(!super::is_known_equipment_character_hash(0x26A4_848A));
+        assert!(!super::is_known_equipment_character_hash(0x2AF6_78E8));
+        assert!(!super::is_known_equipment_character_hash(0x8364_C8BC));
+        assert!(!super::is_known_equipment_character_hash(0x887A_E0B0));
     }
 }
 
