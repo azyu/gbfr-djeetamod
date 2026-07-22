@@ -121,15 +121,15 @@ struct MeterGeometry {
 }
 
 fn meter_geometry(screen_width: f64, screen_height: f64) -> MeterGeometry {
-    let scale = (screen_width / 1920.0)
-        .min(screen_height / 1080.0)
-        .clamp(0.75, 1.5);
+    let scale = (screen_width / 1920.0).min(screen_height / 1080.0);
+    let position_scale = scale.clamp(0.75, 1.5);
+    let size_scale = scale.clamp(1.0, 1.5);
 
     MeterGeometry {
-        x: 45.0 * scale,
-        y: 470.0 * scale,
-        width: 330.0 * scale,
-        height: 145.0 * scale,
+        x: 45.0 * position_scale,
+        y: 470.0 * position_scale,
+        width: 330.0 * size_scale,
+        height: 145.0 * size_scale,
     }
 }
 
@@ -1054,6 +1054,16 @@ mod tests {
                 height: 145.0,
             }
         );
+    }
+
+    #[test]
+    fn meter_geometry_does_not_shrink_below_the_four_row_design() {
+        let geometry = meter_geometry(1536.0, 864.0);
+
+        assert_eq!(geometry.x, 36.0);
+        assert_eq!(geometry.y, 376.0);
+        assert_eq!(geometry.width, 330.0);
+        assert_eq!(geometry.height, 145.0);
     }
 
     #[test]
