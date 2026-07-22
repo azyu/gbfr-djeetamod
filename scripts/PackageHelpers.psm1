@@ -113,6 +113,12 @@ function Select-ProductNsisUpdaterArtifacts {
     }
 }
 
+function ConvertTo-GitHubReleaseAssetName {
+    param([Parameter(Mandatory)][string]$Name)
+
+    return $Name.Replace(' ', '.')
+}
+
 function New-TauriUpdaterManifest {
     param(
         [Parameter(Mandatory)][string]$Version,
@@ -193,4 +199,4 @@ function Invoke-NativeCommand {
     return $output
 }
 
-Export-ModuleMember -Function Get-NodeMajorVersion, Assert-SupportedNodeVersion, Assert-GameNotRunning, Select-ProductNsisInstaller, Assert-ReleaseVersionAgreement, Assert-UpdaterSigningEnvironment, Select-ProductNsisUpdaterArtifacts, New-TauriUpdaterManifest, Set-ArtifactHashesInText, Invoke-NativeCommand
+Export-ModuleMember -Function Get-NodeMajorVersion, Assert-SupportedNodeVersion, Assert-GameNotRunning, Select-ProductNsisInstaller, Assert-ReleaseVersionAgreement, Assert-UpdaterSigningEnvironment, Select-ProductNsisUpdaterArtifacts, ConvertTo-GitHubReleaseAssetName, New-TauriUpdaterManifest, Set-ArtifactHashesInText, Invoke-NativeCommand

@@ -17,6 +17,9 @@ it("publishes only verified manually dispatched signed releases", () => {
   expect(workflow).toContain("npm.cmd run package:nsis -- -RequestedVersion");
   expect(workflow).toContain("gh release create");
   expect(workflow).toContain("--draft");
+  expect(workflow).toContain('gh api "repos/${{ github.repository }}/releases?per_page=100"');
+  expect(workflow).not.toContain("releases/tags/$tag");
+  expect(workflow).toContain("ConvertTo-GitHubReleaseAssetName");
   expect(workflow).toContain("latest.json");
   expect(workflow).toContain("gh release edit");
   expect(workflow).not.toMatch(/uses:\s+[^\s]+@(v\d+|main|master)\b/);

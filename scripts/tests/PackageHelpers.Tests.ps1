@@ -120,7 +120,8 @@ Assert-Throws {
     Select-ProductNsisUpdaterArtifacts -Artifacts @($updaterArchive, $updaterSignature) -ProductName 'Djeeta MOD' -Version '0.1.1' -BuildStartedAt $buildStartedAt
 } 'Wrong-version updater artifacts must fail.'
 
-$archiveUrl = 'https://github.com/azyu/gbfr-djeetamod/releases/download/v0.1.2/Djeeta%20MOD_0.1.2_x64-setup.nsis.zip'
+Assert-Equal (ConvertTo-GitHubReleaseAssetName -Name $updaterArchive.Name) 'Djeeta.MOD_0.1.2_x64-setup.nsis.zip' 'GitHub asset name normalization failed.'
+$archiveUrl = 'https://github.com/azyu/gbfr-djeetamod/releases/download/v0.1.2/Djeeta.MOD_0.1.2_x64-setup.nsis.zip'
 $manifest = New-TauriUpdaterManifest -Version '0.1.2' -Notes 'Release notes' -PublishedAt ([datetime]'2026-07-22T00:00:00Z') -ArchiveUrl $archiveUrl -Signature 'signed-content'
 $parsed = $manifest | ConvertFrom-Json
 Assert-Equal $parsed.version '0.1.2' 'Manifest version failed.'

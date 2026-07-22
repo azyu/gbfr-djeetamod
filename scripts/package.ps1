@@ -127,7 +127,8 @@ try {
     $updater = Select-ProductNsisUpdaterArtifacts -Artifacts $updaterArtifacts -ProductName $productName -Version $productVersion -BuildStartedAt $buildStartedAt
 
     $updaterSignature = [System.IO.File]::ReadAllText($updater.Signature.FullName)
-    $encodedArchiveName = [uri]::EscapeDataString($updater.Archive.Name)
+    $releaseArchiveName = ConvertTo-GitHubReleaseAssetName -Name $updater.Archive.Name
+    $encodedArchiveName = [uri]::EscapeDataString($releaseArchiveName)
     $archiveUrl = "https://github.com/azyu/gbfr-djeetamod/releases/download/v${productVersion}/${encodedArchiveName}"
     $latestJson = New-TauriUpdaterManifest -Version $productVersion -Notes $releaseNotes -PublishedAt ([datetime]::UtcNow) -ArchiveUrl $archiveUrl -Signature $updaterSignature
     $latestJsonPath = Join-Path $repositoryRoot 'target\release\latest.json'
