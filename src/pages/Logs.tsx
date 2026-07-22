@@ -1,3 +1,4 @@
+import { UpdaterDialog } from "@/components/UpdaterDialog";
 import { useMeterSettingsStore } from "@/stores/useMeterSettingsStore";
 import "./Logs.css";
 
@@ -164,6 +165,7 @@ const LayoutContent = () => {
           },
         }}
       />
+      <UpdaterDialog />
     </div>
   );
 };

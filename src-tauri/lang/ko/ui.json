@@ -39,6 +39,23 @@
         }
       }
     },
+    "updater": {
+      "title": "업데이트",
+      "current": "현재 버전 v{{version}}",
+      "check": "업데이트 확인",
+      "checking": "업데이트를 확인하는 중입니다.",
+      "up-to-date": "최신 버전을 사용 중입니다.",
+      "available": "새 버전 v{{version}}을 사용할 수 있습니다.",
+      "notes": "릴리스 노트",
+      "later": "나중에",
+      "install": "업데이트",
+      "preparing": "업데이트를 준비하는 중입니다.",
+      "installing": "업데이트를 설치하는 중입니다.",
+      "check-failed": "업데이트를 확인하지 못했습니다.",
+      "game-running": "게임을 종료한 후 다시 업데이트해 주세요.",
+      "repeat-quest-restore-failed": "무한 퀘스트 반복 설정을 복구하지 못해 업데이트를 중단했습니다.",
+      "install-failed": "업데이트를 설치하지 못했습니다."
+    },
     "equipment-analysis": {
       "title": "진 특성 상한 분석",
       "scope": "현재는 장착 진 12개의 주·보조 특성만 합산합니다. 무기·가호석·소환석·마스터 특성은 아직 포함되지 않습니다.",

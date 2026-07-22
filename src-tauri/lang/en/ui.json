@@ -39,6 +39,23 @@
         }
       }
     },
+    "updater": {
+      "title": "Updates",
+      "current": "Current version v{{version}}",
+      "check": "Check for updates",
+      "checking": "Checking for updates.",
+      "up-to-date": "You are using the latest version.",
+      "available": "Version v{{version}} is available.",
+      "notes": "Release notes",
+      "later": "Later",
+      "install": "Update",
+      "preparing": "Preparing the update.",
+      "installing": "Installing the update.",
+      "check-failed": "Could not check for updates.",
+      "game-running": "Close the game and try the update again.",
+      "repeat-quest-restore-failed": "The update was stopped because Unlimited Repeat Quest could not be restored.",
+      "install-failed": "Could not install the update."
+    },
     "equipment-analysis": {
       "title": "Sigil Trait Cap Analysis",
       "scope": "Currently, only primary and secondary traits from the 12 equipped sigils are totaled. Weapon and wrightstone, summons, and master traits are not included yet.",

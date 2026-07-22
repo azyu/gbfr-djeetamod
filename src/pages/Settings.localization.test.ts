@@ -74,6 +74,42 @@ const expectedKoreanGameFeatures = {
   },
 };
 
+const expectedEnglishUpdater = {
+  title: "Updates",
+  current: "Current version v{{version}}",
+  check: "Check for updates",
+  checking: "Checking for updates.",
+  "up-to-date": "You are using the latest version.",
+  available: "Version v{{version}} is available.",
+  notes: "Release notes",
+  later: "Later",
+  install: "Update",
+  preparing: "Preparing the update.",
+  installing: "Installing the update.",
+  "check-failed": "Could not check for updates.",
+  "game-running": "Close the game and try the update again.",
+  "repeat-quest-restore-failed": "The update was stopped because Unlimited Repeat Quest could not be restored.",
+  "install-failed": "Could not install the update.",
+};
+
+const expectedKoreanUpdater = {
+  title: "업데이트",
+  current: "현재 버전 v{{version}}",
+  check: "업데이트 확인",
+  checking: "업데이트를 확인하는 중입니다.",
+  "up-to-date": "최신 버전을 사용 중입니다.",
+  available: "새 버전 v{{version}}을 사용할 수 있습니다.",
+  notes: "릴리스 노트",
+  later: "나중에",
+  install: "업데이트",
+  preparing: "업데이트를 준비하는 중입니다.",
+  installing: "업데이트를 설치하는 중입니다.",
+  "check-failed": "업데이트를 확인하지 못했습니다.",
+  "game-running": "게임을 종료한 후 다시 업데이트해 주세요.",
+  "repeat-quest-restore-failed": "무한 퀘스트 반복 설정을 복구하지 못해 업데이트를 중단했습니다.",
+  "install-failed": "업데이트를 설치하지 못했습니다.",
+};
+
 const expectedEnglishColumns = {
   name: "Name",
   dps: "DPS",
@@ -155,6 +191,8 @@ describe("Korean settings localization", () => {
     expect(korean["meter-columns"]).toEqual(expectedKoreanColumns);
     expect(english["game-features"]).toMatchObject(expectedEnglishGameFeatures);
     expect(korean["game-features"]).toMatchObject(expectedKoreanGameFeatures);
+    expect(english["updater"]).toEqual(expectedEnglishUpdater);
+    expect(korean["updater"]).toEqual(expectedKoreanUpdater);
   });
 
   it("uses translation keys instead of hardcoded settings labels", () => {
@@ -166,7 +204,9 @@ describe("Korean settings localization", () => {
     }
     expect(source).toContain("t(`ui.meter-columns.${item}`)");
     expect(source).toContain("t(`ui.meter-columns.${item}-description`)");
+    expect(source).toContain("<UpdaterSettings />");
     expect(layoutSource).toContain('t("ui.game-features.repeat-quest.label")');
+    expect(layoutSource).toContain("<UpdaterDialog />");
   });
 
   it("keeps the approved meter abbreviations in both languages", () => {

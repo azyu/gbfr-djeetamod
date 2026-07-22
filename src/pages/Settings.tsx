@@ -1,3 +1,4 @@
+import { UpdaterSettings } from "@/components/UpdaterSettings";
 import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
 import {
   ActionIcon,
@@ -196,6 +197,9 @@ const SettingsPage = () => {
           </DragDropContext>
         </Stack>
       </Fieldset>
+      <Box mt="md">
+        <UpdaterSettings />
+      </Box>
     </Box>
   );
 };
