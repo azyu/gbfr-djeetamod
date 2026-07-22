@@ -10,6 +10,10 @@ it("publishes only verified manually dispatched signed releases", () => {
   expect(workflow).toContain("environment: production");
   expect(workflow).toContain("TAURI_PRIVATE_KEY");
   expect(workflow).toContain("TAURI_KEY_PASSWORD");
+  expect(workflow).toContain("git tag --list $tag");
+  expect(workflow).toContain("gh release list --limit 1000 --json tagName");
+  expect(workflow).not.toContain('git rev-parse "refs/tags/$tag"');
+  expect(workflow).not.toContain("gh release view $tag");
   expect(workflow).toContain("npm.cmd run package:nsis -- -RequestedVersion");
   expect(workflow).toContain("gh release create");
   expect(workflow).toContain("--draft");
