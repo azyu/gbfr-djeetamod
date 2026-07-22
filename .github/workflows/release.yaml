@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact project version without the v prefix
+        required: true
+        type: string
+      publish:
+        description: Publish after verification instead of leaving a draft
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: djeeta-mod-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    environment: production
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+      TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Build, tag, and create draft
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ inputs.version }}'
+          $tag = "v$version"
+
+          git rev-parse "refs/tags/$tag" 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "Tag already exists: $tag" }
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "Release already exists: $tag" }
+
+          $releaseNotesPath = Join-Path $env:RUNNER_TEMP 'djeeta-release-notes.md'
+          gh api --method POST "repos/${{ github.repository }}/releases/generate-notes" -f tag_name=$tag -f target_commitish=main --jq .body | Set-Content -LiteralPath $releaseNotesPath -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw 'Could not generate release notes.' }
+
+          npm.cmd run package:nsis -- -RequestedVersion $version -ReleaseNotesPath $releaseNotesPath
+          if ($LASTEXITCODE -ne 0) { throw 'Signed release packaging failed.' }
+
+          $expectedChanges = @('README.md', 'docs/testing/game-2.0.2-smoke-test.md')
+          $actualChanges = @(git diff --name-only)
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect generated document changes.' }
+          $difference = @(Compare-Object -ReferenceObject $expectedChanges -DifferenceObject $actualChanges)
+          if ($difference.Count -ne 0) {
+            throw "Packaging changed unexpected files: $($actualChanges -join ', ')"
+          }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- README.md docs/testing/game-2.0.2-smoke-test.md
+          git commit -m "chore: record $tag release hashes"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not commit release hashes.' }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw 'Could not push the release hash commit.' }
+
+          git tag -a $tag -m "Djeeta MOD $tag"
+          if ($LASTEXITCODE -ne 0) { throw "Could not create tag $tag." }
+          git push origin $tag
+          if ($LASTEXITCODE -ne 0) { throw "Could not push tag $tag." }
+
+          $summary = Get-Content -Raw -LiteralPath 'target/release/package-summary.json' | ConvertFrom-Json
+          gh release create $tag --draft --verify-tag --generate-notes --title "Djeeta MOD $tag"
+          if ($LASTEXITCODE -ne 0) { throw "Could not create draft release $tag." }
+          gh release upload $tag $summary.InstallerPath $summary.UpdaterArchivePath $summary.UpdaterSignaturePath $summary.LatestJsonPath
+          if ($LASTEXITCODE -ne 0) { throw "Could not upload release assets for $tag." }
+
+          $release = gh api "repos/${{ github.repository }}/releases/tags/$tag" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "Could not inspect draft release $tag." }
+          if (-not $release.draft) { throw 'The release was published before verification.' }
+
+          $localAssets = [ordered]@{
+            ([IO.Path]::GetFileName($summary.InstallerPath)) = $summary.InstallerPath
+            ([IO.Path]::GetFileName($summary.UpdaterArchivePath)) = $summary.UpdaterArchivePath
+            ([IO.Path]::GetFileName($summary.UpdaterSignaturePath)) = $summary.UpdaterSignaturePath
+            'latest.json' = $summary.LatestJsonPath
+          }
+          $remoteNames = @($release.assets | ForEach-Object { $_.name })
+          $assetDifference = @(Compare-Object -ReferenceObject @($localAssets.Keys) -DifferenceObject $remoteNames)
+          if ($release.assets.Count -ne 4 -or $assetDifference.Count -ne 0) {
+            throw "Release assets do not match the required four files: $($remoteNames -join ', ')"
+          }
+
+          foreach ($asset in $release.assets) {
+            if ($asset.digest -and $asset.digest -match '^sha256:(.+)$') {
+              $localDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $localAssets[$asset.name]).Hash
+              if ($Matches[1].ToUpperInvariant() -ne $localDigest.ToUpperInvariant()) {
+                throw "Remote digest mismatch for $($asset.name)."
+              }
+            }
+          }
+
+          $downloadDirectory = Join-Path $env:RUNNER_TEMP 'djeeta-release-verification'
+          New-Item -ItemType Directory -Path $downloadDirectory | Out-Null
+          gh release download $tag --pattern latest.json --dir $downloadDirectory
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download remote latest.json.' }
+          $remoteManifest = Get-Content -Raw -LiteralPath (Join-Path $downloadDirectory 'latest.json') | ConvertFrom-Json
+          $localManifest = Get-Content -Raw -LiteralPath $summary.LatestJsonPath | ConvertFrom-Json
+          $localSignature = [IO.File]::ReadAllText($summary.UpdaterSignaturePath).Trim()
+          $remotePlatform = $remoteManifest.platforms.'windows-x86_64'
+          $localPlatform = $localManifest.platforms.'windows-x86_64'
+          if ($remotePlatform.url -ne $localPlatform.url -or $remotePlatform.signature -ne $localSignature) {
+            throw 'Remote updater manifest does not match the local archive URL and signature.'
+          }
+
+          if ('${{ inputs.publish }}' -eq 'true') {
+            gh release edit $tag --draft=false --latest
+            if ($LASTEXITCODE -ne 0) { throw "Could not publish release $tag." }
+          }
