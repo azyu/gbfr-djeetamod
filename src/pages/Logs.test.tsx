@@ -10,6 +10,7 @@ import Layout from "./Logs";
 
 const mocks = vi.hoisted(() => ({
   connectionState: "searching" as ConnectionState,
+  checkUpdate: vi.fn(),
   meterEnabled: true,
   setMeterEnabled: vi.fn(),
   invoke: vi.fn(),
@@ -33,6 +34,15 @@ vi.mock("./useMeterVisibility", () => ({
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => vi.fn()),
+}));
+
+vi.mock("@tauri-apps/api/app", () => ({
+  getVersion: vi.fn(async () => "9.8.7"),
+}));
+
+vi.mock("@tauri-apps/api/updater", () => ({
+  checkUpdate: mocks.checkUpdate,
+  installUpdate: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/tauri", () => ({
@@ -61,6 +71,8 @@ vi.mock("react-i18next", () => ({
 beforeEach(() => {
   mocks.connectionState = "searching";
   mocks.meterEnabled = true;
+  mocks.checkUpdate.mockReset();
+  mocks.checkUpdate.mockResolvedValue({ shouldUpdate: false });
   mocks.setMeterEnabled.mockReset();
   mocks.setMeterEnabled.mockResolvedValue(undefined);
   mocks.invoke.mockReset();
@@ -104,6 +116,12 @@ it("shows the management navigation with an enabled meter switch", () => {
   expect(screen.getByText("전투 기록")).toBeTruthy();
   expect(screen.getByText("설정")).toBeTruthy();
   expect((screen.getByRole("switch", { name: "데미지 미터" }) as HTMLInputElement).checked).toBe(true);
+});
+
+it("starts one non-blocking update check for the management window", async () => {
+  renderLayout();
+
+  await waitFor(() => expect(mocks.checkUpdate).toHaveBeenCalledTimes(1));
 });
 
 it("toggles once from either the row or the switch", () => {

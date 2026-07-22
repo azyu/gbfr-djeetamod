@@ -35,6 +35,15 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => vi.fn()),
 }));
 
+vi.mock("@tauri-apps/api/app", () => ({
+  getVersion: vi.fn(async () => "9.8.7"),
+}));
+
+vi.mock("@tauri-apps/api/updater", () => ({
+  checkUpdate: vi.fn(async () => ({ shouldUpdate: false })),
+  installUpdate: vi.fn(),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) =>

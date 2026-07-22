@@ -14,8 +14,9 @@ import { Link, Outlet, useNavigate } from "react-router-dom";
 import useConnectionState from "./useConnectionState";
 import useMeterVisibility from "./useMeterVisibility";
 import useRepeatQuest from "./useRepeatQuest";
+import { UpdaterProvider } from "./useUpdater";
 
-const Layout = () => {
+const LayoutContent = () => {
   const { t } = useTranslation();
   const { version } = getVersion();
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
@@ -166,5 +167,11 @@ const Layout = () => {
     </div>
   );
 };
+
+const Layout = () => (
+  <UpdaterProvider>
+    <LayoutContent />
+  </UpdaterProvider>
+);
 
 export default Layout;
