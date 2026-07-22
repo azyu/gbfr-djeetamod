@@ -1,3 +1,8 @@
+param(
+    [string]$RequestedVersion,
+    [string]$ReleaseNotesPath
+)
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
@@ -14,6 +19,7 @@ try {
 
     $requiredPaths = @(
         'package.json',
+        'src-tauri\Cargo.toml',
         'src-tauri\tauri.conf.json',
         'README.md',
         'docs\testing\game-2.0.2-smoke-test.md'
@@ -22,6 +28,37 @@ try {
         if (-not (Test-Path -LiteralPath $path)) {
             throw "Required packaging input is missing: $path"
         }
+    }
+
+    $packageJson = Get-Content -Raw -LiteralPath 'package.json' | ConvertFrom-Json
+    $tauriConfig = Get-Content -Raw -LiteralPath 'src-tauri\tauri.conf.json' | ConvertFrom-Json
+    $cargoManifest = Get-Content -Raw -LiteralPath 'src-tauri\Cargo.toml'
+    $cargoPackageSection = [regex]::Match($cargoManifest, '(?ms)^\[package\]\s*(.*?)(?=^\[|\z)')
+    $cargoVersionMatch = [regex]::Match($cargoPackageSection.Groups[1].Value, '(?m)^version\s*=\s*"([^"]+)"\s*$')
+    if (-not $cargoPackageSection.Success -or -not $cargoVersionMatch.Success) {
+        throw 'Could not read the package version from src-tauri\Cargo.toml.'
+    }
+
+    $effectiveRequestedVersion = $RequestedVersion
+    if ([string]::IsNullOrWhiteSpace($effectiveRequestedVersion)) {
+        $effectiveRequestedVersion = [string]$packageJson.version
+    }
+    $productVersion = Assert-ReleaseVersionAgreement `
+        -RequestedVersion $effectiveRequestedVersion `
+        -PackageVersion ([string]$packageJson.version) `
+        -CargoVersion $cargoVersionMatch.Groups[1].Value `
+        -TauriVersion ([string]$tauriConfig.package.version)
+    Assert-UpdaterSigningEnvironment -Values @{
+        TAURI_PRIVATE_KEY = $env:TAURI_PRIVATE_KEY
+        TAURI_KEY_PASSWORD = $env:TAURI_KEY_PASSWORD
+    }
+
+    $releaseNotes = ''
+    if (-not [string]::IsNullOrWhiteSpace($ReleaseNotesPath)) {
+        if (-not (Test-Path -LiteralPath $ReleaseNotesPath -PathType Leaf)) {
+            throw "Release notes file is missing: $ReleaseNotesPath"
+        }
+        $releaseNotes = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $ReleaseNotesPath).Path)
     }
 
     $gameProcesses = @(Get-Process -Name 'granblue_fantasy_relink' -ErrorAction SilentlyContinue)
@@ -69,9 +106,7 @@ try {
     }
     Copy-Item -LiteralPath $releaseHookPath -Destination $bundledHookPath -Force
 
-    $tauriConfig = Get-Content -Raw -LiteralPath 'src-tauri\tauri.conf.json' | ConvertFrom-Json
     $productName = $tauriConfig.package.productName
-    $productVersion = $tauriConfig.package.version
     $buildStartedAt = [datetime]::UtcNow
     Invoke-NativeCommand -FilePath $npmPath -Arguments @(
         'run',
@@ -80,6 +115,7 @@ try {
         'build',
         '--bundles',
         'nsis',
+        'updater',
         '--',
         '--bin',
         'gbfr-logs'
@@ -87,6 +123,15 @@ try {
 
     $installerArtifacts = @(Get-ChildItem -LiteralPath 'target\release\bundle\nsis' -Filter '*.exe')
     $installer = Select-ProductNsisInstaller -Artifacts $installerArtifacts -ProductName $productName -Version $productVersion -BuildStartedAt $buildStartedAt
+    $updaterArtifacts = @(Get-ChildItem -LiteralPath 'target\release\bundle\nsis' -Filter '*.nsis.zip*')
+    $updater = Select-ProductNsisUpdaterArtifacts -Artifacts $updaterArtifacts -ProductName $productName -Version $productVersion -BuildStartedAt $buildStartedAt
+
+    $updaterSignature = [System.IO.File]::ReadAllText($updater.Signature.FullName)
+    $encodedArchiveName = [uri]::EscapeDataString($updater.Archive.Name)
+    $archiveUrl = "https://github.com/azyu/gbfr-djeetamod/releases/download/v${productVersion}/${encodedArchiveName}"
+    $latestJson = New-TauriUpdaterManifest -Version $productVersion -Notes $releaseNotes -PublishedAt ([datetime]::UtcNow) -ArchiveUrl $archiveUrl -Signature $updaterSignature
+    $latestJsonPath = Join-Path $repositoryRoot 'target\release\latest.json'
+    [System.IO.File]::WriteAllText($latestJsonPath, $latestJson, $utf8WithoutBom)
 
     $releaseHookHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $releaseHookPath).Hash
     $bundledHookHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $bundledHookPath).Hash
@@ -94,6 +139,21 @@ try {
         throw 'Release and bundled hook.dll hashes differ.'
     }
     $installerHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName).Hash
+    $updaterArchiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $updater.Archive.FullName).Hash
+
+    $packageSummaryPath = Join-Path $repositoryRoot 'target\release\package-summary.json'
+    $packageSummary = [ordered]@{
+        Version = $productVersion
+        InstallerPath = $installer.FullName
+        InstallerSHA256 = $installerHash
+        HookPath = $releaseHookPath
+        HookSHA256 = $releaseHookHash
+        UpdaterArchivePath = $updater.Archive.FullName
+        UpdaterArchiveSHA256 = $updaterArchiveHash
+        UpdaterSignaturePath = $updater.Signature.FullName
+        LatestJsonPath = $latestJsonPath
+    } | ConvertTo-Json -Depth 3
+    [System.IO.File]::WriteAllText($packageSummaryPath, $packageSummary, $utf8WithoutBom)
 
     $updatedDocuments = @{}
     foreach ($documentPath in @('README.md', 'docs\testing\game-2.0.2-smoke-test.md')) {
@@ -114,6 +174,11 @@ try {
         InstallerPath = $installer.FullName
         InstallerSHA256 = $installerHash
         HookSHA256 = $releaseHookHash
+        UpdaterArchivePath = $updater.Archive.FullName
+        UpdaterArchiveSHA256 = $updaterArchiveHash
+        UpdaterSignaturePath = $updater.Signature.FullName
+        LatestJsonPath = $latestJsonPath
+        PackageSummaryPath = $packageSummaryPath
         HookHashesEqual = $true
         UpdatedDocuments = @($updatedDocuments.Keys)
     } | Format-List

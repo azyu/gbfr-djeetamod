@@ -76,7 +76,12 @@ it("exposes only the verified NSIS packaging command", () => {
   expect(packageJson.scripts).not.toHaveProperty("package:msi");
   expect(packagingScript).toContain("'target\\release\\bundle\\nsis'");
   expect(packagingScript).toMatch(/'build',\s*'--bundles',\s*'nsis'/);
+  expect(packagingScript).toMatch(/'build',\s*'--bundles',\s*'nsis',\s*'updater'/);
   expect(packagingScript).not.toMatch(/'build',\s*'--bundles',\s*'msi'/);
+  expect(packagingScript).toContain("Assert-UpdaterSigningEnvironment");
+  expect(packagingScript).toContain("Select-ProductNsisUpdaterArtifacts");
+  expect(packagingScript).toContain("New-TauriUpdaterManifest");
+  expect(packagingScript).toContain("package-summary.json");
 });
 
 test("external equipment probe requests read-only process access", () => {
