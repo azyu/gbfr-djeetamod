@@ -680,6 +680,10 @@ impl RepeatQuestState {
         }
     }
 
+    pub(crate) fn restore_for_update(&self) -> RepeatQuestStatus {
+        self.set_enabled(false)
+    }
+
     pub(crate) fn restore_on_exit(&self) {
         if !self.0.may_be_patched.load(Ordering::Acquire)
             || self.0.cleanup_started.swap(true, Ordering::AcqRel)
@@ -1320,6 +1324,25 @@ mod tests {
 
         assert_eq!(backend.enable_calls.load(Ordering::Acquire), 1);
         assert_eq!(backend.restore_calls(), 1);
+    }
+
+    #[test]
+    fn update_restoration_does_not_disable_later_exit_cleanup() {
+        let backend = Arc::new(FakeBackend::patched());
+        let state = super::RepeatQuestState::with_backend(backend.clone());
+
+        assert_eq!(
+            state.restore_for_update().state,
+            super::RepeatQuestStatusKind::Off
+        );
+        assert_eq!(
+            state.set_enabled(true).state,
+            super::RepeatQuestStatusKind::On
+        );
+        state.restore_on_exit();
+
+        assert_eq!(backend.enable_calls.load(Ordering::Acquire), 1);
+        assert_eq!(backend.restore_calls(), 2);
     }
 
     #[test]

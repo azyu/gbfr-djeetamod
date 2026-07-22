@@ -48,6 +48,7 @@ mod equipment_probe;
 mod game_search;
 mod parser;
 mod repeat_quest;
+mod update_install;
 
 struct ClickThrough(AtomicBool);
 struct DebugMode(AtomicBool);
@@ -1003,6 +1004,7 @@ fn main() {
             equipment_probe::inventory::capture_inventory_probe,
             repeat_quest::get_repeat_quest_status,
             repeat_quest::set_repeat_quest_enabled,
+            update_install::prepare_update_install,
         ])
         .setup(|app| {
             app.state::<repeat_quest::RepeatQuestState>()
