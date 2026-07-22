@@ -1,6 +1,7 @@
 import { useMeterSettingsStore } from "@/stores/useMeterSettingsStore";
 import "./Logs.css";
 
+import getVersion from "@/hooks/getVersion";
 import { AppShell, Burger, Button, Group, NavLink, ScrollArea, Switch, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { ChartBar, Gauge, Gear, House } from "@phosphor-icons/react";
@@ -16,6 +17,7 @@ import useRepeatQuest from "./useRepeatQuest";
 
 const Layout = () => {
   const { t } = useTranslation();
+  const { version } = getVersion();
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const { open_log_on_save } = useMeterSettingsStore((state) => ({ open_log_on_save: state.open_log_on_save }));
@@ -70,7 +72,7 @@ const Layout = () => {
             <Group gap="sm" wrap="nowrap">
               <Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" />
               <Burger opened={desktopOpened} onClick={toggleDesktop} visibleFrom="sm" size="sm" />
-              <Text>Djeeta MOD</Text>
+              <Text>Djeeta MOD (v{version})</Text>
             </Group>
             <Group gap="xs" wrap="nowrap" justify="flex-end">
               <Text size="sm" ta="right" truncate>

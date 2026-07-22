@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   meterEnabled: true,
   setMeterEnabled: vi.fn(),
   invoke: vi.fn(),
+  version: "9.8.7",
+}));
+
+vi.mock("@/hooks/getVersion", () => ({
+  default: () => ({ version: mocks.version }),
 }));
 
 vi.mock("./useConnectionState", () => ({
@@ -132,7 +137,7 @@ it.each([
   renderLayout();
 
   const header = screen.getByRole("banner");
-  expect(within(header).getByText("Djeeta MOD")).toBeTruthy();
+  expect(within(header).getByText("Djeeta MOD (v9.8.7)")).toBeTruthy();
   expect(within(header).getByText(label)).toBeTruthy();
 });
 

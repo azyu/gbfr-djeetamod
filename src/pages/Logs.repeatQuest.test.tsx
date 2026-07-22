@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("@/hooks/getVersion", () => ({
+  default: () => ({ version: "9.8.7" }),
+}));
+
 vi.mock("./useMeterVisibility", () => ({
   default: () => ({ meterEnabled: true, setMeterEnabled: vi.fn() }),
 }));
