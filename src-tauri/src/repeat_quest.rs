@@ -36,6 +36,7 @@ const GETTER_PREFIX: &[u8] = &[
 ];
 const GETTER_SUFFIX: &[u8] = &[0x0F, 0xB6, 0x01, 0x48, 0x83, 0xC4, 0x20];
 const SIGNATURE_WILDCARD_BYTES: usize = 4;
+const PATCH_INSTRUCTION_BYTES: usize = 3;
 const RESET_PATCH_OFFSET: usize = 0x28;
 const GETTER_PATCH_OFFSET: usize = 0x12;
 const RESET_ORIGINAL: [u8; 3] = [0x45, 0x31, 0xC0];
@@ -757,17 +758,29 @@ fn unique_signature_offset(
     site: PatchSiteName,
     prefix: &[u8],
     suffix: &[u8],
+    patch_offset: usize,
 ) -> Result<usize, RepeatQuestError> {
     let signature_len = prefix
         .len()
         .checked_add(SIGNATURE_WILDCARD_BYTES)
         .and_then(|len| len.checked_add(suffix.len()))
         .ok_or(RepeatQuestError::AddressOverflow)?;
+    let patch_end = patch_offset
+        .checked_add(PATCH_INSTRUCTION_BYTES)
+        .ok_or(RepeatQuestError::AddressOverflow)?;
+    if patch_end > signature_len {
+        return Err(RepeatQuestError::AddressOverflow);
+    }
+    let suffix_offset = prefix.len() + SIGNATURE_WILDCARD_BYTES;
     let mut found = None;
     let mut count = 0;
     for (offset, window) in text.windows(signature_len).enumerate() {
         if window.get(..prefix.len()) == Some(prefix)
-            && window.get(prefix.len() + SIGNATURE_WILDCARD_BYTES..) == Some(suffix)
+            && suffix.iter().enumerate().all(|(index, expected)| {
+                let window_index = suffix_offset + index;
+                (patch_offset..patch_end).contains(&window_index)
+                    || window[window_index] == *expected
+            })
         {
             found = Some(offset);
             count += 1;
@@ -781,13 +794,24 @@ fn unique_signature_offset(
 }
 
 fn find_patch_offsets(text: &[u8]) -> Result<PatchOffsets, RepeatQuestError> {
-    let reset = unique_signature_offset(text, PatchSiteName::Reset, RESET_PREFIX, RESET_SUFFIX)?
-        .checked_add(RESET_PATCH_OFFSET)
-        .ok_or(RepeatQuestError::AddressOverflow)?;
-    let getter =
-        unique_signature_offset(text, PatchSiteName::Getter, GETTER_PREFIX, GETTER_SUFFIX)?
-            .checked_add(GETTER_PATCH_OFFSET)
-            .ok_or(RepeatQuestError::AddressOverflow)?;
+    let reset = unique_signature_offset(
+        text,
+        PatchSiteName::Reset,
+        RESET_PREFIX,
+        RESET_SUFFIX,
+        RESET_PATCH_OFFSET,
+    )?
+    .checked_add(RESET_PATCH_OFFSET)
+    .ok_or(RepeatQuestError::AddressOverflow)?;
+    let getter = unique_signature_offset(
+        text,
+        PatchSiteName::Getter,
+        GETTER_PREFIX,
+        GETTER_SUFFIX,
+        GETTER_PATCH_OFFSET,
+    )?
+    .checked_add(GETTER_PATCH_OFFSET)
+    .ok_or(RepeatQuestError::AddressOverflow)?;
     Ok(PatchOffsets { reset, getter })
 }
 
@@ -953,6 +977,92 @@ mod tests {
                 reset: 0x128,
                 getter: 0x212,
             }
+        );
+    }
+
+    #[test]
+    fn rediscovers_and_restores_sites_after_enable_changes_the_target_instructions() {
+        let mut text = signature_fixture();
+        text[0x128..0x12b].copy_from_slice(&super::RESET_PATCHED);
+        text[0x212..0x215].copy_from_slice(&super::GETTER_PATCHED);
+
+        let offsets = super::find_patch_offsets(&text).unwrap();
+        assert_eq!(
+            offsets,
+            super::PatchOffsets {
+                reset: 0x128,
+                getter: 0x212,
+            }
+        );
+
+        let sites = super::PatchSites {
+            reset: offsets.reset,
+            getter: offsets.getter,
+        };
+        let mut memory = FakePatchMemory::original(sites);
+        memory.set(sites.reset, super::RESET_PATCHED);
+        memory.set(sites.getter, super::GETTER_PATCHED);
+
+        assert_eq!(
+            super::restore_patch(&mut memory, sites).unwrap(),
+            super::ObservedPatchState::Off
+        );
+        assert_eq!(memory.bytes_at(sites.reset), super::RESET_ORIGINAL);
+        assert_eq!(memory.bytes_at(sites.getter), super::GETTER_ORIGINAL);
+    }
+
+    #[test]
+    fn discovers_unknown_target_bytes_but_never_overwrites_them() {
+        let mut text = signature_fixture();
+        text[0x128..0x12b].copy_from_slice(&super::RESET_PATCHED);
+        text[0x212..0x215].copy_from_slice(&[0x90; 3]);
+        let offsets = super::find_patch_offsets(&text).unwrap();
+        let sites = super::PatchSites {
+            reset: offsets.reset,
+            getter: offsets.getter,
+        };
+        let mut memory = FakePatchMemory::original(sites);
+        memory.set(sites.reset, super::RESET_PATCHED);
+        memory.set(sites.getter, [0x90; 3]);
+
+        assert_eq!(
+            super::restore_patch(&mut memory, sites),
+            Err(super::RepeatQuestError::UnexpectedBytes)
+        );
+        assert!(memory.writes.is_empty());
+        assert_eq!(memory.bytes_at(sites.reset), super::RESET_PATCHED);
+    }
+
+    #[test]
+    fn does_not_wildcard_bytes_adjacent_to_patch_targets() {
+        let mut before_reset = signature_fixture();
+        before_reset[0x127] = 0x90;
+        assert_eq!(
+            super::find_patch_offsets(&before_reset),
+            Err(super::RepeatQuestError::SignatureCount {
+                site: super::PatchSiteName::Reset,
+                count: 0,
+            })
+        );
+
+        let mut after_reset = signature_fixture();
+        after_reset[0x12b] = 0x90;
+        assert_eq!(
+            super::find_patch_offsets(&after_reset),
+            Err(super::RepeatQuestError::SignatureCount {
+                site: super::PatchSiteName::Reset,
+                count: 0,
+            })
+        );
+
+        let mut after_getter = signature_fixture();
+        after_getter[0x215] = 0x90;
+        assert_eq!(
+            super::find_patch_offsets(&after_getter),
+            Err(super::RepeatQuestError::SignatureCount {
+                site: super::PatchSiteName::Getter,
+                count: 0,
+            })
         );
     }
 
