@@ -87,9 +87,16 @@ jobs:
           gh release upload $tag $summary.InstallerPath $summary.UpdaterArchivePath $summary.UpdaterSignaturePath $summary.LatestJsonPath
           if ($LASTEXITCODE -ne 0) { throw "Could not upload release assets for $tag." }
 
-          $releaseList = @(gh api "repos/${{ github.repository }}/releases?per_page=100" | ConvertFrom-Json)
-          if ($LASTEXITCODE -ne 0) { throw "Could not inspect draft release $tag." }
-          $matchingReleases = @($releaseList | Where-Object { $_.tag_name -eq $tag })
+          $matchingReleases = @()
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            $releaseListJson = gh api "repos/${{ github.repository }}/releases?per_page=100"
+            if ($LASTEXITCODE -ne 0) { throw "Could not inspect draft release $tag." }
+            $releaseList = $releaseListJson | ConvertFrom-Json
+            $matchingReleases = @($releaseList | Where-Object { $_.tag_name -eq $tag })
+            if ($matchingReleases.Count -eq 1) { break }
+            if ($matchingReleases.Count -gt 1) { break }
+            if ($attempt -lt 5) { Start-Sleep -Seconds 2 }
+          }
           if ($matchingReleases.Count -ne 1) { throw "Expected exactly one draft release for $tag; found $($matchingReleases.Count)." }
           $release = $matchingReleases[0]
           if (-not $release.draft) { throw 'The release was published before verification.' }

@@ -19,6 +19,8 @@ it("publishes only verified manually dispatched signed releases", () => {
   expect(workflow).toContain("--draft");
   expect(workflow).toContain('gh api "repos/${{ github.repository }}/releases?per_page=100"');
   expect(workflow).not.toContain("releases/tags/$tag");
+  expect(workflow).toContain("for ($attempt = 1; $attempt -le 5; $attempt++)");
+  expect(workflow).toContain("Start-Sleep -Seconds 2");
   expect(workflow).toContain("ConvertTo-GitHubReleaseAssetName");
   expect(workflow).toContain("latest.json");
   expect(workflow).toContain("gh release edit");
