@@ -664,11 +664,11 @@ mod tests {
     #[test]
     fn bundled_2_0_2_catalogs_cover_every_verified_localized_trait() {
         let caps: TraitCapCatalog =
-            serde_json::from_str(include_str!("../../assets/trait-caps.json")).unwrap();
+            serde_json::from_str(include_str!("../assets/trait-caps.json")).unwrap();
         let ko: TraitNameCatalog =
-            serde_json::from_str(include_str!("../../lang/ko/traits.json")).unwrap();
+            serde_json::from_str(include_str!("../lang/ko/traits.json")).unwrap();
         let en: TraitNameCatalog =
-            serde_json::from_str(include_str!("../../lang/en/traits.json")).unwrap();
+            serde_json::from_str(include_str!("../lang/en/traits.json")).unwrap();
 
         assert_eq!(caps.records.len(), 261);
         assert_eq!(ko.len(), 170);
@@ -692,9 +692,9 @@ mod tests {
     #[test]
     fn bundled_2_0_2_catalog_contains_endless_ragnarok_trait() {
         let ko: TraitNameCatalog =
-            serde_json::from_str(include_str!("../../lang/ko/traits.json")).unwrap();
+            serde_json::from_str(include_str!("../lang/ko/traits.json")).unwrap();
         let en: TraitNameCatalog =
-            serde_json::from_str(include_str!("../../lang/en/traits.json")).unwrap();
+            serde_json::from_str(include_str!("../lang/en/traits.json")).unwrap();
         let hash = format!("{:08x}", custom_xxhash32(b"SKILL_173_01"));
 
         assert_eq!(ko[&hash].key, "SKILL_173_01");

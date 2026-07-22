@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [[example]]
 name = "build_trait_caps"
-path = "src/bin/build_trait_caps.rs"
+path = "examples/build_trait_caps.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
