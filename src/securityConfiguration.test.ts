@@ -37,6 +37,33 @@ it("packages only a current-user NSIS installer", () => {
   expect(config.tauri.bundle.windows.nsis?.installMode).toBe("currentUser");
 });
 
+it("enables only the signed stable GitHub updater", () => {
+  const config = JSON.parse(readRepositoryFile("src-tauri/tauri.conf.json")) as {
+    tauri: {
+      updater: {
+        active: boolean;
+        dialog: boolean;
+        pubkey: string;
+        endpoints: string[];
+        windows: { installMode: string };
+      };
+    };
+  };
+  const cargo = readRepositoryFile("src-tauri/Cargo.toml");
+  const inheritedUpstreamKey =
+    "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERDQjZEMTgxOEY4OTIwNDcKUldSSElJbVBnZEcyM1BSUklxWWRsWStXYnVsWU1mODY3YzZCWCtTZzJrUGJsZHpNY1h1S3hhc2cK";
+
+  expect(config.tauri.updater).toMatchObject({
+    active: true,
+    dialog: false,
+    endpoints: ["https://github.com/azyu/gbfr-djeetamod/releases/latest/download/latest.json"],
+    windows: { installMode: "passive" },
+  });
+  expect(config.tauri.updater.pubkey).not.toBe(inheritedUpstreamKey);
+  expect(config.tauri.updater.pubkey.length).toBeGreaterThan(40);
+  expect(cargo).toMatch(/tauri = \{[^\n]*features = \[[^\]]*"updater"/);
+});
+
 it("exposes only the verified NSIS packaging command", () => {
   const packageJson = JSON.parse(readRepositoryFile("package.json")) as {
     scripts: Record<string, string>;
