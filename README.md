@@ -55,6 +55,12 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 - `게임 2.0.2 훅을 찾을 수 없습니다`가 표시되면 게임 버전이 2.0.2인지 확인하고, 백신이 `hook.dll`을 격리하지 않았는지 확인한 뒤 앱을 다시 설치합니다.
 - 진 정보가 갱신되지 않으면 게임의 장비 편성 화면에서 확인할 캐릭터의 장비를 열거나 캐릭터를 다시 선택합니다.
 
+### 업데이트
+
+Djeeta MOD는 관리 창을 시작할 때 GitHub Releases를 한 번 확인하며, **설정**에서도 직접 확인할 수 있습니다. 사용자 확인 없이 업데이트를 설치하지 않습니다. 설치 전 Granblue Fantasy: Relink를 종료해야 하며, **무한 퀘스트 반복**이 켜져 있으면 Djeeta MOD가 원본 게임 명령을 복구한 뒤에만 업데이트를 허용합니다.
+
+자동 업데이트가 비활성화된 기존 `0.1.1` 설치본은 업데이트 기능이 포함된 설치 프로그램을 한 번 직접 실행해야 합니다. 같은 버전을 다시 빌드해도 업데이트로 감지되지 않으므로 이후 검증은 더 높은 버전으로 수행합니다. GitHub Release에는 일반 NSIS 설치 프로그램과 자동 업데이트용 `.nsis.zip`, `.sig`, `latest.json`이 함께 제공됩니다.
+
 `hook.dll`은 게임에서 전투 및 장착 진 정보를 읽어 Djeeta MOD로 전달하는 필수 구성요소입니다. 삭제하거나 격리하면 데미지 미터와 진 특성 분석이 동작하지 않습니다. 이 도구는 공식 허용 도구가 아니므로 먼저 오프라인 또는 비공개 환경에서 테스트하십시오.
 
 ## User Guide (English)
@@ -91,6 +97,12 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 - If the app says `The game 2.0.2 hook was not found`, confirm that the game is version 2.0.2, check whether antivirus software quarantined `hook.dll`, and then reinstall the app.
 - If sigil information does not update, open the equipment screen for that character in the game or select the character again.
 
+### Updates
+
+Djeeta MOD checks GitHub Releases once when the management window starts and can also check from **Settings**. It never installs without confirmation. Close Granblue Fantasy: Relink before installation; if **Unlimited Repeat Quest** is enabled, Djeeta MOD restores the original game instructions before allowing the update.
+
+Existing `0.1.1` installations with the updater disabled require one manual run of an updater-enabled installer. Rebuilding the same version cannot trigger an update, so subsequent acceptance testing must use a higher version. Each GitHub Release contains the regular NSIS installer plus the updater `.nsis.zip`, `.sig`, and `latest.json` assets.
+
 `hook.dll` is required to read combat and equipped-sigil information from the game and deliver it to Djeeta MOD. Removing or quarantining it disables the damage meter and sigil trait analysis. This is not an officially approved tool, so test it in an offline or private session first.
 
 ## 성능 영향
@@ -112,11 +124,13 @@ Djeeta MOD는 게임의 그래픽 설정이나 렌더링 품질을 변경하지 
 
 Node.js 20, Visual Studio 2022 C++ Build Tools, Windows SDK, WebView2, rustup과 `rust-toolchain.toml`에 지정된 툴체인이 필요합니다.
 
-전체 검증, 최신 훅 동기화, NSIS 설치 프로그램 생성과 해시 기록 갱신은 다음 명령으로 실행합니다. 게임은 먼저 종료해야 합니다.
+전체 검증, 최신 훅 동기화, 서명된 NSIS/업데이터 산출물 생성과 해시 기록 갱신은 다음 명령으로 실행합니다. 게임은 먼저 종료해야 하며 `TAURI_PRIVATE_KEY`와 `TAURI_KEY_PASSWORD`를 현재 프로세스 환경에 안전하게 설정해야 합니다. 개인 키와 암호는 저장소나 명령 출력에 남기지 마십시오.
 
 ```powershell
 npm run package:nsis
 ```
+
+`package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`의 버전은 동일한 안정 버전 `X.Y.Z`여야 합니다. 패키징이 성공하면 `target/release/package-summary.json`에 설치 프로그램, `.nsis.zip`, `.sig`, `latest.json` 경로가 기록됩니다. GitHub의 **Release** 워크플로는 `production` 환경의 `TAURI_PRIVATE_KEY`와 `TAURI_KEY_PASSWORD` secret을 사용하며, 수동 입력 버전의 `vX.Y.Z` 초안 릴리스를 만든 뒤 네 자산을 검증합니다. `publish`를 선택한 경우에만 검증 후 정식 공개합니다.
 
 스크립트가 실행하는 개별 검증 명령은 다음과 같습니다.
 

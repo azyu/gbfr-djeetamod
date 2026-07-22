@@ -22,6 +22,22 @@ $versions = @(@($npmVersion, $tauriVersion, $cargoVersion) | Select-Object -Uniq
 if ($versions.Count -ne 1 -or $versions[0] -ne '0.1.1') { throw 'Version mismatch or unexpected release version' }
 ```
 
+## 자동 업데이트 검증
+
+- 부트스트랩 설치 프로그램 버전/해시:
+- 대상 GitHub Release 태그/URL:
+- 업데이트 전후 `logs.db`, 설정 및 창 위치 증거:
+- 원본 명령 복구 read-back 증거:
+- 원격 자산 이름/다이제스트 및 `latest.json` 비교 결과:
+
+- [ ] Updater-enabled `0.1.1` detects stable `0.1.2` and shows its version/notes.
+- [ ] **나중에** leaves `0.1.1` running and data unchanged.
+- [ ] Offline, missing-manifest, and invalid-signature failures do not block the meter.
+- [ ] Installation is refused while `granblue_fantasy_relink.exe` remains running.
+- [ ] With repeat quest ON, update preparation reads both sites back as original before prompting for game exit.
+- [ ] After installation, the app restarts as `0.1.2`; logs, settings, and window geometry remain present.
+- [ ] GitHub Release contains the installer, `.nsis.zip`, `.sig`, and `latest.json` whose URL/signature agree.
+
 ## 게임 검증
 
 | 완료 | 시나리오 | 기대 결과 | 실제 결과 |
