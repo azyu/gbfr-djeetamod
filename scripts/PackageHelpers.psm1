@@ -49,6 +49,109 @@ function Select-ProductNsisInstaller {
     return $matches[0]
 }
 
+function Assert-ReleaseVersionAgreement {
+    param(
+        [Parameter(Mandatory)][string]$RequestedVersion,
+        [Parameter(Mandatory)][string]$PackageVersion,
+        [Parameter(Mandatory)][string]$CargoVersion,
+        [Parameter(Mandatory)][string]$TauriVersion
+    )
+
+    if ($RequestedVersion -notmatch '^\d+\.\d+\.\d+$') {
+        throw "Release version must use stable X.Y.Z format; found '$RequestedVersion'."
+    }
+
+    $versions = [ordered]@{
+        package = $PackageVersion
+        cargo = $CargoVersion
+        tauri = $TauriVersion
+    }
+    foreach ($entry in $versions.GetEnumerator()) {
+        if ($entry.Value -ne $RequestedVersion) {
+            throw "Release version '$RequestedVersion' does not match $($entry.Key) version '$($entry.Value)'."
+        }
+    }
+
+    return $RequestedVersion
+}
+
+function Assert-UpdaterSigningEnvironment {
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Values)
+
+    foreach ($name in @('TAURI_PRIVATE_KEY', 'TAURI_KEY_PASSWORD')) {
+        if (-not $Values.Contains($name) -or [string]::IsNullOrWhiteSpace([string]$Values[$name])) {
+            throw "$name must be set for signed updater packaging."
+        }
+    }
+}
+
+function Select-ProductNsisUpdaterArtifacts {
+    param(
+        [Parameter(Mandatory)][object[]]$Artifacts,
+        [Parameter(Mandatory)][string]$ProductName,
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][datetime]$BuildStartedAt
+    )
+
+    $archiveName = "${ProductName}_${Version}_x64-setup.nsis.zip"
+    $signatureName = "${archiveName}.sig"
+    $archives = @($Artifacts | Where-Object { $_.Name -ceq $archiveName })
+    $signatures = @($Artifacts | Where-Object { $_.Name -ceq $signatureName })
+    if ($archives.Count -ne 1 -or $signatures.Count -ne 1) {
+        throw "Expected exactly one ${ProductName} ${Version} updater archive/signature pair; found $($archives.Count) and $($signatures.Count)."
+    }
+
+    foreach ($artifact in @($archives[0], $signatures[0])) {
+        if ($artifact.LastWriteTimeUtc.ToUniversalTime() -lt $BuildStartedAt.ToUniversalTime()) {
+            throw "The ${ProductName} updater artifacts were not produced by the current build."
+        }
+    }
+
+    return [pscustomobject]@{
+        Archive = $archives[0]
+        Signature = $signatures[0]
+    }
+}
+
+function New-TauriUpdaterManifest {
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Notes,
+        [Parameter(Mandatory)][datetime]$PublishedAt,
+        [Parameter(Mandatory)][string]$ArchiveUrl,
+        [Parameter(Mandatory)][string]$Signature
+    )
+
+    if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+        throw "Updater version must use stable X.Y.Z format; found '$Version'."
+    }
+    if ([string]::IsNullOrWhiteSpace($Signature)) {
+        throw 'Updater signature must not be empty.'
+    }
+
+    $uri = $null
+    if (-not [uri]::TryCreate($ArchiveUrl, [System.UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https') {
+        throw 'Updater archive URL must be an absolute HTTPS URL.'
+    }
+    $expectedTagPath = "/releases/download/v${Version}/"
+    if (-not $uri.AbsolutePath.Contains($expectedTagPath)) {
+        throw "Updater archive URL must use release tag v${Version}."
+    }
+
+    $manifest = [ordered]@{
+        version = $Version
+        notes = $Notes
+        pub_date = $PublishedAt.ToUniversalTime().ToString('o')
+        platforms = [ordered]@{
+            'windows-x86_64' = [ordered]@{
+                signature = $Signature.Trim()
+                url = $ArchiveUrl
+            }
+        }
+    }
+    return $manifest | ConvertTo-Json -Depth 5
+}
+
 function Set-ArtifactHashesInText {
     param(
         [Parameter(Mandatory)][string]$Text,
@@ -90,4 +193,4 @@ function Invoke-NativeCommand {
     return $output
 }
 
-Export-ModuleMember -Function Get-NodeMajorVersion, Assert-SupportedNodeVersion, Assert-GameNotRunning, Select-ProductNsisInstaller, Set-ArtifactHashesInText, Invoke-NativeCommand
+Export-ModuleMember -Function Get-NodeMajorVersion, Assert-SupportedNodeVersion, Assert-GameNotRunning, Select-ProductNsisInstaller, Assert-ReleaseVersionAgreement, Assert-UpdaterSigningEnvironment, Select-ProductNsisUpdaterArtifacts, New-TauriUpdaterManifest, Set-ArtifactHashesInText, Invoke-NativeCommand

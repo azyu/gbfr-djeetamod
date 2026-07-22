@@ -61,6 +61,81 @@ Assert-Throws {
     ) -ProductName 'Djeeta MOD' -Version '0.1.0' -BuildStartedAt $buildStartedAt
 } 'A stale installer must fail.'
 
+Assert-Equal (Assert-ReleaseVersionAgreement -RequestedVersion '0.1.2' -PackageVersion '0.1.2' -CargoVersion '0.1.2' -TauriVersion '0.1.2') '0.1.2' 'Matching release versions failed.'
+Assert-Throws { Assert-ReleaseVersionAgreement -RequestedVersion '0.1.2' -PackageVersion '0.1.2' -CargoVersion '0.1.1' -TauriVersion '0.1.2' } 'Cargo mismatch must fail.'
+Assert-Throws { Assert-ReleaseVersionAgreement -RequestedVersion 'v0.1.2' -PackageVersion '0.1.2' -CargoVersion '0.1.2' -TauriVersion '0.1.2' } 'Prefixed version must fail.'
+Assert-Throws { Assert-ReleaseVersionAgreement -RequestedVersion '0.1.2-beta.1' -PackageVersion '0.1.2-beta.1' -CargoVersion '0.1.2-beta.1' -TauriVersion '0.1.2-beta.1' } 'Prerelease must fail.'
+
+Assert-UpdaterSigningEnvironment -Values @{
+    TAURI_PRIVATE_KEY = 'private-key'
+    TAURI_KEY_PASSWORD = 'password'
+}
+Assert-Throws {
+    Assert-UpdaterSigningEnvironment -Values @{
+        TAURI_PRIVATE_KEY = ' '
+        TAURI_KEY_PASSWORD = 'password'
+    }
+} 'An empty private key must fail.'
+Assert-Throws {
+    Assert-UpdaterSigningEnvironment -Values @{
+        TAURI_PRIVATE_KEY = 'private-key'
+        TAURI_KEY_PASSWORD = ''
+    }
+} 'An empty key password must fail.'
+
+$updaterArchive = [pscustomobject]@{
+    Name = 'Djeeta MOD_0.1.2_x64-setup.nsis.zip'
+    LastWriteTimeUtc = [datetime]'2026-07-19T01:00:01Z'
+}
+$updaterSignature = [pscustomobject]@{
+    Name = 'Djeeta MOD_0.1.2_x64-setup.nsis.zip.sig'
+    LastWriteTimeUtc = [datetime]'2026-07-19T01:00:02Z'
+}
+$selectedUpdater = Select-ProductNsisUpdaterArtifacts -Artifacts @($updaterArchive, $updaterSignature) -ProductName 'Djeeta MOD' -Version '0.1.2' -BuildStartedAt $buildStartedAt
+Assert-Equal $selectedUpdater.Archive.Name $updaterArchive.Name 'Updater archive selection failed.'
+Assert-Equal $selectedUpdater.Signature.Name $updaterSignature.Name 'Updater signature selection failed.'
+
+Assert-Throws {
+    Select-ProductNsisUpdaterArtifacts -Artifacts @($updaterArchive) -ProductName 'Djeeta MOD' -Version '0.1.2' -BuildStartedAt $buildStartedAt
+} 'A missing updater signature must fail.'
+Assert-Throws {
+    Select-ProductNsisUpdaterArtifacts -Artifacts @($updaterArchive, $updaterSignature, $updaterSignature) -ProductName 'Djeeta MOD' -Version '0.1.2' -BuildStartedAt $buildStartedAt
+} 'Duplicate updater signatures must fail.'
+Assert-Throws {
+    Select-ProductNsisUpdaterArtifacts -Artifacts @(
+        $updaterArchive,
+        [pscustomobject]@{
+            Name = 'Djeeta MOD_0.1.2_x64-setup.nsis.zip.sig'
+            LastWriteTimeUtc = [datetime]'2026-07-19T00:59:59Z'
+        }
+    ) -ProductName 'Djeeta MOD' -Version '0.1.2' -BuildStartedAt $buildStartedAt
+} 'A stale updater signature must fail.'
+Assert-Throws {
+    Select-ProductNsisUpdaterArtifacts -Artifacts @(
+        [pscustomobject]@{ Name = 'Other_0.1.2_x64-setup.nsis.zip'; LastWriteTimeUtc = [datetime]'2026-07-19T01:00:01Z' },
+        [pscustomobject]@{ Name = 'Other_0.1.2_x64-setup.nsis.zip.sig'; LastWriteTimeUtc = [datetime]'2026-07-19T01:00:02Z' }
+    ) -ProductName 'Djeeta MOD' -Version '0.1.2' -BuildStartedAt $buildStartedAt
+} 'Wrong-product updater artifacts must fail.'
+Assert-Throws {
+    Select-ProductNsisUpdaterArtifacts -Artifacts @($updaterArchive, $updaterSignature) -ProductName 'Djeeta MOD' -Version '0.1.1' -BuildStartedAt $buildStartedAt
+} 'Wrong-version updater artifacts must fail.'
+
+$archiveUrl = 'https://github.com/azyu/gbfr-djeetamod/releases/download/v0.1.2/Djeeta%20MOD_0.1.2_x64-setup.nsis.zip'
+$manifest = New-TauriUpdaterManifest -Version '0.1.2' -Notes 'Release notes' -PublishedAt ([datetime]'2026-07-22T00:00:00Z') -ArchiveUrl $archiveUrl -Signature 'signed-content'
+$parsed = $manifest | ConvertFrom-Json
+Assert-Equal $parsed.version '0.1.2' 'Manifest version failed.'
+Assert-Equal $parsed.platforms.'windows-x86_64'.signature 'signed-content' 'Manifest signature failed.'
+Assert-Equal $parsed.platforms.'windows-x86_64'.url $archiveUrl 'Manifest URL failed.'
+Assert-Throws {
+    New-TauriUpdaterManifest -Version '0.1.2' -Notes '' -PublishedAt ([datetime]'2026-07-22T00:00:00Z') -ArchiveUrl $archiveUrl -Signature ' '
+} 'An empty updater signature must fail.'
+Assert-Throws {
+    New-TauriUpdaterManifest -Version '0.1.2' -Notes '' -PublishedAt ([datetime]'2026-07-22T00:00:00Z') -ArchiveUrl 'http://example.com/releases/download/v0.1.2/update.zip' -Signature 'signed-content'
+} 'A non-HTTPS updater URL must fail.'
+Assert-Throws {
+    New-TauriUpdaterManifest -Version '0.1.2' -Notes '' -PublishedAt ([datetime]'2026-07-22T00:00:00Z') -ArchiveUrl 'https://github.com/azyu/gbfr-djeetamod/releases/download/v0.1.1/update.zip' -Signature 'signed-content'
+} 'A mismatched updater tag must fail.'
+
 $oldInstaller = 'A' * 64
 $oldHook = 'B' * 64
 $newInstaller = 'C' * 64
