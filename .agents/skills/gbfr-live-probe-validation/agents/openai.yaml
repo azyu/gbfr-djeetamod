@@ -1,0 +1,4 @@
+interface:
+  display_name: "GBFR Live Probe Validation"
+  short_description: "Guide safe in-game probe verification"
+  default_prompt: "Use $gbfr-live-probe-validation to run and document an in-game probe validation."
