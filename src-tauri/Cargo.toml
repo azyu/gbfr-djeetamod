@@ -1,6 +1,6 @@
 [package]
 name = "gbfr-logs"
-version = "0.1.1"
+version = "0.1.2"
 autobins = false
 default-run = "gbfr-logs"
 description = "Djeeta MOD for Granblue Fantasy: Relink"

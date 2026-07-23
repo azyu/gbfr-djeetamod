@@ -19,7 +19,7 @@ $npmVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
 $tauriVersion = (Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json).package.version
 $cargoVersion = (Select-String '^version = "(.+)"' src-tauri/Cargo.toml).Matches[0].Groups[1].Value
 $versions = @(@($npmVersion, $tauriVersion, $cargoVersion) | Select-Object -Unique)
-if ($versions.Count -ne 1 -or $versions[0] -ne '0.1.1') { throw 'Version mismatch or unexpected release version' }
+if ($versions.Count -ne 1 -or $versions[0] -ne '0.1.2') { throw 'Version mismatch or unexpected release version' }
 ```
 
 ## 자동 업데이트 검증

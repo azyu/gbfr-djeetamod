@@ -5,7 +5,7 @@
 - Public name: `Djeeta MOD`
 - Package name: `djeeta-mod`
 - Tauri identifier: `com.azyu.djeeta-mod`
-- Version: `0.1.1`
+- Version: `0.1.2`
 - Target: Granblue Fantasy: Relink Endless Ragnarok 2.0.2 on Windows x64
 - Default language: Korean
 - Compatibility remains unverified until `docs/testing/game-2.0.2-smoke-test.md` is completed.
