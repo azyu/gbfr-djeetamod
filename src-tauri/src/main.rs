@@ -1076,8 +1076,8 @@ fn main() {
 mod tests {
     use super::{
         accept_hook_message, close_request_action, meter_geometry, meter_window_action,
-        retry_allowed, CloseRequestAction, ConnectionState, HookHandshakeState, HookStatus, Message,
-        MeterGeometry, MeterWindowAction, DEFAULT_CLICK_THROUGH,
+        retry_allowed, CloseRequestAction, ConnectionState, HookHandshakeState, HookStatus,
+        Message, MeterGeometry, MeterWindowAction, DEFAULT_CLICK_THROUGH,
     };
 
     #[test]
@@ -1139,10 +1139,7 @@ mod tests {
 
     #[test]
     fn management_close_hides_when_close_to_tray_is_enabled() {
-        assert_eq!(
-            close_request_action("logs", true),
-            CloseRequestAction::Hide
-        );
+        assert_eq!(close_request_action("logs", true), CloseRequestAction::Hide);
     }
 
     #[test]
