@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, it, test } from "vitest";
 
@@ -64,7 +64,7 @@ it("enables only the signed stable GitHub updater", () => {
   expect(cargo).toMatch(/tauri = \{[^\n]*features = \[[^\]]*"updater"/);
 });
 
-it("exposes only the verified NSIS packaging command", () => {
+it("separates unsigned NSIS preparation from updater signing", () => {
   const packageJson = JSON.parse(readRepositoryFile("package.json")) as {
     scripts: Record<string, string>;
   };
@@ -73,15 +73,36 @@ it("exposes only the verified NSIS packaging command", () => {
   expect(packageJson.scripts["package:nsis"]).toBe(
     "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1"
   );
+  expect(packageJson.scripts["package:sign"]).toBe(
+    "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sign-package.ps1"
+  );
   expect(packageJson.scripts).not.toHaveProperty("package:msi");
   expect(packagingScript).toContain("'target\\release\\bundle\\nsis'");
   expect(packagingScript).toMatch(/'build',\s*'--bundles',\s*'nsis'/);
-  expect(packagingScript).toMatch(/'build',\s*'--bundles',\s*'nsis',\s*'updater'/);
+  expect(packagingScript).not.toMatch(/'build',\s*'--bundles',\s*'nsis',\s*'updater'/);
   expect(packagingScript).not.toMatch(/'build',\s*'--bundles',\s*'msi'/);
-  expect(packagingScript).toContain("Assert-UpdaterSigningEnvironment");
-  expect(packagingScript).toContain("Select-ProductNsisUpdaterArtifacts");
-  expect(packagingScript).toContain("New-TauriUpdaterManifest");
-  expect(packagingScript).toContain("package-summary.json");
+  expect(packagingScript).not.toContain("Assert-UpdaterSigningEnvironment");
+  expect(packagingScript).not.toContain("TAURI_PRIVATE_KEY");
+  expect(packagingScript).toContain("New-NsisUpdaterArchive");
+  expect(packagingScript).toContain("package-preparation.json");
+
+  const signingScriptPath = "scripts/sign-package.ps1";
+  expect(existsSync(resolve(process.cwd(), signingScriptPath))).toBe(true);
+  const signingScript = readRepositoryFile(signingScriptPath);
+  expect(signingScript).toContain("Assert-UpdaterSigningEnvironment");
+  expect(signingScript).toMatch(/'signer',\s*'sign'/);
+  expect(signingScript).not.toContain("npm.cmd ci");
+  expect(signingScript).not.toContain("cargo build");
+  expect(signingScript).toContain("Select-ProductNsisUpdaterArtifacts");
+  expect(signingScript).toContain("New-TauriUpdaterManifest");
+  expect(signingScript).toContain("package-summary.json");
+
+  const signerIndex = signingScript.indexOf("signer");
+  const clearPrivateKeyIndex = signingScript.indexOf("Remove-Item Env:TAURI_PRIVATE_KEY");
+  const clearPasswordIndex = signingScript.indexOf("Remove-Item Env:TAURI_KEY_PASSWORD");
+
+  expect(clearPrivateKeyIndex).toBeGreaterThan(signerIndex);
+  expect(clearPasswordIndex).toBeGreaterThan(signerIndex);
 });
 
 test("external equipment probe requests read-only process access", () => {

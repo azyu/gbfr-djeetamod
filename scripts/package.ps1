@@ -48,10 +48,6 @@ try {
         -PackageVersion ([string]$packageJson.version) `
         -CargoVersion $cargoVersionMatch.Groups[1].Value `
         -TauriVersion ([string]$tauriConfig.package.version)
-    Assert-UpdaterSigningEnvironment -Values @{
-        TAURI_PRIVATE_KEY = $env:TAURI_PRIVATE_KEY
-        TAURI_KEY_PASSWORD = $env:TAURI_KEY_PASSWORD
-    }
 
     $releaseNotes = ''
     if (-not [string]::IsNullOrWhiteSpace($ReleaseNotesPath)) {
@@ -115,7 +111,6 @@ try {
         'build',
         '--bundles',
         'nsis',
-        'updater',
         '--',
         '--bin',
         'gbfr-logs'
@@ -123,16 +118,8 @@ try {
 
     $installerArtifacts = @(Get-ChildItem -LiteralPath 'target\release\bundle\nsis' -Filter '*.exe')
     $installer = Select-ProductNsisInstaller -Artifacts $installerArtifacts -ProductName $productName -Version $productVersion -BuildStartedAt $buildStartedAt
-    $updaterArtifacts = @(Get-ChildItem -LiteralPath 'target\release\bundle\nsis' -Filter '*.nsis.zip*')
-    $updater = Select-ProductNsisUpdaterArtifacts -Artifacts $updaterArtifacts -ProductName $productName -Version $productVersion -BuildStartedAt $buildStartedAt
-
-    $updaterSignature = [System.IO.File]::ReadAllText($updater.Signature.FullName)
-    $releaseArchiveName = ConvertTo-GitHubReleaseAssetName -Name $updater.Archive.Name
-    $encodedArchiveName = [uri]::EscapeDataString($releaseArchiveName)
-    $archiveUrl = "https://github.com/azyu/gbfr-djeetamod/releases/download/v${productVersion}/${encodedArchiveName}"
-    $latestJson = New-TauriUpdaterManifest -Version $productVersion -Notes $releaseNotes -PublishedAt ([datetime]::UtcNow) -ArchiveUrl $archiveUrl -Signature $updaterSignature
-    $latestJsonPath = Join-Path $repositoryRoot 'target\release\latest.json'
-    [System.IO.File]::WriteAllText($latestJsonPath, $latestJson, $utf8WithoutBom)
+    $updaterArchivePath = Join-Path $installer.DirectoryName "${productName}_${productVersion}_x64-setup.nsis.zip"
+    $updaterArchive = New-NsisUpdaterArchive -Installer $installer -DestinationPath $updaterArchivePath
 
     $releaseHookHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $releaseHookPath).Hash
     $bundledHookHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $bundledHookPath).Hash
@@ -140,34 +127,23 @@ try {
         throw 'Release and bundled hook.dll hashes differ.'
     }
     $installerHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName).Hash
-    $updaterArchiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $updater.Archive.FullName).Hash
+    $updaterArchiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $updaterArchive.FullName).Hash
 
-    $packageSummaryPath = Join-Path $repositoryRoot 'target\release\package-summary.json'
-    $packageSummary = [ordered]@{
+    $preparationSummaryPath = Join-Path $repositoryRoot 'target\release\package-preparation.json'
+    $preparationSummary = [ordered]@{
         Version = $productVersion
+        ProductName = $productName
+        BuildStartedAt = $buildStartedAt.ToUniversalTime().ToString('o')
         InstallerPath = $installer.FullName
         InstallerSHA256 = $installerHash
         HookPath = $releaseHookPath
         HookSHA256 = $releaseHookHash
-        UpdaterArchivePath = $updater.Archive.FullName
+        BundledHookPath = $bundledHookPath
+        UpdaterArchivePath = $updaterArchive.FullName
         UpdaterArchiveSHA256 = $updaterArchiveHash
-        UpdaterSignaturePath = $updater.Signature.FullName
-        LatestJsonPath = $latestJsonPath
+        ReleaseNotes = $releaseNotes
     } | ConvertTo-Json -Depth 3
-    [System.IO.File]::WriteAllText($packageSummaryPath, $packageSummary, $utf8WithoutBom)
-
-    $updatedDocuments = @{}
-    foreach ($documentPath in @('README.md', 'docs\testing\game-2.0.2-smoke-test.md')) {
-        $absolutePath = Join-Path $repositoryRoot $documentPath
-        $currentText = [System.IO.File]::ReadAllText($absolutePath)
-        $updatedText = Set-ArtifactHashesInText -Text $currentText -InstallerHash $installerHash -HookHash $releaseHookHash
-        if ($updatedText -ne $currentText) {
-            $updatedDocuments[$absolutePath] = $updatedText
-        }
-    }
-    foreach ($document in $updatedDocuments.GetEnumerator()) {
-        [System.IO.File]::WriteAllText($document.Key, $document.Value, $utf8WithoutBom)
-    }
+    [System.IO.File]::WriteAllText($preparationSummaryPath, $preparationSummary, $utf8WithoutBom)
 
     Invoke-NativeCommand -FilePath $gitPath -Arguments @('diff', '--check')
 
@@ -175,13 +151,10 @@ try {
         InstallerPath = $installer.FullName
         InstallerSHA256 = $installerHash
         HookSHA256 = $releaseHookHash
-        UpdaterArchivePath = $updater.Archive.FullName
+        UpdaterArchivePath = $updaterArchive.FullName
         UpdaterArchiveSHA256 = $updaterArchiveHash
-        UpdaterSignaturePath = $updater.Signature.FullName
-        LatestJsonPath = $latestJsonPath
-        PackageSummaryPath = $packageSummaryPath
+        PreparationSummaryPath = $preparationSummaryPath
         HookHashesEqual = $true
-        UpdatedDocuments = @($updatedDocuments.Keys)
     } | Format-List
 }
 finally {

@@ -51,7 +51,7 @@ A new `npm.cmd run package:sign` command:
 - updates the two release hash documents;
 - writes the final `package-summary.json` consumed by the publish phase.
 
-The updater ZIP contains exactly one stored entry: the generated NSIS installer with its original filename. This matches the existing Tauri 1 Windows updater archive format.
+The updater ZIP contains exactly one entry: the generated NSIS installer with its original filename and bytes. Tauri 1 extracts it as a standard ZIP archive; the ZIP compression method is not a security boundary.
 
 ### 4. Failure behavior
 

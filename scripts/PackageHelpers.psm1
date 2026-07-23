@@ -185,6 +185,49 @@ function Set-ArtifactHashesInText {
     return [regex]::Replace($updated, $hookPattern, { param($match) $match.Groups[1].Value + $normalizedHook + $match.Groups[2].Value })
 }
 
+function New-NsisUpdaterArchive {
+    param(
+        [Parameter(Mandatory)][System.IO.FileInfo]$Installer,
+        [Parameter(Mandatory)][string]$DestinationPath
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+    $destination = [IO.Path]::GetFullPath($DestinationPath)
+    $parent = Split-Path -Parent $destination
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+        throw "Updater archive directory is missing: $parent"
+    }
+
+    $fileStream = [IO.File]::Open($destination, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+        $archive = [IO.Compression.ZipArchive]::new(
+            $fileStream,
+            [IO.Compression.ZipArchiveMode]::Create,
+            $false
+        )
+        try {
+            $entry = $archive.CreateEntry($Installer.Name, [IO.Compression.CompressionLevel]::NoCompression)
+            $input = $Installer.OpenRead()
+            $output = $entry.Open()
+            try {
+                $input.CopyTo($output)
+            }
+            finally {
+                $output.Dispose()
+                $input.Dispose()
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
+    finally {
+        $fileStream.Dispose()
+    }
+
+    return Get-Item -LiteralPath $destination
+}
+
 function Invoke-NativeCommand {
     param(
         [Parameter(Mandatory)][string]$FilePath,
@@ -199,4 +242,4 @@ function Invoke-NativeCommand {
     return $output
 }
 
-Export-ModuleMember -Function Get-NodeMajorVersion, Assert-SupportedNodeVersion, Assert-GameNotRunning, Select-ProductNsisInstaller, Assert-ReleaseVersionAgreement, Assert-UpdaterSigningEnvironment, Select-ProductNsisUpdaterArtifacts, ConvertTo-GitHubReleaseAssetName, New-TauriUpdaterManifest, Set-ArtifactHashesInText, Invoke-NativeCommand
+Export-ModuleMember -Function Get-NodeMajorVersion, Assert-SupportedNodeVersion, Assert-GameNotRunning, Select-ProductNsisInstaller, Assert-ReleaseVersionAgreement, Assert-UpdaterSigningEnvironment, Select-ProductNsisUpdaterArtifacts, ConvertTo-GitHubReleaseAssetName, New-TauriUpdaterManifest, Set-ArtifactHashesInText, New-NsisUpdaterArchive, Invoke-NativeCommand

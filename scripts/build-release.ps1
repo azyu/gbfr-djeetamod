@@ -8,18 +8,25 @@ if (-not (Test-Path -LiteralPath $keyPath -PathType Leaf)) {
 }
 
 $npmPath = (Get-Command npm.cmd -ErrorAction Stop).Source
-$securePassword = Read-Host 'Updater key password' -AsSecureString
 $passwordPointer = [IntPtr]::Zero
 $packageExitCode = 1
 
 Push-Location $repositoryRoot
 try {
-    $env:TAURI_PRIVATE_KEY = [IO.File]::ReadAllText($keyPath)
-    $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
-    $env:TAURI_KEY_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+    Remove-Item Env:TAURI_PRIVATE_KEY -ErrorAction SilentlyContinue
+    Remove-Item Env:TAURI_KEY_PASSWORD -ErrorAction SilentlyContinue
 
     & $npmPath run package:nsis
     $packageExitCode = $LASTEXITCODE
+    if ($packageExitCode -eq 0) {
+        $securePassword = Read-Host 'Updater key password' -AsSecureString
+        $env:TAURI_PRIVATE_KEY = [IO.File]::ReadAllText($keyPath)
+        $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+        $env:TAURI_KEY_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+
+        & $npmPath run package:sign
+        $packageExitCode = $LASTEXITCODE
+    }
 }
 finally {
     if ($passwordPointer -ne [IntPtr]::Zero) {

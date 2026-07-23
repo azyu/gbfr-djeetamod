@@ -17,6 +17,12 @@ it("delegates double-click release builds to the secure PowerShell wrapper", () 
 
 it("keeps updater credentials process-scoped and always clears them", () => {
   const wrapper = readRepositoryFile("scripts/build-release.ps1");
+  const clearPrivateKeyIndex = wrapper.indexOf("Remove-Item Env:TAURI_PRIVATE_KEY");
+  const clearPasswordIndex = wrapper.indexOf("Remove-Item Env:TAURI_KEY_PASSWORD");
+  const prepareIndex = wrapper.indexOf("& $npmPath run package:nsis");
+  const setPrivateKeyIndex = wrapper.indexOf("$env:TAURI_PRIVATE_KEY =");
+  const setPasswordIndex = wrapper.indexOf("$env:TAURI_KEY_PASSWORD =");
+  const signIndex = wrapper.indexOf("& $npmPath run package:sign");
 
   expect(wrapper).toContain("[Environment]::GetFolderPath('UserProfile')");
   expect(wrapper).toContain("'.djeeta-mod\\updater.key'");
@@ -24,10 +30,15 @@ it("keeps updater credentials process-scoped and always clears them", () => {
   expect(wrapper).toContain("SecureStringToBSTR");
   expect(wrapper).toContain("PtrToStringBSTR");
   expect(wrapper).toContain("Get-Command npm.cmd");
-  expect(wrapper).toContain("& $npmPath run package:nsis");
+  expect(clearPrivateKeyIndex).toBeGreaterThanOrEqual(0);
+  expect(clearPasswordIndex).toBeGreaterThanOrEqual(0);
+  expect(prepareIndex).toBeGreaterThan(clearPrivateKeyIndex);
+  expect(prepareIndex).toBeGreaterThan(clearPasswordIndex);
+  expect(setPrivateKeyIndex).toBeGreaterThan(prepareIndex);
+  expect(setPasswordIndex).toBeGreaterThan(prepareIndex);
+  expect(signIndex).toBeGreaterThan(setPrivateKeyIndex);
+  expect(signIndex).toBeGreaterThan(setPasswordIndex);
   expect(wrapper).toContain("finally");
   expect(wrapper).toContain("ZeroFreeBSTR");
-  expect(wrapper).toContain("Remove-Item Env:TAURI_PRIVATE_KEY");
-  expect(wrapper).toContain("Remove-Item Env:TAURI_KEY_PASSWORD");
   expect(wrapper).not.toMatch(/--password|-p\s+['"]/);
 });

@@ -164,4 +164,38 @@ Assert-Throws {
     Set-ArtifactHashesInText -Text "- NSIS installer: ``$oldInstaller``" -InstallerHash $newInstaller -HookHash $newHook
 } 'Missing hook label must fail.'
 
+$archiveTestRoot = Join-Path ([IO.Path]::GetTempPath()) ('djeeta-updater-archive-test-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $archiveTestRoot | Out-Null
+try {
+    $installerPath = Join-Path $archiveTestRoot 'Djeeta MOD_0.1.2_x64-setup.exe'
+    [IO.File]::WriteAllBytes($installerPath, [byte[]](1, 2, 3, 4))
+    $archivePath = Join-Path $archiveTestRoot 'Djeeta MOD_0.1.2_x64-setup.nsis.zip'
+    $created = New-NsisUpdaterArchive -Installer (Get-Item -LiteralPath $installerPath) -DestinationPath $archivePath
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($created.FullName)
+    try {
+        Assert-Equal $zip.Entries.Count 1 'Updater archive must contain exactly one file.'
+        Assert-Equal $zip.Entries[0].FullName 'Djeeta MOD_0.1.2_x64-setup.exe' 'Updater archive entry name failed.'
+        Assert-Equal $zip.Entries[0].Length 4 'Updater archive entry length failed.'
+
+        $entryStream = $zip.Entries[0].Open()
+        try {
+            $entryBytes = New-Object byte[] $zip.Entries[0].Length
+            $bytesRead = $entryStream.Read($entryBytes, 0, $entryBytes.Length)
+            Assert-Equal $bytesRead 4 'Updater archive entry must be fully readable.'
+            Assert-Equal ([Convert]::ToBase64String($entryBytes)) ([Convert]::ToBase64String([byte[]](1, 2, 3, 4))) 'Updater archive entry bytes failed.'
+        }
+        finally {
+            $entryStream.Dispose()
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+}
+finally {
+    Remove-Item -LiteralPath $archiveTestRoot -Recurse -Force
+}
+
 Write-Output 'Package helper tests passed.'
