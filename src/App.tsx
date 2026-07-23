@@ -5,9 +5,9 @@ import { Meter } from "./pages/Meter";
 import { EquipmentAnalysis } from "./pages/EquipmentAnalysis";
 import Logs from "./pages/Logs";
 import SettingsPage from "./pages/Settings";
-import useCloseButtonAction from "./pages/useCloseButtonAction";
 import { IndexPage as LogIndexPage } from "./pages/logs/Index";
 import { ViewPage as LogViewPage } from "./pages/logs/View";
+import useCloseButtonAction from "./pages/useCloseButtonAction";
 
 import "./App.css";
 
