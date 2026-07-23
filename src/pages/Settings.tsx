@@ -1,4 +1,5 @@
 import { UpdaterSettings } from "@/components/UpdaterSettings";
+import { CloseButtonAction } from "@/stores/useMeterSettingsStore";
 import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
 import {
   ActionIcon,
@@ -45,6 +46,7 @@ const SettingsPage = () => {
     addOverlayColumn,
     removeOverlayColumn,
     open_log_on_save,
+    close_button_action,
   } = useSettings();
 
   const toggleDebugMode = () => {
@@ -62,7 +64,7 @@ const SettingsPage = () => {
           GBFR Logs와 Awa Edition을 기반으로 제작되었습니다.
         </Text>
       </Stack>
-      <Fieldset legend={t("ui.meter-settings")}>
+      <Fieldset legend={t("ui.general-settings")}>
         <Stack>
           <Select
             label={t("ui.language")}
@@ -71,6 +73,25 @@ const SettingsPage = () => {
             allowDeselect={false}
             onChange={handleLanguageChange}
           />
+          <Select
+            label={t("ui.close-button-action")}
+            description={t("ui.close-button-action-description")}
+            data={[
+              { value: "minimize-to-tray", label: t("ui.close-button-minimize-to-tray") },
+              { value: "quit", label: t("ui.close-button-quit") },
+            ]}
+            value={close_button_action}
+            allowDeselect={false}
+            onChange={(value) => {
+              if (value) {
+                setMeterSettings({ close_button_action: value as CloseButtonAction });
+              }
+            }}
+          />
+        </Stack>
+      </Fieldset>
+      <Fieldset legend={t("ui.meter-settings")} mt="md">
+        <Stack>
           <ColorInput
             defaultValue={color_1}
             onChangeEnd={(value) => setMeterSettings({ color_1: value })}

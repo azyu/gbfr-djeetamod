@@ -9,6 +9,11 @@ const readJson = (relativePath: string) =>
 
 const expectedEnglish = {
   language: "Language",
+  "general-settings": "General Settings",
+  "close-button-action": "Close Button Action",
+  "close-button-action-description": "Choose what the management window's X button does.",
+  "close-button-minimize-to-tray": "Minimize to Tray",
+  "close-button-quit": "Quit Application",
   "meter-settings": "Meter Settings",
   "color-placeholder": "Color",
   "customize-overlay-columns": "Customize Overlay Meter Columns",
@@ -35,6 +40,11 @@ const expectedEnglish = {
 
 const expectedKorean = {
   language: "언어",
+  "general-settings": "일반 설정",
+  "close-button-action": "닫기 버튼 동작",
+  "close-button-action-description": "관리 창의 X 버튼을 눌렀을 때 수행할 동작을 선택합니다.",
+  "close-button-minimize-to-tray": "트레이로 최소화",
+  "close-button-quit": "프로그램 종료",
   "meter-settings": "미터기 설정",
   "color-placeholder": "색상",
   "customize-overlay-columns": "오버레이 미터 열 설정",
@@ -207,6 +217,10 @@ describe("Korean settings localization", () => {
     expect(source).toContain("<UpdaterSettings />");
     expect(layoutSource).toContain('t("ui.game-features.repeat-quest.label")');
     expect(layoutSource).toContain("<UpdaterDialog />");
+    expect(source.indexOf('legend={t("ui.general-settings")}')).toBeLessThan(
+      source.indexOf('legend={t("ui.meter-settings")}')
+    );
+    expect(source).toContain("value={close_button_action}");
   });
 
   it("keeps the approved meter abbreviations in both languages", () => {
