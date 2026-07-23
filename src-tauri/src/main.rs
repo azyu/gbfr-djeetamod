@@ -51,11 +51,13 @@ mod repeat_quest;
 mod update_install;
 
 struct ClickThrough(AtomicBool);
+struct CloseToTray(AtomicBool);
 struct DebugMode(AtomicBool);
 struct ConnectionStatus(Mutex<ConnectionState>);
 struct EquipmentStatus(Mutex<equipment::EquipmentState>);
 
 const DEFAULT_CLICK_THROUGH: bool = false;
+const DEFAULT_CLOSE_TO_TRAY: bool = true;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MeterWindowAction {
@@ -68,6 +70,20 @@ fn meter_window_action(enabled: bool) -> MeterWindowAction {
         MeterWindowAction::Show
     } else {
         MeterWindowAction::Hide
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CloseRequestAction {
+    Hide,
+    Exit,
+}
+
+fn close_request_action(window_label: &str, close_to_tray: bool) -> CloseRequestAction {
+    if window_label == "logs" && !close_to_tray {
+        CloseRequestAction::Exit
+    } else {
+        CloseRequestAction::Hide
     }
 }
 
@@ -889,6 +905,11 @@ fn set_meter_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn set_close_to_tray(state: State<CloseToTray>, enabled: bool) {
+    state.0.store(enabled, Ordering::Release);
+}
+
+#[tauri::command]
 fn toggle_clickthrough(window: tauri::Window, state: State<ClickThrough>) {
     let click_through = &state.0;
     let new_state = !click_through.load(Ordering::Acquire);
@@ -970,6 +991,7 @@ fn main() {
                 .build(),
         )
         .manage(ClickThrough(AtomicBool::new(DEFAULT_CLICK_THROUGH)))
+        .manage(CloseToTray(AtomicBool::new(DEFAULT_CLOSE_TO_TRAY)))
         .manage(DebugMode(AtomicBool::new(false)))
         .manage(ConnectionStatus(Mutex::new(ConnectionState::Searching)))
         .manage(GameSearchState::default())
@@ -984,8 +1006,23 @@ fn main() {
         .on_system_tray_event(menu_tray_handler)
         .on_window_event(|event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event.event() {
-                event.window().hide().unwrap();
-                api.prevent_close();
+                let close_to_tray = event
+                    .window()
+                    .state::<CloseToTray>()
+                    .0
+                    .load(Ordering::Acquire);
+
+                match close_request_action(event.window().label(), close_to_tray) {
+                    CloseRequestAction::Hide => {
+                        event.window().hide().unwrap();
+                        api.prevent_close();
+                    }
+                    CloseRequestAction::Exit => {
+                        let handle = event.window().app_handle();
+                        let _ = handle.save_window_state(StateFlags::all());
+                        handle.exit(0);
+                    }
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -994,6 +1031,7 @@ fn main() {
             delete_logs,
             delete_all_logs,
             set_meter_enabled,
+            set_close_to_tray,
             export_damage_log_to_file,
             set_debug_mode,
             reset_meter_geometry,
@@ -1037,9 +1075,9 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        accept_hook_message, meter_geometry, meter_window_action, retry_allowed, ConnectionState,
-        HookHandshakeState, HookStatus, Message, MeterGeometry, MeterWindowAction,
-        DEFAULT_CLICK_THROUGH,
+        accept_hook_message, close_request_action, meter_geometry, meter_window_action,
+        retry_allowed, CloseRequestAction, ConnectionState, HookHandshakeState, HookStatus, Message,
+        MeterGeometry, MeterWindowAction, DEFAULT_CLICK_THROUGH,
     };
 
     #[test]
@@ -1097,6 +1135,30 @@ mod tests {
     fn meter_visibility_maps_to_explicit_window_actions() {
         assert_eq!(meter_window_action(true), MeterWindowAction::Show);
         assert_eq!(meter_window_action(false), MeterWindowAction::Hide);
+    }
+
+    #[test]
+    fn management_close_hides_when_close_to_tray_is_enabled() {
+        assert_eq!(
+            close_request_action("logs", true),
+            CloseRequestAction::Hide
+        );
+    }
+
+    #[test]
+    fn management_close_exits_when_close_to_tray_is_disabled() {
+        assert_eq!(
+            close_request_action("logs", false),
+            CloseRequestAction::Exit
+        );
+    }
+
+    #[test]
+    fn unrelated_window_close_keeps_existing_hide_behavior() {
+        assert_eq!(
+            close_request_action("main", false),
+            CloseRequestAction::Hide
+        );
     }
 
     #[test]
