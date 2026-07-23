@@ -21,12 +21,9 @@ function Assert-Throws {
     throw "$Message Expected an exception."
 }
 
-Assert-Equal (Get-NodeMajorVersion -Version 'v20.11.1') 20 'Node major parsing failed.'
-Assert-Throws { Assert-SupportedNodeVersion -Version 'v19.9.0' } 'Node 19 must fail.'
-Assert-SupportedNodeVersion -Version 'v20.11.1'
-$nodeWarnings = @()
-Assert-SupportedNodeVersion -Version 'v24.16.0' -WarningVariable nodeWarnings
-Assert-Equal $nodeWarnings.Count 1 'Node 24 must emit one warning.'
+Assert-Equal (Get-NodeMajorVersion -Version 'v24.16.0') 24 'Node major parsing failed.'
+Assert-Throws { Assert-SupportedNodeVersion -Version 'v20.19.4' } 'Node 20 must fail.'
+Assert-SupportedNodeVersion -Version 'v24.16.0'
 
 Assert-GameNotRunning -Processes @()
 Assert-Throws { Assert-GameNotRunning -Processes @([pscustomobject]@{ Id = 1234 }) } 'A running game must fail.'

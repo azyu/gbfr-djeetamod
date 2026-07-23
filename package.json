@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.2",
   "type": "module",
+  "packageManager": "npm@11.13.0",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
   "scripts": {
     "dev": "cargo build --release --package hook --features hook/console && vite",
     "build": "tsc && vite build",
@@ -11,6 +15,7 @@
     "tsc": "tsc",
     "format": "prettier --write --ignore-unknown --ext js,jsx,ts,tsx src ./src",
     "format-check": "prettier --check --ignore-unknown --ext js,jsx,ts,tsx src ./src",
+    "audit:npm": "npm audit",
     "test:package-helpers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/PackageHelpers.Tests.ps1",
     "package:nsis": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1",
     "package:sign": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sign-package.ps1",
@@ -42,12 +47,12 @@
   "devDependencies": {
     "@tauri-apps/cli": "^1.5.8",
     "@testing-library/react": "^15.0.6",
-    "@types/node": "^20.11.30",
+    "@types/node": "^24.0.0",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@typescript-eslint/eslint-plugin": "^7.1.0",
     "@typescript-eslint/parser": "^7.1.0",
-    "@vitejs/plugin-react": "^4.2.1",
+    "@vitejs/plugin-react": "^4.7.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.33.2",
@@ -58,7 +63,7 @@
     "prettier": "3.2.5",
     "prettier-plugin-organize-imports": "^3.2.4",
     "typescript": "^5.0.2",
-    "vite": "^5.0.0",
-    "vitest": "^1.6.0"
+    "vite": "^6.4.2",
+    "vitest": "^4.1.10"
   }
 }

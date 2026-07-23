@@ -122,7 +122,7 @@ Djeeta MOD는 게임의 그래픽 설정이나 렌더링 품질을 변경하지 
 
 ## 소스 빌드
 
-Node.js 20, Visual Studio 2022 C++ Build Tools, Windows SDK, WebView2, rustup과 `rust-toolchain.toml`에 지정된 툴체인이 필요합니다.
+Node.js 24, Visual Studio 2022 C++ Build Tools, Windows SDK, WebView2, rustup과 `rust-toolchain.toml`에 지정된 툴체인이 필요합니다.
 
 전체 검증, 최신 훅 동기화, 서명된 NSIS/업데이터 산출물 생성과 해시 기록 갱신은 다음 명령으로 실행합니다. 게임은 먼저 종료해야 하며 `TAURI_PRIVATE_KEY`와 `TAURI_KEY_PASSWORD`를 현재 프로세스 환경에 안전하게 설정해야 합니다. 개인 키와 암호는 저장소나 명령 출력에 남기지 마십시오.
 

@@ -9,21 +9,23 @@ jobs:
     name: Typescript
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 24
       - run: npm ci
+      - name: npm audit
+        run: npm run audit:npm
       - name: Typescript
         run: npm run tsc
   eslint:
     name: ESLint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 24
       - run: npm ci
       - name: ESLint
         run: npm run lint
@@ -31,10 +33,10 @@ jobs:
     name: Prettier
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 24
       - run: npm ci
       - name: Prettier
         run: npm run format-check
@@ -42,10 +44,10 @@ jobs:
     name: Typescript - Vitest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 24
       - run: npm ci
       - name: Vitest
         run: npm test
@@ -53,12 +55,12 @@ jobs:
     name: Rust - Cargo Test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Should not update rustup
         shell: bash
         run: rustup set auto-self-update disable
-      - run: rustup update nightly && rustup default nightly
-      - uses: Swatinem/rust-cache@v2
+      - run: rustup toolchain install nightly-2024-05-04 --profile minimal
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - run: cargo build --release --package hook
       - run: cargo build --verbose
       - run: cargo test --verbose
