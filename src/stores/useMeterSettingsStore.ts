@@ -2,6 +2,8 @@ import { MeterColumns } from "@/types";
 import { Mutate, StoreApi, create } from "zustand";
 import { persist } from "zustand/middleware";
 
+export type CloseButtonAction = "minimize-to-tray" | "quit";
+
 interface MeterSettings {
   color_1: string;
   color_2: string;
@@ -16,6 +18,7 @@ interface MeterSettings {
   use_condensed_skills: boolean;
   open_log_on_save: boolean;
   overlay_columns: MeterColumns[];
+  close_button_action: CloseButtonAction;
 }
 
 interface MeterStateFunctions {
@@ -36,6 +39,7 @@ const DEFAULT_METER_SETTINGS: MeterSettings = {
   use_condensed_skills: true,
   open_log_on_save: true,
   overlay_columns: [MeterColumns.TotalDamage, MeterColumns.DPS, MeterColumns.DamagePercentage],
+  close_button_action: "minimize-to-tray",
 };
 
 export type StoreWithPersist<T> = Mutate<StoreApi<T>, [["zustand/persist", T]]>;
