@@ -14,6 +14,8 @@ const REQUIRED_KEYS = [
   "notification.label",
   "notification.description",
   "notification.permission-denied",
+  "notification.title",
+  "notification.remaining",
   "error.ALREADY_RUNNING",
   "error.GAME_NOT_RUNNING",
   "error.UNSUPPORTED_GAME",

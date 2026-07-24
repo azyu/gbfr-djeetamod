@@ -32,6 +32,10 @@ vi.mock("./useMeterVisibility", () => ({
   }),
 }));
 
+vi.mock("./useItemAcquisitionNotifications", () => ({
+  useItemAcquisitionNotifications: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => vi.fn()),
 }));
@@ -224,4 +228,18 @@ it("gives management content its own vertical scrollbar", () => {
   expect(source).toContain('<AppShell.Main className="log-main">');
   expect(css).toMatch(/\.log-window\s*\{[^}]*height:\s*100vh;[^}]*overflow:\s*hidden;/s);
   expect(css).toMatch(/\.log-main\s*\{[^}]*height:\s*100vh;[^}]*overflow-y:\s*auto;/s);
+});
+
+it("mounts the item acquisition notification controller in the management layout", () => {
+  const source = readFileSync(resolve(process.cwd(), "src/pages/Logs.tsx"), "utf8");
+
+  expect(source).toContain("useItemAcquisitionNotifications();");
+});
+
+it("emits the battle-ended app event from the accepted battle-end message", () => {
+  const source = readFileSync(resolve(process.cwd(), "src-tauri/src/main.rs"), "utf8");
+
+  expect(source).toMatch(
+    /protocol::Message::OnBattleEnd\s*=>\s*\{[\s\S]*state\.on_battle_end_event\(\);[\s\S]*emit_all\("battle-ended"/
+  );
 });

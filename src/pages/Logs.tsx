@@ -13,6 +13,7 @@ import { Toaster } from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import useConnectionState from "./useConnectionState";
+import { useItemAcquisitionNotifications } from "./useItemAcquisitionNotifications";
 import useMeterVisibility from "./useMeterVisibility";
 import useRepeatQuest from "./useRepeatQuest";
 import { UpdaterProvider } from "./useUpdater";
@@ -27,6 +28,7 @@ const LayoutContent = () => {
   const [retryPending, setRetryPending] = useState(false);
   const { meterEnabled, setMeterEnabled } = useMeterVisibility();
   const repeatQuest = useRepeatQuest();
+  useItemAcquisitionNotifications();
 
   const navigate = useNavigate();
 

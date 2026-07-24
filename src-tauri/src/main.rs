@@ -808,6 +808,7 @@ fn connect_and_run_parser(app: AppHandle, target: OwnedProcess) {
                                         }
                                         protocol::Message::OnBattleEnd => {
                                             state.on_battle_end_event();
+                                            let _ = app.emit_all("battle-ended", ());
                                         }
                                         }
                                     }

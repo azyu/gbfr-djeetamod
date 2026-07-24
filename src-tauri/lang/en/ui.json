@@ -112,7 +112,9 @@
       "notification": {
         "label": "Notify me when an acquired item reaches 900 or more",
         "description": "Checks increased ordinary items after battle and sends a Windows notification.",
-        "permission-denied": "Windows notification permission is required to use this setting."
+        "permission-denied": "Windows notification permission is required to use this setting.",
+        "title": "Djeeta MOD · Item Analysis",
+        "remaining": "and {{count}} more"
       },
       "error": {
         "ALREADY_RUNNING": "Item quantities are already being checked.",
