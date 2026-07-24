@@ -105,6 +105,15 @@
       "loading": "Checking item quantities.",
       "empty": "No items are close to the holding limit.",
       "quantity": "Quantity",
+      "tabs": {
+        "inventory": "Inventory",
+        "notifications": "Notification settings"
+      },
+      "notification": {
+        "label": "Notify me when an acquired item reaches 900 or more",
+        "description": "Checks increased ordinary items after battle and sends a Windows notification.",
+        "permission-denied": "Windows notification permission is required to use this setting."
+      },
       "error": {
         "ALREADY_RUNNING": "Item quantities are already being checked.",
         "GAME_NOT_RUNNING": "The game is not running.",
