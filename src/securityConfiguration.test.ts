@@ -145,6 +145,16 @@ test("inventory probe stays read-only and release-gated", () => {
   }
 });
 
+test("item analysis requests read-only process access and does not log inventory contents", () => {
+  const memory = readRepositoryFile("src-tauri/src/equipment_probe/memory.rs");
+  const source = readRepositoryFile("src-tauri/src/item_analysis.rs");
+  expect(memory).toContain("PROCESS_QUERY_INFORMATION | PROCESS_VM_READ");
+  for (const forbidden of ["PROCESS_VM_WRITE", "PROCESS_VM_OPERATION", "WriteProcessMemory"]) {
+    expect(memory + source).not.toContain(forbidden);
+  }
+  expect(source).not.toMatch(/log::\w+!\([^)]*(raw|address|items|inventory_json)/i);
+});
+
 test("full-roster validation stays read-only and development-gated", () => {
   const runner = readRepositoryFile("src-tauri/src/equipment_probe/mod.rs");
   const roster = readRepositoryFile("src-tauri/src/equipment_probe/roster_probe.rs");

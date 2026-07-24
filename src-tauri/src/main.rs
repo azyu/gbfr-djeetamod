@@ -46,6 +46,7 @@ mod db;
 mod equipment;
 mod equipment_probe;
 mod game_search;
+mod item_analysis;
 mod parser;
 mod repeat_quest;
 mod update_install;
@@ -997,6 +998,7 @@ fn main() {
         .manage(GameSearchState::default())
         .manage(equipment_probe::ProbeState::default())
         .manage(equipment_probe::inventory::InventoryProbeState::default())
+        .manage(item_analysis::ItemAnalysisState::default())
         .manage(repeat_quest::RepeatQuestState::default())
         .manage(EquipmentStatus(Mutex::new(
             equipment::EquipmentState::from_bundled_catalog()
@@ -1038,6 +1040,7 @@ fn main() {
             get_connection_state,
             retry_game_search,
             fetch_equipment_analysis,
+            item_analysis::fetch_item_analysis,
             equipment_probe::inventory::inventory_probe_available,
             equipment_probe::inventory::capture_inventory_probe,
             repeat_quest::get_repeat_quest_status,

@@ -57,6 +57,7 @@ vi.mock("react-i18next", () => ({
         "ui.navigation.battle-records": "전투 기록",
         "ui.navigation.settings": "설정",
         "ui.equipment-analysis.title": "진 특성 상한 분석",
+        "ui.item-analysis.title": "아이템 분석",
         "ui.connection.searching": "게임을 찾는 중입니다",
         "ui.connection.connected": "게임에 연결되었습니다",
         "ui.connection.disconnected": "게임 실행 중이 아닙니다",
@@ -113,6 +114,7 @@ it("shows the management navigation with an enabled meter switch", () => {
 
   expect(screen.getByText("데미지 미터")).toBeTruthy();
   expect(screen.getByText("진 특성 상한 분석")).toBeTruthy();
+  expect(screen.getByText("아이템 분석").closest("a")?.getAttribute("href")).toBe("/logs/items");
   expect(screen.getByText("전투 기록")).toBeTruthy();
   expect(screen.getByText("설정")).toBeTruthy();
   expect((screen.getByRole("switch", { name: "데미지 미터" }) as HTMLInputElement).checked).toBe(true);

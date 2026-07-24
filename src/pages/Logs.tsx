@@ -5,7 +5,7 @@ import "./Logs.css";
 import getVersion from "@/hooks/getVersion";
 import { AppShell, Burger, Button, Group, NavLink, ScrollArea, Switch, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { ChartBar, Gauge, Gear, House } from "@phosphor-icons/react";
+import { ChartBar, Gauge, Gear, House, Package } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { useEffect, useState } from "react";
@@ -133,6 +133,12 @@ const LayoutContent = () => {
               leftSection={<ChartBar size="1rem" />}
               component={Link}
               to="/logs/equipment"
+            />
+            <NavLink
+              label={t("ui.item-analysis.title")}
+              leftSection={<Package size="1rem" />}
+              component={Link}
+              to="/logs/items"
             />
             <NavLink
               label={t("ui.navigation.battle-records")}

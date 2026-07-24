@@ -4,7 +4,9 @@ use protocol::{
 use thiserror::Error;
 
 mod inventory;
+mod item_inventory;
 pub use inventory::*;
+pub use item_inventory::*;
 
 pub const EMPTY_HASH: u32 = 0x887A_E0B0;
 pub const SIGIL_COUNT: usize = 12;

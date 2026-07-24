@@ -98,6 +98,22 @@
         }
       }
     },
+    "item-analysis": {
+      "title": "Item Analysis",
+      "description": "Shows ordinary items approaching the 999-item holding limit.",
+      "refresh": "Refresh",
+      "loading": "Checking item quantities.",
+      "empty": "No items are close to the holding limit.",
+      "quantity": "Quantity",
+      "error": {
+        "ALREADY_RUNNING": "Item quantities are already being checked.",
+        "GAME_NOT_RUNNING": "The game is not running.",
+        "UNSUPPORTED_GAME": "This is not the supported game 2.0.2 executable.",
+        "UNAVAILABLE": "The ordinary-item inventory could not be found.",
+        "UNSTABLE": "Item quantities changed while being read. Refresh again.",
+        "INTERNAL": "Item quantities could not be checked."
+      }
+    },
     "successful-save": "Saved encounter to logs",
     "unsuccessful-save": "Failed to save encounter to logs: {{error}}",
     "on-area-enter": "Entered area..",

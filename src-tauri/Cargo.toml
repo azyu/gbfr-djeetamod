@@ -15,6 +15,10 @@ path = "src/main.rs"
 name = "build_trait_caps"
 path = "examples/build_trait_caps.rs"
 
+[[example]]
+name = "probe_item_inventory"
+path = "examples/probe_item_inventory.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]

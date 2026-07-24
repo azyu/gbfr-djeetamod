@@ -52,6 +52,7 @@ vi.mock("react-i18next", () => ({
         "ui.navigation.battle-records": "전투 기록",
         "ui.navigation.settings": "설정",
         "ui.equipment-analysis.title": "진 특성 상한 분석",
+        "ui.item-analysis.title": "아이템 분석",
         "ui.game-features.repeat-quest.label": "무한 퀘스트 반복",
         "ui.game-features.repeat-quest.reason.gameNotRunning": "게임이 실행 중이 아닙니다.",
         "ui.game-features.repeat-quest.reason.accessDenied": "현재 권한으로 게임 코드를 변경할 수 없습니다.",

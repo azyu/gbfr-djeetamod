@@ -1082,6 +1082,7 @@ name = "equipment-core"
 version = "0.1.2"
 dependencies = [
  "protocol",
+ "serde",
  "thiserror 1.0.58",
 ]
 

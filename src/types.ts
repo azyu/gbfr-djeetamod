@@ -285,6 +285,18 @@ export type EquipmentAnalysisResponse = {
   characters: CharacterEquipmentAnalysis[];
 };
 
+export type ItemAnalysisEntry = {
+  itemId: number;
+  quantity: number;
+};
+
+export type ItemAnalysisResponse = {
+  inspectedAtMs: number;
+  threshold: 900;
+  maximum: 999;
+  items: ItemAnalysisEntry[];
+};
+
 export enum MeterColumns {
   Name = "name",
   DPS = "dps",
