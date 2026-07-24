@@ -17,6 +17,10 @@
 - `src-tauri/`: named-pipe client, encounter parser, persistence, Tauri commands, and Windows packaging.
 - `src/`: React compact overlay and logs/settings UI.
 
+## Maintainer references
+
+- Relink file extraction, tables, IDs, and reverse-engineering index: [`docs/research/2026-07-24-relink-modding-reference.md`](docs/research/2026-07-24-relink-modding-reference.md)
+
 ## Behavioral invariants
 
 - First accepted hit starts an encounter.
@@ -55,6 +59,21 @@ Before packaging, check for an exact `Djeeta MOD` process and stop it only when 
 After packaging, independently verify that the NSIS installer exists, SHA-256 hashes of `target/release/hook.dll` and `src-tauri/hook.dll` are equal, and the installer and hook hashes appear in both `README.md` and `docs/testing/game-2.0.2-smoke-test.md`. Commit those two generated hash-document changes together.
 
 Node.js 20 is the supported toolchain. If packaging succeeds on another Node.js version, report it as a non-standard environment rather than implying that version is supported.
+
+## Release and updater operations
+
+- Keep maintainer-only Rust tools out of `src-tauri/src/bin/`. Tauri 1 may still collect files there as bundle binaries even when Cargo declares them as examples; place them under `src-tauri/examples/` or another non-bin path.
+- A warm `target/` directory can hide a missing bundle binary. Reproduce unexplained NSIS `os error 2` failures with an isolated `CARGO_TARGET_DIR` and, when Tauri tool downloads may affect the result, an isolated `LOCALAPPDATA` before treating the problem as CI-only.
+- Store `TAURI_PRIVATE_KEY` as the exact one-line contents of the generated updater key file. When updating the GitHub environment secret, pass the file through standard input and never print the key or place it directly in a logged command line.
+- GitHub normalizes spaces in uploaded release asset filenames to periods. Generate updater manifest URLs and remote asset comparisons with `ConvertTo-GitHubReleaseAssetName`; do not assume the local Tauri filename is the remote filename.
+- Do not use the single-release-by-tag API to inspect a newly created Draft Release. Query the authenticated releases list and use a bounded retry because a successful `gh release create` may not be immediately visible.
+- A failed Release workflow may already have pushed a hash-document commit and tag or created a Draft with uploaded assets. Inspect remote `main`, the exact tag, the authenticated release list, and asset state before rerunning; never blindly rerun the workflow.
+- If rebuilding is necessary, remove only the confirmed Draft release ID and exact version tag, then verify both are absent before dispatching again. Never delete a published release as cleanup for a failed workflow.
+- If failure occurs after asset upload, preserve and independently validate the existing Draft before choosing to rebuild. Do not spend another full release build merely to obtain a green workflow unless the Draft is invalid or the user explicitly requests a rerun.
+- Independently verify every release after the workflow: it remains a Draft unless publication was requested, exactly four assets exist, every available remote digest matches a fresh download, and `latest.json` contains the uploaded updater archive URL and the exact `.sig` contents.
+- Distinguish an ordinary local frontend/Rust build from the canonical signed NSIS package. Do not report local signed packaging as successful unless `npm.cmd run package:nsis` completed with the updater key and password; a successful unsigned Tauri or frontend build is not equivalent.
+- Publish a Draft Release only on an explicit user request. After publishing, verify that it is no longer a draft, has a publication timestamp, remains the latest release, and still has four uploaded assets.
+- GitHub Actions may force action runtimes onto Node.js 24 even when the workflow configures Node.js 20. Treat and report that as a non-standard environment warning while separately reporting the actual build result.
 
 ## Change discipline
 
