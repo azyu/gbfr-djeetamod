@@ -64,6 +64,22 @@ it("enables only the signed stable GitHub updater", () => {
   expect(cargo).toMatch(/tauri = \{[^\n]*features = \[[^\]]*"updater"/);
 });
 
+it("enables only the native notification capability required by item alerts", () => {
+  const config = JSON.parse(readRepositoryFile("src-tauri/tauri.conf.json")) as {
+    tauri: {
+      allowlist: {
+        all: boolean;
+        notification?: { all?: boolean };
+      };
+    };
+  };
+  const cargo = readRepositoryFile("src-tauri/Cargo.toml");
+
+  expect(config.tauri.allowlist.all).toBe(false);
+  expect(config.tauri.allowlist.notification).toEqual({ all: true });
+  expect(cargo).toMatch(/tauri = \{[^\n]*features = \[[^\]]*"notification-all"/);
+});
+
 it("separates unsigned NSIS preparation from updater signing", () => {
   const packageJson = JSON.parse(readRepositoryFile("package.json")) as {
     scripts: Record<string, string>;
