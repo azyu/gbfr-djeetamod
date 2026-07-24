@@ -23,7 +23,7 @@ const invoke = vi.hoisted(() =>
 
 const notification = vi.hoisted(() => ({
   isPermissionGranted: vi.fn(async () => false),
-  requestPermission: vi.fn(async () => "denied" as const),
+  requestPermission: vi.fn(async (): Promise<"granted" | "denied"> => "denied"),
 }));
 
 vi.mock("@tauri-apps/api", () => ({ invoke }));
