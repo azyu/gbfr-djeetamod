@@ -1041,6 +1041,7 @@ fn main() {
             retry_game_search,
             fetch_equipment_analysis,
             item_analysis::fetch_item_analysis,
+            item_analysis::fetch_item_inventory_snapshot,
             equipment_probe::inventory::inventory_probe_available,
             equipment_probe::inventory::capture_inventory_probe,
             repeat_quest::get_repeat_quest_status,

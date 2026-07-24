@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeItemAnalysisResponse } from "./itemAnalysisContract";
+import { normalizeItemAnalysisResponse, normalizeItemInventorySnapshotResponse } from "./itemAnalysisContract";
 
 describe("normalizeItemAnalysisResponse", () => {
   it("keeps only valid warning entries and removes duplicate ids", () => {
@@ -33,5 +33,25 @@ describe("normalizeItemAnalysisResponse", () => {
         items: [],
       })
     ).toThrow("invalid item analysis response");
+  });
+});
+
+describe("normalizeItemInventorySnapshotResponse", () => {
+  it("normalizes a complete item inventory snapshot", () => {
+    expect(
+      normalizeItemInventorySnapshotResponse({
+        inspectedAtMs: 456,
+        items: [
+          { itemId: 0x11111111, quantity: 899 },
+          { itemId: 0x22222222, quantity: 900 },
+        ],
+      })
+    ).toEqual({
+      inspectedAtMs: 456,
+      items: [
+        { itemId: 0x11111111, quantity: 899 },
+        { itemId: 0x22222222, quantity: 900 },
+      ],
+    });
   });
 });

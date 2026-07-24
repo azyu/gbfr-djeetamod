@@ -1,4 +1,4 @@
-import { ItemAnalysisEntry, ItemAnalysisResponse } from "@/types";
+import { ItemAnalysisEntry, ItemAnalysisResponse, ItemInventorySnapshotResponse } from "@/types";
 
 export const normalizeItemAnalysisResponse = (value: unknown): ItemAnalysisResponse => {
   if (
@@ -11,13 +11,33 @@ export const normalizeItemAnalysisResponse = (value: unknown): ItemAnalysisRespo
     throw new Error("invalid item analysis response");
   }
 
+  return {
+    inspectedAtMs: value.inspectedAtMs,
+    threshold: 900,
+    maximum: 999,
+    items: normalizeItems(value.items, 900),
+  };
+};
+
+export const normalizeItemInventorySnapshotResponse = (value: unknown): ItemInventorySnapshotResponse => {
+  if (!isRecord(value) || !isNonNegativeSafeInteger(value.inspectedAtMs) || !Array.isArray(value.items)) {
+    throw new Error("invalid item inventory snapshot response");
+  }
+
+  return {
+    inspectedAtMs: value.inspectedAtMs,
+    items: normalizeItems(value.items, 0),
+  };
+};
+
+function normalizeItems(value: unknown[], minimumQuantity: number): ItemAnalysisEntry[] {
   const seen = new Set<number>();
-  const items = value.items.flatMap((entry): ItemAnalysisEntry[] => {
+  return value.flatMap((entry): ItemAnalysisEntry[] => {
     if (
       !isRecord(entry) ||
       !isUint32(entry.itemId) ||
       !isNonNegativeSafeInteger(entry.quantity) ||
-      entry.quantity < 900 ||
+      entry.quantity < minimumQuantity ||
       entry.quantity > 999 ||
       seen.has(entry.itemId)
     ) {
@@ -26,14 +46,7 @@ export const normalizeItemAnalysisResponse = (value: unknown): ItemAnalysisRespo
     seen.add(entry.itemId);
     return [{ itemId: entry.itemId, quantity: entry.quantity }];
   });
-
-  return {
-    inspectedAtMs: value.inspectedAtMs,
-    threshold: 900,
-    maximum: 999,
-    items,
-  };
-};
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

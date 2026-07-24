@@ -81,6 +81,24 @@ pub(crate) struct ItemAnalysisResponse {
     items: Vec<OwnedItem>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ItemInventorySnapshotResponse {
+    inspected_at_ms: u64,
+    items: Vec<OwnedItem>,
+}
+
+impl From<ItemInventorySnapshotResponse> for ItemAnalysisResponse {
+    fn from(snapshot: ItemInventorySnapshotResponse) -> Self {
+        Self {
+            inspected_at_ms: snapshot.inspected_at_ms,
+            threshold: ITEM_WARNING_THRESHOLD,
+            maximum: ITEM_MAX_QUANTITY,
+            items: warning_items(&snapshot.items),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OrdinaryItemCatalog {
@@ -131,11 +149,11 @@ fn decode_snapshot(
     })
 }
 
-pub(crate) fn analyze_snapshots(
+pub(crate) fn stable_inventory_snapshot(
     first: &[u8],
     second: &[u8],
     ordinary_item_ids: &HashSet<u32>,
-) -> Result<ItemAnalysisResponse, ItemAnalysisCode> {
+) -> Result<ItemInventorySnapshotResponse, ItemAnalysisCode> {
     let first = decode_snapshot(first, ordinary_item_ids)?;
     let second = decode_snapshot(second, ordinary_item_ids)?;
     if first != second {
@@ -148,12 +166,18 @@ pub(crate) fn analyze_snapshots(
         .try_into()
         .map_err(|_| ItemAnalysisCode::Internal)?;
 
-    Ok(ItemAnalysisResponse {
+    Ok(ItemInventorySnapshotResponse {
         inspected_at_ms,
-        threshold: ITEM_WARNING_THRESHOLD,
-        maximum: ITEM_MAX_QUANTITY,
-        items: warning_items(&first),
+        items: first,
     })
+}
+
+pub(crate) fn analyze_snapshots(
+    first: &[u8],
+    second: &[u8],
+    ordinary_item_ids: &HashSet<u32>,
+) -> Result<ItemAnalysisResponse, ItemAnalysisCode> {
+    stable_inventory_snapshot(first, second, ordinary_item_ids).map(Into::into)
 }
 
 fn read_region(process: &RemoteProcess, region: MemoryRegion) -> Result<Vec<u8>, ItemAnalysisCode> {
@@ -164,7 +188,7 @@ fn read_region(process: &RemoteProcess, region: MemoryRegion) -> Result<Vec<u8>,
     Ok(bytes)
 }
 
-fn analyze_process() -> Result<ItemAnalysisResponse, ItemAnalysisCode> {
+fn analyze_process() -> Result<ItemInventorySnapshotResponse, ItemAnalysisCode> {
     let started = Instant::now();
     let process = RemoteProcess::find(GAME_PROCESS_NAME)
         .map_err(|_| ItemAnalysisCode::Internal)?
@@ -187,9 +211,9 @@ fn analyze_process() -> Result<ItemAnalysisResponse, ItemAnalysisCode> {
     let first = read_region(&process, region)?;
     std::thread::sleep(STABILITY_DELAY);
     let second = read_region(&process, region)?;
-    let response = analyze_snapshots(&first, &second, &ordinary_item_ids)?;
+    let response = stable_inventory_snapshot(&first, &second, &ordinary_item_ids)?;
     log::warn!(
-        "ITEM ANALYSIS MATCH pid={} elapsed_ms={} warning_count={}",
+        "ITEM ANALYSIS MATCH pid={} elapsed_ms={} decoded_count={}",
         process.pid,
         started.elapsed().as_millis(),
         response.items.len()
@@ -197,10 +221,9 @@ fn analyze_process() -> Result<ItemAnalysisResponse, ItemAnalysisCode> {
     Ok(response)
 }
 
-#[tauri::command]
-pub(crate) async fn fetch_item_analysis(
+async fn fetch_snapshot(
     state: State<'_, ItemAnalysisState>,
-) -> Result<ItemAnalysisResponse, String> {
+) -> Result<ItemInventorySnapshotResponse, String> {
     let _guard = state.try_begin().map_err(|code| code.as_str().to_owned())?;
     tauri::async_runtime::spawn_blocking(analyze_process)
         .await
@@ -208,15 +231,30 @@ pub(crate) async fn fetch_item_analysis(
         .map_err(|code| code.as_str().to_owned())
 }
 
+#[tauri::command]
+pub(crate) async fn fetch_item_inventory_snapshot(
+    state: State<'_, ItemAnalysisState>,
+) -> Result<ItemInventorySnapshotResponse, String> {
+    fetch_snapshot(state).await
+}
+
+#[tauri::command]
+pub(crate) async fn fetch_item_analysis(
+    state: State<'_, ItemAnalysisState>,
+) -> Result<ItemAnalysisResponse, String> {
+    fetch_snapshot(state).await.map(Into::into)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
 
-    use equipment_core::{OwnedItem, ITEM_RECORD_BYTES};
+    use equipment_core::{OwnedItem, ITEM_MAX_QUANTITY, ITEM_RECORD_BYTES, ITEM_WARNING_THRESHOLD};
 
     use super::{
-        analyze_snapshots, bundled_ordinary_item_ids, select_inventory_region, ItemAnalysisCode,
-        ItemAnalysisState, INVENTORY_REGION_BYTES,
+        analyze_snapshots, bundled_ordinary_item_ids, select_inventory_region,
+        stable_inventory_snapshot, ItemAnalysisCode, ItemAnalysisResponse, ItemAnalysisState,
+        ItemInventorySnapshotResponse, INVENTORY_REGION_BYTES,
     };
     use crate::equipment_probe::memory::MemoryRegion;
 
@@ -253,6 +291,61 @@ mod tests {
         );
         assert_eq!(response.threshold, 900);
         assert_eq!(response.maximum, 999);
+    }
+
+    #[test]
+    fn full_snapshot_keeps_items_below_the_warning_threshold() {
+        let bytes = [
+            record(ITEM_A, ITEM_WARNING_THRESHOLD - 1),
+            record(ITEM_B, ITEM_WARNING_THRESHOLD),
+        ]
+        .concat();
+
+        let snapshot =
+            stable_inventory_snapshot(&bytes, &bytes, &HashSet::from([ITEM_A, ITEM_B])).unwrap();
+
+        assert_eq!(
+            snapshot.items,
+            vec![
+                OwnedItem {
+                    item_id: ITEM_B,
+                    quantity: ITEM_WARNING_THRESHOLD,
+                },
+                OwnedItem {
+                    item_id: ITEM_A,
+                    quantity: ITEM_WARNING_THRESHOLD - 1,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn warning_response_still_filters_the_complete_snapshot() {
+        let snapshot = ItemInventorySnapshotResponse {
+            inspected_at_ms: 123,
+            items: vec![
+                OwnedItem {
+                    item_id: ITEM_A,
+                    quantity: ITEM_WARNING_THRESHOLD - 1,
+                },
+                OwnedItem {
+                    item_id: ITEM_B,
+                    quantity: ITEM_WARNING_THRESHOLD,
+                },
+            ],
+        };
+
+        let response = ItemAnalysisResponse::from(snapshot);
+
+        assert_eq!(
+            response.items,
+            vec![OwnedItem {
+                item_id: ITEM_B,
+                quantity: ITEM_WARNING_THRESHOLD,
+            }]
+        );
+        assert_eq!(response.threshold, ITEM_WARNING_THRESHOLD);
+        assert_eq!(response.maximum, ITEM_MAX_QUANTITY);
     }
 
     #[test]

@@ -297,6 +297,11 @@ export type ItemAnalysisResponse = {
   items: ItemAnalysisEntry[];
 };
 
+export type ItemInventorySnapshotResponse = {
+  inspectedAtMs: number;
+  items: ItemAnalysisEntry[];
+};
+
 export enum MeterColumns {
   Name = "name",
   DPS = "dps",
