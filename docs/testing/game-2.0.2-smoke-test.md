@@ -7,8 +7,8 @@
 - 게임 빌드: 2.0.2 / 실제 표시:
 - 화면 해상도:
 - 파티 구성:
-- NSIS installer SHA-256: `7F377D51F6BA096485E81F659A218FAF04D4236BAA45F9734AE6A03347A3907D`
-- `hook.dll` SHA-256: `3A7E6184A21B2AF14C337AEE2559ECB5C1D28300D7BA0734BC22AB59FA2B8776`
+- NSIS installer SHA-256: `3FF24400A93DC6FA3EA008F65104787326C3E91F7ECEDB5E5AFC1643705D4228`
+- `hook.dll` SHA-256: `F8853C963EAB55A8BB139B44E9D23DD20629B383F129928BC6BDB827FBA5E9D8`
 - 훅 로그 경로:
 - 테스트 일시:
 
@@ -19,7 +19,7 @@ $npmVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
 $tauriVersion = (Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json).package.version
 $cargoVersion = (Select-String '^version = "(.+)"' src-tauri/Cargo.toml).Matches[0].Groups[1].Value
 $versions = @(@($npmVersion, $tauriVersion, $cargoVersion) | Select-Object -Unique)
-if ($versions.Count -ne 1 -or $versions[0] -ne '0.1.2') { throw 'Version mismatch or unexpected release version' }
+if ($versions.Count -ne 1 -or $versions[0] -ne '0.1.3') { throw 'Version mismatch or unexpected release version' }
 ```
 
 ## 자동 업데이트 검증
