@@ -16,6 +16,10 @@ name = "build_trait_caps"
 path = "examples/build_trait_caps.rs"
 
 [[example]]
+name = "build_item_catalog"
+path = "examples/build_item_catalog.rs"
+
+[[example]]
 name = "probe_item_inventory"
 path = "examples/probe_item_inventory.rs"
 
