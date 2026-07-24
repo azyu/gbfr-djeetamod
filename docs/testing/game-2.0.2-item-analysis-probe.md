@@ -41,6 +41,15 @@ until every controlled comparison above agrees. Do not record a reusable absolut
   (384 named rows per language; 64 unnamed rows excluded).
 - [x] Verify all 281 ordinary-item IDs are displayable: 278 localized names and the
   existing ID fallback for the three official unnamed records.
+- [x] Verify the notification setting defaults off and requires Windows notification permission.
+- [x] Verify automated snapshot comparison, 900-inclusive boundaries, five-second debounce,
+  grouping, and failure handling.
+- [ ] In an offline or private session, enable the setting and verify one post-battle Windows
+  notification for an ordinary item that increases to at least 900.
+- [ ] Verify multiple qualifying post-battle item gains are grouped into one Windows notification.
+- [ ] Verify no notification appears for an unchanged/decreased item or while the setting is off.
+- [ ] Verify the notification remains visible through Windows Notification Center when the
+  management window is hidden.
 - [ ] Verify a controlled `+1` quantity change for one ordinary item.
 - [ ] Verify a controlled quantity decrease for one ordinary item.
 - [ ] Verify the 899, 900, and 999 warning boundaries in game.
