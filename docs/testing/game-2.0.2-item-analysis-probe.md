@@ -34,3 +34,19 @@ until every controlled comparison above agrees. Do not record a reusable absolut
   item catalog. Catalog records above 999 are treated as higher-cap currencies and excluded.
 - Live app result: `궁극의 증표 918 / 999` appeared on initial page load and remained the
   same after manual refresh.
+
+## Remaining tasks
+
+- [x] Regenerate the Korean and English item-name catalogs from verified 2.0.2 assets
+  (384 named rows per language; 64 unnamed rows excluded).
+- [x] Verify all 281 ordinary-item IDs are displayable: 278 localized names and the
+  existing ID fallback for the three official unnamed records.
+- [ ] Verify a controlled `+1` quantity change for one ordinary item.
+- [ ] Verify a controlled quantity decrease for one ordinary item.
+- [ ] Verify the 899, 900, and 999 warning boundaries in game.
+- [ ] Verify snapshot stability after changing the in-game item-menu sort and filter.
+- [ ] Restart validation 1/3: resolve the same logical inventory.
+- [ ] Restart validation 2/3: resolve the same logical inventory.
+- [ ] Restart validation 3/3: resolve the same logical inventory.
+- [ ] After the manual evidence is complete, rerun the required frontend and Rust
+  verification suite and record the final result.
