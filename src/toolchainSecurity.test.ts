@@ -35,7 +35,7 @@ it("uses Node.js 24 and immutable third-party actions in CI", () => {
   expect(ci).toContain("actions/checkout@11d5960a326750d5838078e36cf38b85af677262");
   expect(ci).toContain("actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020");
   expect(ci).toContain("Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32");
-  expect(ci).toContain("rustup toolchain install nightly-2024-05-04 --profile minimal");
+  expect(ci).toContain("rustup toolchain install nightly-2025-06-27 --profile minimal");
 });
 
 it("uses patched Vite and Vitest versions and audits them in CI", () => {
@@ -53,4 +53,34 @@ it("uses patched Vite and Vitest versions and audits them in CI", () => {
     vitest: "^4.1.10",
   });
   expect(ci).toContain("npm run audit:npm");
+});
+
+it("pins a Rust 1.88-capable nightly and audits both lockfiles", () => {
+  const packageJson = JSON.parse(readRepositoryFile("package.json")) as {
+    scripts: Record<string, string>;
+  };
+  const auditScriptPath = repositoryPath("scripts/audit-rust.ps1");
+  const ci = readRepositoryFile(".github/workflows/ci.yaml");
+
+  expect(readRepositoryFile("rust-toolchain.toml")).toContain('channel = "nightly-2025-06-27"');
+  expect(packageJson.scripts["audit:rust"]).toBe(
+    "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/audit-rust.ps1"
+  );
+  expect(existsSync(auditScriptPath)).toBe(true);
+  expect(ci).toContain("npm run audit:rust");
+  if (!existsSync(auditScriptPath)) return;
+
+  const auditScript = readFileSync(auditScriptPath, "utf8");
+  expect(auditScript).toContain("cargo-audit-x86_64-pc-windows-msvc-v0.22.2.zip");
+  expect(auditScript).toContain("0a7316540862c13d954f648917ceacca593747baed6eec180fafa590be2710ab");
+  expect(auditScript).toContain("Get-FileHash");
+  expect(auditScript).toContain("Cargo.lock");
+  expect(auditScript).toContain("protocol\\Cargo.lock");
+  expect(auditScript).toContain("audit --no-fetch --file 'protocol\\Cargo.lock'");
+});
+
+it("uses a current dll-syringe without unused RPC and cross-bitness features", () => {
+  expect(readRepositoryFile("src-tauri/Cargo.toml")).toContain(
+    'dll-syringe = { version = "0.17.1", default-features = false, features = ["syringe"] }'
+  );
 });

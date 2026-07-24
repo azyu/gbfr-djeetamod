@@ -16,6 +16,7 @@
     "format": "prettier --write --ignore-unknown --ext js,jsx,ts,tsx src ./src",
     "format-check": "prettier --check --ignore-unknown --ext js,jsx,ts,tsx src ./src",
     "audit:npm": "npm audit",
+    "audit:rust": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/audit-rust.ps1",
     "test:package-helpers": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/PackageHelpers.Tests.ps1",
     "package:nsis": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1",
     "package:sign": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sign-package.ps1",

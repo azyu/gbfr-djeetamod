@@ -59,8 +59,9 @@ jobs:
       - name: Should not update rustup
         shell: bash
         run: rustup set auto-self-update disable
-      - run: rustup toolchain install nightly-2024-05-04 --profile minimal
+      - run: rustup toolchain install nightly-2025-06-27 --profile minimal
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - run: cargo build --release --package hook
       - run: cargo build --verbose
       - run: cargo test --verbose
+      - run: npm run audit:rust

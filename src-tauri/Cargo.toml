@@ -23,7 +23,7 @@ tauri-build = { version = "1.5", features = [] }
 [dependencies]
 aho-corasick = "1.1"
 anyhow = "1.0"
-dll-syringe = "0.15.2"
+dll-syringe = { version = "0.17.1", default-features = false, features = ["syringe"] }
 equipment-core = { path = "../equipment-core" }
 futures = "0.3"
 interprocess = { version = "^2.0", features = ["tokio"] }
