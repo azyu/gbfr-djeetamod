@@ -539,7 +539,8 @@ git commit -m "feat: add 2.0.2 item catalog generator"
 **Interfaces:**
 
 - Consumes: the Task 1 CLI and verified local extraction artifacts.
-- Produces: two 384-entry catalogs and bundled regression tests that cover all 281 ordinary-item IDs.
+- Produces: two 384-entry catalogs and bundled regression tests that cover all 278 named
+  ordinary-item IDs while pinning the three official unnamed records to the ID fallback.
 
 - [ ] **Step 1: Add failing bundled-catalog tests**
 
@@ -735,7 +736,8 @@ Append:
 ## Remaining tasks
 
 - [x] Regenerate the complete Korean and English item-name catalogs from pinned 2.0.2 assets.
-- [x] Verify all 281 ordinary-item IDs have Korean and English names.
+- [x] Verify all 278 named ordinary-item IDs have Korean and English names; pin the three
+  official unnamed records to the ID fallback.
 - [ ] Observe a controlled +1 change affecting only the selected item.
 - [ ] Observe a controlled decrease affecting only the selected item.
 - [ ] Validate live warning boundaries at 899, 900, and 999.
@@ -830,7 +832,8 @@ Report:
 
 - Korean/English catalog entry count: 384 each;
 - unnamed internal rows excluded: 64;
-- ordinary-item translation coverage: 281/281 each language;
+- ordinary-item translation coverage: 278/281 each language, with the three official unnamed
+  records displayed through the ID fallback;
 - exact focused and full test/build results;
 - unchecked manual quantity, boundary, sort/filter, and restart tasks;
 - no claim of full 2.0.2 compatibility.

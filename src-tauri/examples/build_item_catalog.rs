@@ -181,16 +181,20 @@ fn load_item_definitions(connection: &Connection) -> Result<Vec<ItemDefinition>>
     Ok(definitions)
 }
 
-fn parse_message_names(bytes: &[u8], language: &str) -> Result<BTreeMap<String, String>> {
+fn parse_message_names(
+    bytes: &[u8],
+    language: &str,
+    required_names: &HashSet<&str>,
+) -> Result<BTreeMap<String, String>> {
     let table: MessageTable =
         rmp_serde::from_slice(bytes).with_context(|| format!("parse {language} text.msg"))?;
     let mut names = BTreeMap::new();
     for row in table.rows_ {
         let key = row.column_.id_hash_.trim().to_owned();
-        let text = row.column_.text_.trim().to_owned();
-        if key.is_empty() {
+        if !required_names.contains(key.as_str()) {
             continue;
         }
+        let text = row.column_.text_.trim().to_owned();
         if let Some(previous) = names.insert(key.clone(), text.clone()) {
             if previous != text {
                 bail!("{language} contains conflicting text for {key}");
@@ -256,14 +260,18 @@ fn generate_catalogs(
 ) -> Result<GeneratedCatalogs> {
     validated_game_sha256(game_exe_sha256)?;
     let definitions = load_item_definitions(connection)?;
+    let required_names = definitions
+        .iter()
+        .map(|definition| definition.name_key.as_str())
+        .collect::<HashSet<_>>();
     let ko = build_catalog(
         &definitions,
-        &parse_message_names(ko_message, "Korean")?,
+        &parse_message_names(ko_message, "Korean", &required_names)?,
         "Korean",
     )?;
     let en = build_catalog(
         &definitions,
-        &parse_message_names(en_message, "English")?,
+        &parse_message_names(en_message, "English", &required_names)?,
         "English",
     )?;
     if ko.keys().ne(en.keys()) || ko.iter().any(|(hash, record)| en[hash].key != record.key) {
@@ -359,11 +367,21 @@ mod tests {
     use std::fs;
 
     use rusqlite::Connection;
+    use serde::Deserialize;
 
     use super::{
         custom_xxhash32, generate_catalogs, load_item_definitions, write_prepared_outputs,
-        ItemNameCatalog, MessageColumn, MessageRow, MessageTable, GAME_EXE_SHA256,
+        ItemNameCatalog, MessageColumn, MessageRow, MessageTable, EXPECTED_LOCALIZED_ITEMS,
+        GAME_EXE_SHA256, GAME_VERSION,
     };
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct OrdinaryItemCatalog {
+        game_version: String,
+        game_exe_sha256: String,
+        item_ids: Vec<String>,
+    }
 
     fn sqlite_fixture(rows: &[(&str, &str)]) -> Connection {
         let connection = Connection::open_in_memory().unwrap();
@@ -442,6 +460,22 @@ mod tests {
     }
 
     #[test]
+    fn ignores_conflicting_messages_that_are_not_item_names() {
+        let connection = sqlite_fixture(&[("0EB683CD", "TXT_ITEM_90_0000")]);
+        let ko = message_fixture(&[("TXT_ITEM_90_0000", "테스트 아이템")]);
+        let en = message_fixture(&[
+            ("TXT_ITEM_90_0000", "Test Item"),
+            ("TXT_ITEM_INFO_01_0000", "Description variant A"),
+            ("TXT_ITEM_INFO_01_0000", "Description variant B"),
+        ]);
+
+        let generated = generate_catalogs(&connection, &ko, &en, GAME_EXE_SHA256).unwrap();
+        let en_catalog: ItemNameCatalog = serde_json::from_slice(&generated.en_names).unwrap();
+
+        assert_eq!(en_catalog["0eb683cd"].text, "Test Item");
+    }
+
+    #[test]
     fn rejects_missing_language_empty_text_duplicate_ids_and_wrong_game_hash() {
         let connection = sqlite_fixture(&[("0EB683CD", "TXT_ITEM_90_0000")]);
         let ko = message_fixture(&[("TXT_ITEM_90_0000", "테스트 아이템")]);
@@ -480,5 +514,50 @@ mod tests {
         assert_eq!(fs::read(&ko_path).unwrap(), b"korean");
         assert_eq!(fs::read(&en_path).unwrap(), b"english");
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bundled_2_0_2_catalogs_cover_every_named_ordinary_item() {
+        let ko: ItemNameCatalog =
+            serde_json::from_str(include_str!("../lang/ko/items.json")).unwrap();
+        let en: ItemNameCatalog =
+            serde_json::from_str(include_str!("../lang/en/items.json")).unwrap();
+        let ordinary: OrdinaryItemCatalog =
+            serde_json::from_str(include_str!("../data/ordinary-items-2.0.2.json")).unwrap();
+
+        assert_eq!(ordinary.game_version, GAME_VERSION);
+        assert_eq!(ordinary.game_exe_sha256, GAME_EXE_SHA256);
+        assert_eq!(ko.len(), EXPECTED_LOCALIZED_ITEMS);
+        assert_eq!(en.len(), EXPECTED_LOCALIZED_ITEMS);
+        assert_eq!(ko.keys().collect::<Vec<_>>(), en.keys().collect::<Vec<_>>());
+        assert!(ko
+            .values()
+            .all(|record| !record.key.trim().is_empty() && !record.text.trim().is_empty()));
+        assert!(en
+            .values()
+            .all(|record| !record.key.trim().is_empty() && !record.text.trim().is_empty()));
+        assert!(ko.iter().all(|(hash, record)| en[hash].key == record.key));
+        assert_eq!(ordinary.item_ids.len(), 281);
+        let untranslated = ordinary
+            .item_ids
+            .iter()
+            .filter(|hash| !ko.contains_key(&hash.to_ascii_lowercase()))
+            .map(|hash| hash.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(untranslated, ["3ca218dd", "7b3f6dd9", "84f84569"]);
+        assert_eq!(ordinary.item_ids.len() - untranslated.len(), 278);
+    }
+
+    #[test]
+    fn bundled_catalog_contains_endless_ragnarok_items() {
+        let ko: ItemNameCatalog =
+            serde_json::from_str(include_str!("../lang/ko/items.json")).unwrap();
+        let en: ItemNameCatalog =
+            serde_json::from_str(include_str!("../lang/en/items.json")).unwrap();
+
+        for hash in ["0eb683cd", "20c742de", "98cdb46f"] {
+            assert!(ko.contains_key(hash), "missing Korean item {hash}");
+            assert!(en.contains_key(hash), "missing English item {hash}");
+        }
     }
 }
