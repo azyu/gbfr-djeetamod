@@ -75,18 +75,39 @@ try {
         }
     }
 
-    $npmPath = (Get-Command npm.cmd -ErrorAction Stop).Source
+    $nodePath = (Get-Command node.exe -ErrorAction Stop).Source
+    $tauriCliPath = Join-Path $repositoryRoot 'node_modules\@tauri-apps\cli\tauri.js'
+    if (-not (Test-Path -LiteralPath $tauriCliPath -PathType Leaf)) {
+        throw "Tauri CLI is missing: $tauriCliPath"
+    }
+
+    $runnerTemp = [Environment]::GetEnvironmentVariable('RUNNER_TEMP')
+    $tempDirectory = if ([string]::IsNullOrWhiteSpace($runnerTemp)) {
+        [IO.Path]::GetTempPath()
+    }
+    else {
+        $runnerTemp
+    }
+    $privateKeyPath = Join-Path $tempDirectory ("djeeta-updater-" + [guid]::NewGuid().ToString('N') + '.key')
+    [IO.File]::WriteAllText($privateKeyPath, $env:TAURI_PRIVATE_KEY, $utf8WithoutBom)
     try {
-        Invoke-NativeCommand -FilePath $npmPath -Arguments @(
-            'run',
-            'tauri',
-            '--',
+        $signerArguments = @(
+            $tauriCliPath,
             'signer',
             'sign',
+            '--private-key-path',
+            $privateKeyPath,
+            '--password',
+            $env:TAURI_KEY_PASSWORD,
             $updaterArchive.FullName
         )
+        & $nodePath @signerArguments
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Tauri updater signing command failed.'
+        }
     }
     finally {
+        Remove-Item -LiteralPath $privateKeyPath -Force -ErrorAction SilentlyContinue
         Remove-Item Env:TAURI_PRIVATE_KEY -ErrorAction SilentlyContinue
         Remove-Item Env:TAURI_KEY_PASSWORD -ErrorAction SilentlyContinue
     }

@@ -107,6 +107,11 @@ it("separates unsigned NSIS preparation from updater signing", () => {
   const signingScript = readRepositoryFile(signingScriptPath);
   expect(signingScript).toContain("Assert-UpdaterSigningEnvironment");
   expect(signingScript).toMatch(/'signer',\s*'sign'/);
+  expect(signingScript).toContain("'--private-key-path'");
+  expect(signingScript).toContain("'--password'");
+  expect(signingScript).toContain("[IO.File]::WriteAllText($privateKeyPath, $env:TAURI_PRIVATE_KEY");
+  expect(signingScript).toContain("Remove-Item -LiteralPath $privateKeyPath");
+  expect(signingScript).not.toMatch(/Invoke-NativeCommand[\s\S]{0,300}'signer',\s*'sign'/);
   expect(signingScript).not.toContain("npm.cmd ci");
   expect(signingScript).not.toContain("cargo build");
   expect(signingScript).toContain("Select-ProductNsisUpdaterArtifacts");
