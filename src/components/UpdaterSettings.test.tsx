@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     currentVersion: "0.1.1",
     manifest: null,
     error: null,
+    downloadProgress: null,
   } as UpdaterState,
 }));
 
@@ -51,6 +52,7 @@ beforeEach(() => {
     currentVersion: "0.1.1",
     manifest: null,
     error: null,
+    downloadProgress: null,
   };
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: false,

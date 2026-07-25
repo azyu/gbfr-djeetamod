@@ -96,10 +96,14 @@ const expectedEnglishUpdater = {
   install: "Update",
   preparing: "Preparing the update.",
   installing: "Installing the update.",
+  "download-progress": "{{percent}}% downloaded",
+  "download-progress-label": "Update download progress",
   "check-failed": "Could not check for updates.",
   "game-running": "Close the game and try the update again.",
   "repeat-quest-restore-failed": "The update was stopped because Unlimited Repeat Quest could not be restored.",
   "install-failed": "Could not install the update.",
+  retry: "Try again",
+  "manual-install": "Manual install",
 };
 
 const expectedKoreanUpdater = {
@@ -114,10 +118,14 @@ const expectedKoreanUpdater = {
   install: "업데이트",
   preparing: "업데이트를 준비하는 중입니다.",
   installing: "업데이트를 설치하는 중입니다.",
+  "download-progress": "{{percent}}% 다운로드됨",
+  "download-progress-label": "업데이트 다운로드 진행률",
   "check-failed": "업데이트를 확인하지 못했습니다.",
   "game-running": "게임을 종료한 후 다시 업데이트해 주세요.",
   "repeat-quest-restore-failed": "무한 퀘스트 반복 설정을 복구하지 못해 업데이트를 중단했습니다.",
   "install-failed": "업데이트를 설치하지 못했습니다.",
+  retry: "다시 시도",
+  "manual-install": "수동 설치",
 };
 
 const expectedEnglishColumns = {

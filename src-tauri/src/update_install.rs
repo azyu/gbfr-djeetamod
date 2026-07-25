@@ -4,6 +4,12 @@ use crate::{
 };
 use dll_syringe::process::OwnedProcess;
 use serde::Serialize;
+use std::time::Duration;
+
+use log::warn;
+use tauri::AppHandle;
+
+const UPDATE_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +55,36 @@ pub(crate) async fn prepare_update_install(
     })
     .await
     .unwrap_or(UpdateInstallReadiness::RepeatQuestRestoreFailed))
+}
+
+#[tauri::command]
+pub(crate) async fn install_available_update(app: AppHandle) -> Result<(), String> {
+    warn!(
+        "UPDATER INSTALL stage=check timeout_seconds={}",
+        UPDATE_REQUEST_TIMEOUT.as_secs()
+    );
+    let update = tauri::updater::builder(app)
+        .timeout(UPDATE_REQUEST_TIMEOUT)
+        .check()
+        .await
+        .map_err(|error| {
+            warn!("UPDATER INSTALL stage=check result=failed error={error}");
+            error.to_string()
+        })?;
+
+    if !update.is_update_available() {
+        warn!("UPDATER INSTALL stage=check result=up-to-date");
+        return Err("No update is available".to_string());
+    }
+
+    warn!(
+        "UPDATER INSTALL stage=download version={} result=started",
+        update.latest_version()
+    );
+    update.download_and_install().await.map_err(|error| {
+        warn!("UPDATER INSTALL stage=download result=failed error={error}");
+        error.to_string()
+    })
 }
 
 #[cfg(test)]

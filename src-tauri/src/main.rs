@@ -1048,6 +1048,7 @@ fn main() {
             repeat_quest::get_repeat_quest_status,
             repeat_quest::set_repeat_quest_enabled,
             update_install::prepare_update_install,
+            update_install::install_available_update,
         ])
         .setup(|app| {
             app.state::<repeat_quest::RepeatQuestState>()

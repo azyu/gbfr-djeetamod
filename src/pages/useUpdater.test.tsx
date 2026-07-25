@@ -5,15 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   checkUpdate: vi.fn(),
   getVersion: vi.fn(),
-  installUpdate: vi.fn(),
   invoke: vi.fn(),
+  listen: vi.fn(),
+  listeners: new Map<string, (event: { payload: { chunkLength: number; contentLength: number | null } }) => void>(),
 }));
 
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: mocks.getVersion }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: mocks.listen,
+  TauriEvent: { DOWNLOAD_PROGRESS: "tauri://update-download-progress" },
+}));
 vi.mock("@tauri-apps/api/tauri", () => ({ invoke: mocks.invoke }));
 vi.mock("@tauri-apps/api/updater", () => ({
   checkUpdate: mocks.checkUpdate,
-  installUpdate: mocks.installUpdate,
 }));
 
 import { UpdaterProvider, useUpdater } from "./useUpdater";
@@ -24,6 +28,16 @@ describe("UpdaterProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getVersion.mockResolvedValue("0.1.1");
+    mocks.listeners.clear();
+    mocks.listen.mockImplementation(
+      async (
+        event: string,
+        handler: (event: { payload: { chunkLength: number; contentLength: number | null } }) => void
+      ) => {
+        mocks.listeners.set(event, handler);
+        return vi.fn();
+      }
+    );
   });
 
   afterEach(() => {
@@ -43,6 +57,7 @@ describe("UpdaterProvider", () => {
       currentVersion: "0.1.1",
       manifest: null,
       error: null,
+      downloadProgress: null,
     });
     expect(warning).toHaveBeenCalledTimes(1);
   });
@@ -124,27 +139,78 @@ describe("UpdaterProvider", () => {
     await act(() => result.current.installAvailableUpdate());
 
     expect(mocks.invoke).toHaveBeenCalledWith("prepare_update_install");
-    expect(mocks.installUpdate).not.toHaveBeenCalled();
     expect(result.current.state.phase).toBe("error");
     expect(result.current.state.error).toBe("gameRunning");
     expect(result.current.state.manifest?.version).toBe("0.1.2");
   });
 
-  it("calls installUpdate only after backend readiness is ready", async () => {
+  it("publishes cumulative native download progress while installing", async () => {
     mocks.checkUpdate.mockResolvedValue({
       shouldUpdate: true,
       manifest: { version: "0.1.2", date: "2026-07-22T00:00:00Z", body: "Signed update" },
     });
-    mocks.invoke.mockResolvedValue("ready");
-    mocks.installUpdate.mockResolvedValue(undefined);
+    let resolveInstall: (() => void) | undefined;
+    mocks.invoke.mockResolvedValueOnce("ready").mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveInstall = resolve;
+        })
+    );
+    const { result } = renderHook(() => useUpdater(), { wrapper });
+    await waitFor(() => expect(result.current.state.phase).toBe("available"));
+
+    let installation!: Promise<void>;
+    act(() => {
+      installation = result.current.installAvailableUpdate();
+    });
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2));
+
+    act(() => {
+      mocks.listeners.get("tauri://update-download-progress")?.({
+        payload: { chunkLength: 2048, contentLength: 8192 },
+      });
+      mocks.listeners.get("tauri://update-download-progress")?.({
+        payload: { chunkLength: 1024, contentLength: 8192 },
+      });
+    });
+
+    expect(result.current.state.downloadProgress).toEqual({
+      downloadedBytes: 3072,
+      totalBytes: 8192,
+    });
+    resolveInstall?.();
+    await act(() => installation);
+  });
+
+  it("uses the timeout-controlled backend installer after readiness succeeds", async () => {
+    mocks.checkUpdate.mockResolvedValue({
+      shouldUpdate: true,
+      manifest: { version: "0.1.2", date: "2026-07-22T00:00:00Z", body: "Signed update" },
+    });
+    mocks.invoke.mockResolvedValueOnce("ready").mockResolvedValueOnce(undefined);
     const { result } = renderHook(() => useUpdater(), { wrapper });
     await waitFor(() => expect(result.current.state.phase).toBe("available"));
 
     await act(() => result.current.installAvailableUpdate());
 
-    expect(mocks.invoke).toHaveBeenCalledWith("prepare_update_install");
-    expect(mocks.installUpdate).toHaveBeenCalledTimes(1);
-    expect(result.current.state.phase).toBe("installing");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(1, "prepare_update_install");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(2, "install_available_update");
+  });
+
+  it("reports installFailed when backend preparation rejects", async () => {
+    mocks.checkUpdate.mockResolvedValue({
+      shouldUpdate: true,
+      manifest: { version: "0.1.2", date: "2026-07-22T00:00:00Z", body: "Signed update" },
+    });
+    mocks.invoke.mockRejectedValue(new Error("backend unavailable"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { result } = renderHook(() => useUpdater(), { wrapper });
+    await waitFor(() => expect(result.current.state.phase).toBe("available"));
+
+    await act(() => result.current.installAvailableUpdate());
+
+    expect(result.current.state.phase).toBe("error");
+    expect(result.current.state.error).toBe("installFailed");
   });
 
   it("reports repeatQuestRestoreFailed without calling installUpdate", async () => {
@@ -158,18 +224,17 @@ describe("UpdaterProvider", () => {
 
     await act(() => result.current.installAvailableUpdate());
 
-    expect(mocks.installUpdate).not.toHaveBeenCalled();
     expect(result.current.state.phase).toBe("error");
     expect(result.current.state.error).toBe("repeatQuestRestoreFailed");
   });
 
-  it("reports installFailed when installUpdate rejects", async () => {
+  it("reports installFailed when the timeout-controlled backend installer rejects", async () => {
     mocks.checkUpdate.mockResolvedValue({
       shouldUpdate: true,
       manifest: { version: "0.1.2", date: "2026-07-22T00:00:00Z", body: "Signed update" },
     });
-    mocks.invoke.mockResolvedValue("ready");
-    mocks.installUpdate.mockRejectedValue(new Error("invalid signature"));
+    mocks.invoke.mockResolvedValueOnce("ready").mockRejectedValueOnce(new Error("request timed out"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { result } = renderHook(() => useUpdater(), { wrapper });
     await waitFor(() => expect(result.current.state.phase).toBe("available"));
 
@@ -185,9 +250,8 @@ describe("UpdaterProvider", () => {
       shouldUpdate: true,
       manifest: { version: "0.1.2", date: "2026-07-22T00:00:00Z", body: "Signed update" },
     });
-    mocks.invoke.mockResolvedValue("ready");
     let resolveInstall: (() => void) | undefined;
-    mocks.installUpdate.mockImplementation(
+    mocks.invoke.mockResolvedValueOnce("ready").mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
           resolveInstall = resolve;
@@ -202,10 +266,10 @@ describe("UpdaterProvider", () => {
       first = result.current.installAvailableUpdate();
       second = result.current.installAvailableUpdate();
     });
-    await waitFor(() => expect(mocks.installUpdate).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2));
 
-    expect(mocks.invoke).toHaveBeenCalledTimes(1);
-    expect(mocks.installUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.invoke).toHaveBeenNthCalledWith(1, "prepare_update_install");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(2, "install_available_update");
     resolveInstall?.();
     await act(() => Promise.all([first, second]));
   });
@@ -225,6 +289,7 @@ describe("UpdaterProvider", () => {
       currentVersion: "0.1.1",
       manifest: null,
       error: null,
+      downloadProgress: null,
     });
   });
 });
