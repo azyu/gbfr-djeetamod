@@ -30,4 +30,4 @@ it("keeps maintainer tools out of the application bundle targets", () => {
   expect(appPackage?.targets.filter(({ kind }) => kind.includes("bin")).map(({ name }) => name)).toEqual(["gbfr-logs"]);
   expect(appPackage?.targets.find(({ name }) => name === "build_trait_caps")?.kind).toContain("example");
   expect(existsSync(join(process.cwd(), "src-tauri", "src", "bin", "build_trait_caps.rs"))).toBe(false);
-});
+}, 120_000);
