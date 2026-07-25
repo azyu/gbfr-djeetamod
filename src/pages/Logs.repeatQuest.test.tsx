@@ -103,6 +103,13 @@ it("shows repeat quest immediately after the damage-meter control", () => {
   expect(meter.compareDocumentPosition(repeat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
+it("shows a repeat icon beside the repeat-quest label", () => {
+  renderLayout();
+
+  const repeatNavLink = screen.getByText("무한 퀘스트 반복").closest(".mantine-NavLink-root");
+  expect(repeatNavLink?.querySelector("svg")).toBeTruthy();
+});
+
 it("changes repeat quest only through its switch", () => {
   renderLayout();
 
