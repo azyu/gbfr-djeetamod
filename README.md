@@ -115,7 +115,7 @@ Djeeta MOD는 게임의 그래픽 설정이나 렌더링 품질을 변경하지 
 
 백신 프로그램이 동작 방식 때문에 파일을 오탐할 수 있습니다. 출처와 아래 SHA-256 값을 직접 확인한 뒤 설치 여부를 판단하십시오.
 
-## 0.1.3 빌드 해시
+## 0.1.4 빌드 해시
 
 - NSIS installer: `EAEA1FEE468870B57A4CFD88672BF51BD367862D0FAC9A865F19491609B5B1AA`
 - `hook.dll`: `AE18581692694DC4F867ABF887E8016CEFBEB29FD42DBD743DECAAEF4C7B8DA6`
