@@ -1,4 +1,5 @@
 use crate::{
+    conflux_timer::{ConfluxTimerState, ConfluxTimerStatus, ConfluxTimerStatusKind},
     equipment_probe::GAME_PROCESS_NAME,
     repeat_quest::{RepeatQuestState, RepeatQuestStatus, RepeatQuestStatusKind},
 };
@@ -17,23 +18,39 @@ pub(crate) enum UpdateInstallReadiness {
     Ready,
     GameRunning,
     RepeatQuestRestoreFailed,
+    ConfluxTimerRestoreFailed,
 }
 
 fn decide_readiness(
-    restore_status: Option<RepeatQuestStatus>,
+    repeat_restore_status: Option<RepeatQuestStatus>,
+    timer_restore_status: Option<ConfluxTimerStatus>,
     running_after_restore: bool,
 ) -> UpdateInstallReadiness {
     if !running_after_restore {
         return UpdateInstallReadiness::Ready;
     }
 
-    match restore_status {
+    if !matches!(
+        repeat_restore_status,
         Some(RepeatQuestStatus {
             state: RepeatQuestStatusKind::Off,
             ..
-        }) => UpdateInstallReadiness::GameRunning,
-        _ => UpdateInstallReadiness::RepeatQuestRestoreFailed,
+        })
+    ) {
+        return UpdateInstallReadiness::RepeatQuestRestoreFailed;
     }
+
+    if !matches!(
+        timer_restore_status,
+        Some(ConfluxTimerStatus {
+            state: ConfluxTimerStatusKind::Off,
+            ..
+        })
+    ) {
+        return UpdateInstallReadiness::ConfluxTimerRestoreFailed;
+    }
+
+    UpdateInstallReadiness::GameRunning
 }
 
 fn game_is_running() -> bool {
@@ -42,19 +59,26 @@ fn game_is_running() -> bool {
 
 #[tauri::command]
 pub(crate) async fn prepare_update_install(
-    state: tauri::State<'_, RepeatQuestState>,
+    repeat_state: tauri::State<'_, RepeatQuestState>,
+    timer_state: tauri::State<'_, ConfluxTimerState>,
 ) -> Result<UpdateInstallReadiness, ()> {
-    let state = state.inner().clone();
+    let repeat_state = repeat_state.inner().clone();
+    let timer_state = timer_state.inner().clone();
     if !game_is_running() && !game_is_running() {
         return Ok(UpdateInstallReadiness::Ready);
     }
 
     Ok(tauri::async_runtime::spawn_blocking(move || {
-        let restored = state.restore_for_update();
-        decide_readiness(Some(restored), game_is_running())
+        let repeat_restored = repeat_state.restore_for_update();
+        let timer_restored = timer_state.restore_for_update();
+        decide_readiness(
+            Some(repeat_restored),
+            Some(timer_restored),
+            game_is_running(),
+        )
     })
     .await
-    .unwrap_or(UpdateInstallReadiness::RepeatQuestRestoreFailed))
+    .unwrap_or(UpdateInstallReadiness::ConfluxTimerRestoreFailed))
 }
 
 #[tauri::command]
@@ -90,6 +114,7 @@ pub(crate) async fn install_available_update(app: AppHandle) -> Result<(), Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::conflux_timer::{ConfluxTimerReason, ConfluxTimerStatusKind};
     use crate::repeat_quest::{RepeatQuestReason, RepeatQuestStatusKind};
 
     fn status(
@@ -99,15 +124,29 @@ mod tests {
         RepeatQuestStatus { state, reason }
     }
 
+    fn timer_status(
+        state: ConfluxTimerStatusKind,
+        reason: Option<ConfluxTimerReason>,
+    ) -> ConfluxTimerStatus {
+        ConfluxTimerStatus { state, reason }
+    }
+
     #[test]
     fn stopped_game_is_ready_without_restoration() {
-        assert_eq!(decide_readiness(None, false), UpdateInstallReadiness::Ready);
+        assert_eq!(
+            decide_readiness(None, None, false),
+            UpdateInstallReadiness::Ready
+        );
     }
 
     #[test]
     fn restored_running_game_stays_blocked_until_closed() {
         assert_eq!(
-            decide_readiness(Some(status(RepeatQuestStatusKind::Off, None)), true),
+            decide_readiness(
+                Some(status(RepeatQuestStatusKind::Off, None)),
+                Some(timer_status(ConfluxTimerStatusKind::Off, None)),
+                true,
+            ),
             UpdateInstallReadiness::GameRunning
         );
     }
@@ -120,9 +159,25 @@ mod tests {
                     RepeatQuestStatusKind::Unavailable,
                     Some(RepeatQuestReason::RestoreFailed),
                 )),
+                Some(timer_status(ConfluxTimerStatusKind::Off, None)),
                 true,
             ),
             UpdateInstallReadiness::RepeatQuestRestoreFailed
+        );
+    }
+
+    #[test]
+    fn timer_restoration_failure_blocks_a_still_running_game() {
+        assert_eq!(
+            decide_readiness(
+                Some(status(RepeatQuestStatusKind::Off, None)),
+                Some(timer_status(
+                    ConfluxTimerStatusKind::Unavailable,
+                    Some(ConfluxTimerReason::RestoreFailed),
+                )),
+                true,
+            ),
+            UpdateInstallReadiness::ConfluxTimerRestoreFailed
         );
     }
 
@@ -133,6 +188,10 @@ mod tests {
                 Some(status(
                     RepeatQuestStatusKind::Unavailable,
                     Some(RepeatQuestReason::GameNotRunning),
+                )),
+                Some(timer_status(
+                    ConfluxTimerStatusKind::Unavailable,
+                    Some(ConfluxTimerReason::GameNotRunning),
                 )),
                 false,
             ),

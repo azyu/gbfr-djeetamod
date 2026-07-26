@@ -22,7 +22,7 @@
     },
     "game-features": {
       "title": "Game Features",
-      "repeat-quest": {
+        "repeat-quest": {
         "label": "Unlimited Repeat Quest",
         "description": "Removes the quest repeat-count limit.",
         "reason": {
@@ -35,10 +35,30 @@
           "accessDenied": "The game code cannot be changed with the current permissions.",
           "patchFailed": "Unlimited Repeat Quest could not be enabled.",
           "restoreFailed": "The original game code could not be restored.",
-          "internal": "An internal error occurred while processing Unlimited Repeat Quest."
+            "internal": "An internal error occurred while processing Unlimited Repeat Quest."
+          }
+        },
+        "conflux": {
+          "title": "Extreme Conflux",
+          "description": "Shortens selection delays while using the game's unattended progression.",
+          "requirement-title": "Game option required",
+          "requirement": "Enable the game's Extreme Conflux unattended-operation option.",
+          "auto-run": "Automatic execution",
+          "timer-description": "Sets auto progress to 2 seconds and its notice to 1 second. Original values are restored when disabled or when the app exits.",
+          "todo": "Configured final rewards and automatic Tredame re-entry remain follow-up TODOs.",
+          "reason": {
+            "busy": "The previous change is still in progress.",
+            "gameNotRunning": "The game is not running.",
+            "unsupportedGame": "This is not the supported game 2.0.2 executable.",
+            "notEndlessMode": "Enter Extreme Conflux and try again.",
+            "unexpectedValues": "The timer was not changed because its values were unexpected.",
+            "accessDenied": "The game timer cannot be changed with the current permissions.",
+            "patchFailed": "Extreme Conflux automatic execution could not be enabled.",
+            "restoreFailed": "The original game timer could not be restored.",
+            "internal": "An internal error occurred while processing the Extreme Conflux timer."
+          }
         }
-      }
-    },
+      },
     "updater": {
       "title": "Updates",
       "current": "Current version v{{version}}",
@@ -56,6 +76,7 @@
       "check-failed": "Could not check for updates.",
       "game-running": "Close the game and try the update again.",
       "repeat-quest-restore-failed": "The update was stopped because Unlimited Repeat Quest could not be restored.",
+      "conflux-timer-restore-failed": "The update was stopped because the Conflux auto-progress timer could not be restored.",
       "install-failed": "Could not install the update.",
       "retry": "Try again",
       "manual-install": "Manual install"

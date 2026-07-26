@@ -8,6 +8,7 @@ const MANUAL_UPDATE_URL = "https://github.com/azyu/gbfr-djeetamod/releases/lates
 const blockingErrorTranslationKeys: Partial<Record<UpdaterError, string>> = {
   gameRunning: "game-running",
   repeatQuestRestoreFailed: "repeat-quest-restore-failed",
+  confluxTimerRestoreFailed: "conflux-timer-restore-failed",
   installFailed: "install-failed",
 };
 

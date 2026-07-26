@@ -4,7 +4,9 @@
 
 ## Status
 
-**Not runnable yet.** The native-candidate static gate is `BLOCKED`; see
+**External read-only capture is runnable; the injected observation probe is
+still pending.** The result/re-entry native-candidate gate has a
+reference-assisted static pass, while reward-ID mapping remains blocked; see
 [`../research/2026-07-25-conflux-auto-reentry-candidates.md`](../research/2026-07-25-conflux-auto-reentry-candidates.md).
 
 This checklist is the evidence contract for a future observation-only probe and
@@ -61,6 +63,7 @@ Record the PID only in local test notes. Do not commit it.
 | Power selection opens with mixed grades | 2026-07-25 | Result popup dismissed | Visible grades `[1, 1, 2]`; four primary menu objects plus matching secondary vtables | Expected choice is visible index two, but grade-to-object mapping is unresolved | MISMATCH | Keep screen unpromoted until field mapping is independently verified |
 | Power selection contains Chaos type | 2026-07-25 | Prior boss-result acknowledgement completed | User identified Chaos as present; four primary menu objects plus matching secondary vtables remained allocated | Expected choice is display index zero, but Chaos type-to-object mapping is unresolved | MISMATCH | Chaos overrides grade priority |
 | Final-boss field return gate opens | 2026-07-25 | Floor-five final boss defeated | One `BaEndlessPortal`; two primary gate-icon objects; event, boss-result, and reward controllers all zero | Visible `귀환하기` field interaction is a distinct required boundary before final reward | MISMATCH | Final-boss phase/destination and interaction callback remain unresolved |
+| Floor-four final reward screen opens | 2026-07-26 | Offline/private floor-four reward selection visible | One `ControllerEndlessResultReward`, one `MenuResultRewardTreasure`, two `MenuResultReward`, four Endless result/info owners, eight visible reward rows, and one retained `BaEndlessPortal`; ordinary Power and result-dialog owners zero | The core reward-screen owner structure matches floor five, while row count and available rewards are floor-dependent | PASS | [Captured screen](evidence/conflux-floor-4-reward-select-2026-07-26.jpg); internal reward IDs and selectable flags remain TODO |
 | Floor-five final reward screen opens | 2026-07-25 | Final-boss field return gate manually activated | One `ControllerEndlessResultReward`, one `MenuResultRewardTreasure`, two `MenuResultReward`, four Endless result/info owners, and eleven visible reward rows; `MenuEndlessResultReward` zero | Actual final-reward owner is distinct from ordinary Power selection | PASS | Row vector, selectable flag, internal reward IDs, indices, and callbacks remain unresolved |
 | Configured floor-five reward exists below first row | TODO | TODO | TODO | TODO | TODO | |
 | Configured floor-five reward is absent or unselectable | TODO | TODO | TODO | TODO | TODO | |
@@ -144,7 +147,10 @@ numeric kinds, and bounded values. Raw object addresses are prohibited.
 | Scenario | Date | Objects | Candidate | Result | Notes |
 | --- | --- | ---: | --- | --- | --- |
 | Ordinary battle baseline | 2026-07-25 | 25 | none | PASS | No active unattended choice screen |
-| Route choice, game unattended ON | TODO | TODO | TODO | TODO | Start probe as soon as the screen opens |
+| Timer manager on unattended choice | 2026-07-26 | one global manager | mode `1`; initial `60.000`; current `13.818 -> 13.318`; defaults `[60,60,30,30,30,30,30,30,60,30,30]`; notice `3.000` | PASS | Independently corroborated by `EndlessAbandonedAutoTimer` and `ControllerEndlessAutoPlayHud` access sites |
+| Route choice, game unattended ON | TODO | TODO | TODO | TODO | Visible about-two-second progression remains required |
 | Power choice, game unattended ON | TODO | TODO | TODO | TODO | Corroborate the same duration boundary |
 | Single-OK screen, game unattended ON | TODO | TODO | TODO | TODO | Corroborate the notice boundary |
-| Automation OFF restores original delay | TODO | TODO | TODO | TODO | Requires later reversible hook build |
+| Reversible 1/2-second data patch | 2026-07-26 | one global manager | exact original -> fast -> original configuration with readback; waiting screen advanced to the floor-four battle | PASS | Explicit offline/private ignored test; post-transition read-only probe showed original notice/default configuration; code and transition timing were not patched |
+| Management-page switch round trip | 2026-07-26 | one global manager | page OFF: notice `3.000`, original defaults; page ON: notice `1.000`, eleven `2.000` defaults; page OFF again: notice `3.000`, original defaults `[60,60,30,30,30,30,30,30,60,30,30]` | PASS | Verified against the live pinned game process after repairing debug startup and opening the built management page; the manager `mode` field was not used as the Djeeta switch state |
+| Automation OFF restores original delay | 2026-07-26 | one global manager | shortened active screen advanced; next unattended screen reported `initial=60.000`, `current=47.333 -> 46.833`, and original defaults `[60,60,30,30,30,30,30,30,60,30,30]` | PASS | Confirmed by both the backend live round trip and the built management-page ON/OFF cycle |

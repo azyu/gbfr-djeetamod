@@ -7,6 +7,7 @@ const errorTranslationKeys: Record<UpdaterError, string> = {
   checkFailed: "check-failed",
   gameRunning: "game-running",
   repeatQuestRestoreFailed: "repeat-quest-restore-failed",
+  confluxTimerRestoreFailed: "conflux-timer-restore-failed",
   installFailed: "install-failed",
 };
 

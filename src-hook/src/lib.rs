@@ -10,6 +10,7 @@ use interprocess::os::windows::named_pipe::{pipe_mode, PipeListenerOptions, Pipe
 use log::{info, warn};
 use tokio::sync::broadcast;
 
+mod conflux_retry;
 mod event;
 mod hooks;
 mod process;

@@ -1,0 +1,4 @@
+interface:
+  display_name: "GBFR Reference-Assisted Native Analysis"
+  short_description: "Safely relocate mod-derived native hypotheses"
+  default_prompt: "Use $gbfr-reference-assisted-native-analysis to inspect a pinned reference mod as hypotheses and independently relocate them in the target game build."

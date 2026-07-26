@@ -4,21 +4,26 @@
 
 ## Decision
 
-**STATIC BLOCKED — do not build or enable an action-capable probe yet.**
+**REFERENCE-ASSISTED STATIC PASS for the result/re-entry callbacks; reward-ID
+mapping remains blocked.**
 
 The installed executable is the expected Granblue Fantasy: Relink 2.0.2 image,
 and several Endless-mode controllers can be identified independently through
 MSVC RTTI and their complete-object locators. The final reward controller has a
 unique update candidate that calls reward-menu methods directly.
 
-Static evidence is not yet sufficient to distinguish all required confirmation
-paths from their adjacent cancel or unrelated-dialog paths. In particular, the
-TOTAL RESULTS ready state and the Tredame Palace gate boundary do not have an
-independently verified semantic owner, ABI, and callback contract. The
-fail-closed design therefore blocks Task 2 until those rows reach `STATIC PASS`.
+The independent pass did not distinguish every required confirmation path.
+After that gate failed, the pinned user-supplied reference archive was inspected
+as allowed by the approved analysis ladder. Its relevant method names, masked
+signatures, and bounded field hypotheses were then checked independently
+against the pinned game executable. All twelve candidate function signatures
+occur exactly once in executable code. This promotes observation-only work for
+the final reward, TOTAL RESULTS, return dialog, Tredame gate, party, and
+difficulty boundaries.
 
-No address, signature, field offset, callback, or event value in this document
-was taken from a downloaded mod DLL.
+This does not yet promote configured reward selection: the 12-byte live reward
+row has a verified favorite byte, but its internal reward ID and the versioned
+Korean/English catalog still need a floor-five live cross-check.
 
 ## Research Input
 
@@ -112,6 +117,28 @@ Observed static relationships:
 The function is large and stateful. Hooking it before its ABI and state fields
 are proven would create false-positive and stale-object risks.
 
+## Reference-assisted relocation result — 2026-07-26
+
+Reference input was accepted only after its SHA-256 matched
+`02FE3756F47118D5F957EE597C4C4776877AE906A9D373A913C1D0D9FADCBA71`.
+The inspected artifacts remained in a temporary directory outside the
+repository and were not executed or loaded.
+
+| Boundary | Reference hypothesis | Independent relocation | Promotion |
+| --- | --- | --- | --- |
+| Final reward update | controller update receives one controller pointer; active controller/menu, callback ownership, row vector, and indices are validated before change/decide | masked prologue is unique at RVA `0x042DEB70`; change and decide prologues are unique at `0x029EFAE0` and `0x029EF990` | `STATIC PASS` for observation and index action; reward ID remains blocked |
+| Single result/city dialog | dialog update receives one controller pointer and validates the exact controller/menu/callback owners | update and decision callback are unique at `0x03B8BB40` and `0x03B8BDA0` | `STATIC PASS` for allowlisted flow stages only |
+| TOTAL RESULTS | controller state `2`, active UI root, and animation state `6`; next is published as event hash `0xB0D3541F` | update prologue is unique at RVA `0x042E35E0`; the independently recovered controller vtable is `0x0607E1D8` | `STATIC PASS` |
+| Tredame gate | exact gate type, mode/state fields, initialization capture, and game-thread interaction | initialize, interact, and update prologues are unique at RVAs `0x036DDFD0`, `0x036DE0E0`, and `0x036DE520` | `STATIC PASS` subject to live positive/negative probe |
+| Party confirmation | exact Endless-top controller, controller state `2`, active UI root, and live `Button01` entry; publish event hash `0xD78C07FC` | update prologue is unique at RVA `0x031C8C10`; vtable `0x05C76808` was independently recovered | `STATIC PASS` subject to live positive/negative probe |
+| Difficulty confirmation | exact menu/update subobject vtables, active root, bounded count/current/selected indices, and dedicated zero-argument confirm function | update and confirm prologues are unique at RVAs `0x03CB4230` and `0x03CB4B80` | `STATIC PASS` subject to live positive/negative probe |
+
+The associated unique signatures have lengths from 18 to 43 bytes. Every
+wildcard covers an image-relative or branch displacement; fixed object-layout
+operands remain part of the match. Production installation must still enforce
+exactly one match and fail the optional capability without changing the core
+meter status.
+
 ## Live Semantic Correction — 2026-07-25
 
 An offline/private 2.0.2 session disproved the initial semantic inference from
@@ -173,22 +200,21 @@ provisional supporting-state candidate for the party/depth UI.
 
 ## Static Gate Result
 
-The required gate is not met:
+The result/re-entry callback gate is met for an observation-only probe after
+reference-assisted relocation. Action dispatch remains fail-closed until each
+positive and hidden/stale negative is observed in the offline/private session.
 
-- the floor-five reward row vector, IDs, indices, and callbacks are unresolved;
-- TOTAL RESULTS ownership and ready-state offset are unresolved;
-- Tredame Palace is not independently distinguishable from other town or
-  Endless UI interactions;
-- accept and cancel callbacks are not independently separated for any
-  action-capable boundary;
-- the party/depth active states and callbacks are not independently separated.
+The configured reward gate is not met:
 
-Accordingly:
+- the reward row vector and selected/current indices are bounded, and the
+  change/decide callbacks are uniquely relocated;
+- the row's internal reward ID and selectable state are not yet independently
+  mapped;
+- the version-pinned Korean/English floor-five reward catalog is absent.
 
-- do not add an observation detour from these provisional anchors;
-- do not add native action dispatch;
-- do not expose a functional UI toggle;
-- do not infer missing constants from downloaded binaries.
+Accordingly, the optional observation detours and pure state machine may be
+built, while configured reward selection and the public functional toggle stay
+disabled until the catalog and live action gates pass.
 
 ## Minimal Autodrive Timer Investigation
 
@@ -200,18 +226,27 @@ The public text/config files in `GBFR-Fast-Conflux-v1.0.0.zip` document behavior
 only: 2-second auto progress, 1-second notice, OFF on launch, and unchanged
 fade/transition timing. The DLL was not extracted or decompiled.
 
-Independent static inspection of the pinned executable found three aligned
-`f64` values equal to 60.0. The only direct code reference participates in a
-generic numeric/time conversion routine and is not sufficient evidence of a
-Conflux timer. Five immediate pairs containing `f32 60.0` were traced to
-unrelated item, behavior, enemy-action, or general object initialization
-families. They are rejected as timer boundaries.
+Independent RTTI and access-site analysis resolved the timer boundary in the
+pinned executable:
 
-The read-only probe now samples known Endless UI objects twice and emits only
-controller label, object ordinal, relative field offset, numeric kind, and
-before/after values for plausible countdowns. It does not emit object
-addresses. An ordinary-battle baseline sampled 25 objects and returned zero
-candidates, as expected. A live unattended-choice screen remains required.
+- `EndlessAbandonedAutoTimer` copies its instance flag to the global timer
+  manager;
+- `ControllerEndlessAutoPlayHud` compares the manager notice threshold with
+  the current countdown;
+- the manager contains the notice threshold, eleven per-mode defaults, Endless
+  mode, initial duration, and current countdown.
+
+A read-only live capture on an unattended-choice screen observed mode `1`,
+notice `3.000`, initial `60.000`, current `13.818 -> 13.318` over 0.500 seconds,
+and defaults `[60,60,30,30,30,30,30,30,60,30,30]`. The earlier ordinary-battle
+object scan returned no countdown candidates because the authoritative timer
+is manager-owned rather than controller-owned.
+
+An explicitly opted-in offline/private test wrote only the manager timer data,
+verified notice/default values `1/2`, clamped the active countdown to at most
+two seconds, and restored the exact original configuration. No code, fade, or
+transition field was modified. Visible about-two-second progression and OFF
+restoration through the built page remain manual smoke-test items.
 
 ## TODO to Unblock
 

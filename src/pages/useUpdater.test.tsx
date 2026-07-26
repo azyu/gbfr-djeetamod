@@ -228,6 +228,22 @@ describe("UpdaterProvider", () => {
     expect(result.current.state.error).toBe("repeatQuestRestoreFailed");
   });
 
+  it("reports confluxTimerRestoreFailed without calling installUpdate", async () => {
+    mocks.checkUpdate.mockResolvedValue({
+      shouldUpdate: true,
+      manifest: { version: "0.1.2", date: "2026-07-22T00:00:00Z", body: "Signed update" },
+    });
+    mocks.invoke.mockResolvedValue("confluxTimerRestoreFailed");
+    const { result } = renderHook(() => useUpdater(), { wrapper });
+    await waitFor(() => expect(result.current.state.phase).toBe("available"));
+
+    await act(() => result.current.installAvailableUpdate());
+
+    expect(result.current.state.phase).toBe("error");
+    expect(result.current.state.error).toBe("confluxTimerRestoreFailed");
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+  });
+
   it("reports installFailed when the timeout-controlled backend installer rejects", async () => {
     mocks.checkUpdate.mockResolvedValue({
       shouldUpdate: true,

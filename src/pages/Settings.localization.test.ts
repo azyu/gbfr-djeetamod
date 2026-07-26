@@ -101,6 +101,8 @@ const expectedEnglishUpdater = {
   "check-failed": "Could not check for updates.",
   "game-running": "Close the game and try the update again.",
   "repeat-quest-restore-failed": "The update was stopped because Unlimited Repeat Quest could not be restored.",
+  "conflux-timer-restore-failed":
+    "The update was stopped because the Conflux auto-progress timer could not be restored.",
   "install-failed": "Could not install the update.",
   retry: "Try again",
   "manual-install": "Manual install",
@@ -123,6 +125,7 @@ const expectedKoreanUpdater = {
   "check-failed": "업데이트를 확인하지 못했습니다.",
   "game-running": "게임을 종료한 후 다시 업데이트해 주세요.",
   "repeat-quest-restore-failed": "무한 퀘스트 반복 설정을 복구하지 못해 업데이트를 중단했습니다.",
+  "conflux-timer-restore-failed": "극돈공소 자동 진행 대기 시간을 복구하지 못해 업데이트를 중단했습니다.",
   "install-failed": "업데이트를 설치하지 못했습니다.",
   retry: "다시 시도",
   "manual-install": "수동 설치",

@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { Meter } from "./pages/Meter";
 
+import { Conflux } from "./pages/Conflux";
 import { EquipmentAnalysis } from "./pages/EquipmentAnalysis";
 import { ItemAnalysis } from "./pages/ItemAnalysis";
 import Logs from "./pages/Logs";
@@ -23,6 +24,7 @@ export const App = () => {
           <Route index element={<LogIndexPage />} />
           <Route path="equipment" element={<EquipmentAnalysis />} />
           <Route path="items" element={<ItemAnalysis />} />
+          <Route path="conflux" element={<Conflux />} />
           <Route path=":id" element={<LogViewPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

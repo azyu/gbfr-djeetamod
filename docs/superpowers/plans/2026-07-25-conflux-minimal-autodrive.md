@@ -1,70 +1,51 @@
-# Conflux Minimal Autodrive Implementation Plan
+# Conflux Minimal Automation Implementation Plan
 
-**Goal:** Use the game's own Conflux unattended progression while Djeeta MOD
-shortens its inactivity timer, selects the final reward, and re-enters the
-currently focused depth.
-
-**Architecture:** Keep timer patching, reward selection, and re-entry actions
-inside the version-pinned injected hook. Expose one fail-closed control channel
-to the Tauri page. Promote a native mutation only after an independent
-observation proves a unique boundary and reversible behavior.
+**Goal:** Use the game's own unattended Conflux progression while Djeeta MOD
+shortens the wait. Keep final-reward selection and re-entry as follow-up work.
 
 ## Constraints
 
 - Target only executable SHA-256
   `63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F`.
 - Test only in an offline/private session.
-- Do not import, load, redistribute, decompile, or copy implementation details
-  from downloaded mods.
-- Do not synthesize keyboard, mouse, or player movement.
+- Do not copy implementation details from downloaded mods.
+- Do not synthesize input or player movement.
 - Do not touch `logs.db`.
 - Do not stage or commit without explicit approval.
 
-## Task 1: Independently identify the inactivity timer
+## Timer Reduction
 
-- [ ] Add a read-only timer candidate sampling mode to
-      `src-tauri/examples/probe_conflux_ui.rs`.
-- [ ] Add focused tests for candidate filtering, stable original values, and
-      float/double interpretation.
-- [ ] Observe the same Conflux screen with the game option OFF and ON and
-      identify the countdown/duration boundary.
-- [ ] Derive and document a unique pinned-executable signature without using
-      the downloaded DLL.
-- [ ] Verify that the candidate does not control fade or transitions.
+- [x] Independently identify the Conflux timer manager, mode, original
+      configuration, notice threshold, initial duration, and current countdown.
+- [x] Add a read-only timer-manager probe and focused tests.
+- [x] Implement exact-value classification, 1/2-second application, active
+      countdown clamping, readback verification, rollback, and restoration in
+      the Tauri backend.
+- [x] Verify a reversible live write round trip in the offline/private session.
+- [x] Keep the injected hook and shared protocol unchanged.
 
-## Task 2: Implement the minimal pure policy
+## UI and Lifecycle
 
-- [ ] Replace obsolete route/Power RED tests with timer lifecycle and reward
-      fallback tests.
-- [ ] Reduce protocol stages to timer armed, reward selection, result return,
-      Tredame gate, party formation, and depth confirmation.
-- [ ] Implement OFF-by-default, enable/apply, disable/restore,
-      disconnect/restore, and fail-closed transitions.
-- [ ] Run focused protocol and hook tests.
+- [x] Add the `극돈공소` sidebar route and page.
+- [x] Add an authoritative OFF/ON/unavailable switch and explain the required
+      game option.
+- [x] Restore on startup, OFF, normal exit, and update preparation.
+- [x] Show reward selection and re-entry as TODO.
+- [x] Add focused frontend, backend, and write-isolation regression tests.
 
-## Task 3: Implement validated native boundaries
+## Remaining Verification
 
-- [ ] Implement the reversible timer patch with original-value ownership.
-- [ ] Implement only the verified reward and re-entry callbacks.
-- [ ] Reject non-unique signatures, unexpected original values, invalid active
-      states, duplicate actions, and transition timeouts.
-- [ ] Restore timer values before every terminal OFF/unavailable path.
+- [ ] Run format, lint, TypeScript, full frontend tests/build, focused Rust
+      tests, release hook build, and Rust workspace tests.
+- [ ] In a fresh offline/private floor-three run, enable both the game option
+      and Djeeta MOD switch.
+- [ ] Observe about-two-second game-owned route/Power/OK progression.
+- [ ] Disable the switch and verify original timer values are restored.
+- [ ] Confirm fade and screen transitions are unchanged.
 
-## Task 4: Add the Tauri control client and page
+## Follow-up TODO
 
-- [ ] Add the `극돈공소` sidebar route and page.
-- [ ] Add the process-local `자동 실행` switch and persisted floor-five reward
-      preference.
-- [ ] Show authoritative stage/reason state and the requirement that the game
-      unattended option be ON.
-- [ ] Add frontend and backend regression tests.
-
-## Task 5: Verify
-
-- [ ] Run focused tests, formatting, lint, TypeScript, full tests, frontend
-      build, release hook build, and Rust workspace tests.
-- [ ] Start a fresh offline/private floor-three run with the game option ON.
-- [ ] Confirm about-two-second game-owned progression, original-delay restore
-      on OFF, unchanged transitions, reward fallback, Tredame return, and
-      re-entry with no manual input after enable.
-- [ ] Record remaining unsupported boundaries as TODO rather than guessing.
+- [ ] Map and validate final-reward rows, IDs, selection, and fallback.
+- [ ] Map and validate TOTAL RESULTS dismissal and return destination.
+- [ ] Map and validate Tredame gate, current-party confirmation, and depth
+      re-entry.

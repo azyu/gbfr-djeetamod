@@ -1,13 +1,14 @@
 ---
 name: gbfr-live-probe-validation
-description: Use when validating Djeeta MOD debug probes against Granblue Fantasy Relink in a live offline or private game session, including external equipment reader, inventory, roster, controlled-change, restart, MATCH/MISMATCH, or smoke-test evidence work.
+description: Use when validating Djeeta MOD debug probes in a live offline/private Granblue Fantasy Relink session, including Conflux, equipment, inventory, roster, restart, MATCH/MISMATCH, or smoke-test evidence.
 ---
 
 # Validate GBFR Live Probes
 
 ## Overview
 
-Treat the game UI or verified hook snapshot as the control, accept only observed evidence, and keep probe success separate from full game compatibility.
+Treat the game UI or verified hook snapshot as the control. Probe success is
+not full game compatibility.
 
 ## Select the Contract
 
@@ -15,9 +16,13 @@ Treat the game UI or verified hook snapshot as the control, accept only observed
 |---|---|---|
 | External equipment reader or roster | Debug build and `DJEETA_EXTERNAL_READER_PROBE=1` | `docs/testing/game-2.0.2-equipment-layout.md` |
 | Inventory scanner | Debug build and `DJEETA_INVENTORY_PROBE=1` | `docs/testing/game-2.0.2-inventory-probe.md` |
+| Conflux UI or timer | Read-only example and task-specific opt-in | `docs/testing/game-2.0.2-conflux-auto-reentry-probe.md` |
 | Product behavior | Packaged build | `docs/testing/game-2.0.2-smoke-test.md` |
 
 Read the selected evidence document and the relevant `docs/superpowers/specs` or `docs/research` file before proposing steps. Use the document's current acceptance criteria; do not silently strengthen or weaken them.
+
+For Conflux UI, timer, reward-screen, or re-entry capture, read
+[`references/conflux.md`](references/conflux.md) completely before acting.
 
 ## Workflow
 

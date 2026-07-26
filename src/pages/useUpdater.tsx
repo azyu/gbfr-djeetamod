@@ -7,7 +7,12 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 
 export type UpdaterPhase = "idle" | "checking" | "upToDate" | "available" | "preparing" | "installing" | "error";
 
-export type UpdaterError = "checkFailed" | "gameRunning" | "repeatQuestRestoreFailed" | "installFailed";
+export type UpdaterError =
+  | "checkFailed"
+  | "gameRunning"
+  | "repeatQuestRestoreFailed"
+  | "confluxTimerRestoreFailed"
+  | "installFailed";
 type DownloadProgress = {
   downloadedBytes: number;
   totalBytes: number | null;
@@ -23,7 +28,7 @@ export type UpdaterState = {
 };
 
 type CheckMode = "automatic" | "manual";
-type UpdateInstallReadiness = "ready" | "gameRunning" | "repeatQuestRestoreFailed";
+type UpdateInstallReadiness = "ready" | "gameRunning" | "repeatQuestRestoreFailed" | "confluxTimerRestoreFailed";
 
 export type UpdaterController = {
   state: UpdaterState;
@@ -107,6 +112,10 @@ export const UpdaterProvider = ({ children }: PropsWithChildren) => {
         }
         if (readiness === "repeatQuestRestoreFailed") {
           setState((current) => ({ ...current, phase: "error", error: "repeatQuestRestoreFailed" }));
+          return;
+        }
+        if (readiness === "confluxTimerRestoreFailed") {
+          setState((current) => ({ ...current, phase: "error", error: "confluxTimerRestoreFailed" }));
           return;
         }
 

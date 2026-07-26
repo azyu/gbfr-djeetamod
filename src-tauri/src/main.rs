@@ -42,6 +42,7 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use tokio_stream::StreamExt;
 use tokio_util::codec::FramedRead;
 
+mod conflux_timer;
 mod db;
 mod equipment;
 mod equipment_probe;
@@ -969,6 +970,8 @@ fn menu_tray_handler(handle: &AppHandle, event: SystemTrayEvent) {
 fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_window("logs") {
         let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
     }
 }
 
@@ -1000,6 +1003,7 @@ fn main() {
         .manage(equipment_probe::ProbeState::default())
         .manage(equipment_probe::inventory::InventoryProbeState::default())
         .manage(item_analysis::ItemAnalysisState::default())
+        .manage(conflux_timer::ConfluxTimerState::default())
         .manage(repeat_quest::RepeatQuestState::default())
         .manage(EquipmentStatus(Mutex::new(
             equipment::EquipmentState::from_bundled_catalog()
@@ -1047,10 +1051,14 @@ fn main() {
             equipment_probe::inventory::capture_inventory_probe,
             repeat_quest::get_repeat_quest_status,
             repeat_quest::set_repeat_quest_enabled,
+            conflux_timer::get_conflux_timer_status,
+            conflux_timer::set_conflux_timer_enabled,
             update_install::prepare_update_install,
             update_install::install_available_update,
         ])
         .setup(|app| {
+            app.state::<conflux_timer::ConfluxTimerState>()
+                .restore_on_startup();
             app.state::<repeat_quest::RepeatQuestState>()
                 .restore_on_startup();
 
@@ -1071,6 +1079,9 @@ fn main() {
         .expect("error while building tauri application")
         .run(|handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                handle
+                    .state::<conflux_timer::ConfluxTimerState>()
+                    .restore_on_exit();
                 handle
                     .state::<repeat_quest::RepeatQuestState>()
                     .restore_on_exit();

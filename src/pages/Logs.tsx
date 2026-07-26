@@ -5,7 +5,7 @@ import "./Logs.css";
 import getVersion from "@/hooks/getVersion";
 import { AppShell, Burger, Button, Group, NavLink, ScrollArea, Switch, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { ChartBar, Gauge, Gear, House, Package, Repeat } from "@phosphor-icons/react";
+import { ChartBar, Gauge, Gear, House, Package, Repeat, Timer } from "@phosphor-icons/react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import { useEffect, useState } from "react";
@@ -131,6 +131,12 @@ const LayoutContent = () => {
                 {t(`ui.game-features.repeat-quest.reason.${repeatQuest.status.reason}`)}
               </Text>
             )}
+            <NavLink
+              label={t("ui.game-features.conflux.title")}
+              leftSection={<Timer size="1rem" />}
+              component={Link}
+              to="/logs/conflux"
+            />
             <NavLink
               label={t("ui.equipment-analysis.title")}
               leftSection={<ChartBar size="1rem" />}

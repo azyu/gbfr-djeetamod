@@ -20,6 +20,29 @@ pub enum ProcessError {
     ModuleSnapshotError(windows::core::Error),
 }
 
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SignatureMatchError {
+    #[error("required signature `{label}` was not found")]
+    Missing { label: &'static str },
+    #[error("required signature `{label}` matched {count} locations")]
+    Ambiguous { label: &'static str, count: usize },
+}
+
+pub(crate) fn require_unique_match(
+    label: &'static str,
+    matches: impl IntoIterator<Item = usize>,
+) -> Result<usize, SignatureMatchError> {
+    let mut matches = matches.into_iter();
+    let first = matches
+        .next()
+        .ok_or(SignatureMatchError::Missing { label })?;
+    let count = 1 + matches.count();
+    if count != 1 {
+        return Err(SignatureMatchError::Ambiguous { label, count });
+    }
+    Ok(first)
+}
+
 pub struct Process {
     pub base_address: usize,
     pub module_handle: HMODULE,
@@ -149,5 +172,34 @@ impl Process {
                 signature_pattern
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{require_unique_match, SignatureMatchError};
+
+    #[test]
+    fn unique_signature_match_is_accepted() {
+        assert_eq!(require_unique_match("reward", [0x42DEB70]), Ok(0x42DEB70));
+    }
+
+    #[test]
+    fn missing_signature_match_is_rejected() {
+        assert_eq!(
+            require_unique_match("reward", []),
+            Err(SignatureMatchError::Missing { label: "reward" })
+        );
+    }
+
+    #[test]
+    fn ambiguous_signature_match_is_rejected() {
+        assert_eq!(
+            require_unique_match("reward", [0x42DEB70, 0x42DEB80]),
+            Err(SignatureMatchError::Ambiguous {
+                label: "reward",
+                count: 2,
+            })
+        );
     }
 }

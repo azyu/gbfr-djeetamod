@@ -1,4 +1,7 @@
-use protocol::{ActionType, Actor, Message};
+use protocol::{
+    ActionType, Actor, ConfluxAutomationStage, ConfluxAutomationState, ConfluxAutomationStatus,
+    ConfluxControlCommand, ConfluxControlRequest, ConfluxControlResponse, Message,
+};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -108,4 +111,68 @@ fn local_equipment_snapshot_round_trips() {
         protocol::bincode::deserialize::<Message>(&encoded).unwrap(),
         Message::LocalEquipmentSnapshot(_)
     ));
+}
+
+#[test]
+fn conflux_get_status_request_round_trips_outside_the_gameplay_message_enum() {
+    let request = ConfluxControlRequest {
+        request_id: 41,
+        command: ConfluxControlCommand::GetStatus,
+    };
+
+    let bytes = protocol::bincode::serialize(&request).unwrap();
+    let decoded: ConfluxControlRequest = protocol::bincode::deserialize(&bytes).unwrap();
+
+    assert_eq!(decoded, request);
+}
+
+#[test]
+fn conflux_configuration_preserves_preference_and_revision() {
+    let request = ConfluxControlRequest {
+        request_id: 42,
+        command: ConfluxControlCommand::Configure {
+            enabled: true,
+            reward_id: 0x1234_5678,
+            revision: 9,
+        },
+    };
+    let response = ConfluxControlResponse {
+        request_id: 42,
+        status: ConfluxAutomationStatus {
+            state: ConfluxAutomationState::On,
+            stage: ConfluxAutomationStage::Armed,
+            reason: None,
+            reward_id: Some(0x1234_5678),
+            revision: 9,
+        },
+    };
+
+    let request_bytes = protocol::bincode::serialize(&request).unwrap();
+    let response_bytes = protocol::bincode::serialize(&response).unwrap();
+
+    assert_eq!(
+        protocol::bincode::deserialize::<ConfluxControlRequest>(&request_bytes).unwrap(),
+        request
+    );
+    assert_eq!(
+        protocol::bincode::deserialize::<ConfluxControlResponse>(&response_bytes).unwrap(),
+        response
+    );
+}
+
+#[test]
+fn standalone_conflux_types_do_not_shift_existing_message_variants() {
+    let hook_status =
+        protocol::bincode::serialize(&Message::HookStatus(protocol::HookStatus::Ready)).unwrap();
+    let equipment = protocol::bincode::serialize(&Message::LocalEquipmentSnapshot(
+        protocol::LocalEquipmentSnapshotEvent {
+            character_type: 1,
+            status: protocol::EquipmentCaptureStatus::Complete,
+            sources: Vec::new(),
+        },
+    ))
+    .unwrap();
+
+    assert_eq!(&hook_status[..4], &11_u32.to_le_bytes());
+    assert_eq!(&equipment[..4], &12_u32.to_le_bytes());
 }

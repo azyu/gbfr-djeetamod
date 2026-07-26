@@ -30,6 +30,69 @@ pub use bincode;
 use serde::{Deserialize, Serialize};
 
 pub const PIPE_NAME: &str = r"\\.\pipe\gbfr-logs";
+pub const CONFLUX_CONTROL_PIPE_NAME: &str = r"\\.\pipe\djeeta-mod-conflux";
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum ConfluxControlCommand {
+    GetStatus,
+    Configure {
+        enabled: bool,
+        reward_id: u32,
+        revision: u64,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct ConfluxControlRequest {
+    pub request_id: u64,
+    pub command: ConfluxControlCommand,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct ConfluxControlResponse {
+    pub request_id: u64,
+    pub status: ConfluxAutomationStatus,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct ConfluxAutomationStatus {
+    pub state: ConfluxAutomationState,
+    pub stage: ConfluxAutomationStage,
+    pub reason: Option<ConfluxAutomationReason>,
+    pub reward_id: Option<u32>,
+    pub revision: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfluxAutomationState {
+    Unavailable,
+    Off,
+    On,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfluxAutomationStage {
+    Off,
+    Armed,
+    RewardSelection,
+    TotalResults,
+    ReturnDestination,
+    TredameGate,
+    PartyFormation,
+    DifficultyConfirmation,
+    Unavailable,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfluxAutomationReason {
+    CapabilityUnavailable,
+    InvalidPreference,
+    InvalidObservation,
+    UnexpectedSuccessor,
+    TransitionTimeout,
+    ControlDisconnected,
+    Internal,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Actor {

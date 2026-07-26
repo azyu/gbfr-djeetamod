@@ -9,6 +9,7 @@ interface CargoTarget {
 }
 
 interface CargoPackage {
+  features: Record<string, string[]>;
   name: string;
   targets: CargoTarget[];
 }
@@ -30,4 +31,18 @@ it("keeps maintainer tools out of the application bundle targets", () => {
   expect(appPackage?.targets.filter(({ kind }) => kind.includes("bin")).map(({ name }) => name)).toEqual(["gbfr-logs"]);
   expect(appPackage?.targets.find(({ name }) => name === "build_trait_caps")?.kind).toContain("example");
   expect(existsSync(join(process.cwd(), "src-tauri", "src", "bin", "build_trait_caps.rs"))).toBe(false);
+}, 120_000);
+
+it("keeps the Conflux observation probe opt-in", () => {
+  const metadata = JSON.parse(
+    execFileSync("cargo", ["metadata", "--no-deps", "--format-version", "1", "--locked", "--offline"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    })
+  ) as CargoMetadata;
+  const hookPackage = metadata.packages.find(({ name }) => name === "hook");
+
+  expect(hookPackage).toBeDefined();
+  expect(hookPackage?.features["conflux-retry-probe"]).toEqual([]);
+  expect(hookPackage?.features.default ?? []).not.toContain("conflux-retry-probe");
 }, 120_000);

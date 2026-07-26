@@ -194,24 +194,27 @@ test("full-roster validation stays read-only and development-gated", () => {
   }
 });
 
-test("repeat quest writes are isolated from the read-only probes", () => {
+test("game feature writes are isolated from the read-only probes", () => {
   const repeatQuest = readRepositoryFile("src-tauri/src/repeat_quest.rs");
+  const confluxTimer = readRepositoryFile("src-tauri/src/conflux_timer.rs");
   const readOnlyProbes =
     readRepositoryFile("src-tauri/src/equipment_probe/memory.rs") +
-    readRepositoryFile("src-tauri/src/equipment_probe/inventory.rs");
+    readRepositoryFile("src-tauri/src/equipment_probe/inventory.rs") +
+    readRepositoryFile("src-tauri/examples/probe_conflux_ui.rs");
 
-  for (const required of [
-    "PROCESS_VM_WRITE",
-    "PROCESS_VM_OPERATION",
-    "WriteProcessMemory",
-    "VirtualProtectEx",
-    "FlushInstructionCache",
-  ]) {
+  for (const required of ["PROCESS_VM_WRITE", "PROCESS_VM_OPERATION", "WriteProcessMemory"]) {
     expect(repeatQuest).toContain(required);
+    expect(confluxTimer).toContain(required);
     expect(readOnlyProbes).not.toContain(required);
   }
 
+  expect(repeatQuest).toContain("VirtualProtectEx");
+  expect(repeatQuest).toContain("FlushInstructionCache");
+  expect(confluxTimer).not.toContain("VirtualProtectEx");
+  expect(confluxTimer).not.toContain("FlushInstructionCache");
+
   for (const forbidden of ["PROCESS_CREATE_THREAD", "VirtualAllocEx", "CreateRemoteThread"]) {
     expect(repeatQuest).not.toContain(forbidden);
+    expect(confluxTimer).not.toContain(forbidden);
   }
 });

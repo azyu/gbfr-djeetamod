@@ -44,6 +44,8 @@ vi.mock("react-i18next", () => ({
         "ui.updater.download-progress-label": "업데이트 다운로드 진행률",
         "ui.updater.game-running": "게임을 종료한 후 다시 업데이트해 주세요.",
         "ui.updater.repeat-quest-restore-failed": "무한 퀘스트 반복 설정을 복구하지 못해 업데이트를 중단했습니다.",
+        "ui.updater.conflux-timer-restore-failed":
+          "극돈공소 자동 진행 대기 시간을 복구하지 못해 업데이트를 중단했습니다.",
         "ui.updater.install-failed": "업데이트를 설치하지 못했습니다.",
         "ui.updater.retry": "다시 시도",
         "ui.updater.manual-install": "수동 설치",
@@ -151,6 +153,7 @@ it.each([
   ["installing", null, "업데이트를 설치하는 중입니다."],
   ["error", "gameRunning", "게임을 종료한 후 다시 업데이트해 주세요."],
   ["error", "repeatQuestRestoreFailed", "무한 퀘스트 반복 설정을 복구하지 못해 업데이트를 중단했습니다."],
+  ["error", "confluxTimerRestoreFailed", "극돈공소 자동 진행 대기 시간을 복구하지 못해 업데이트를 중단했습니다."],
   ["error", "installFailed", "업데이트를 설치하지 못했습니다."],
 ] as const)("shows %s state with %s error", (phase, error, message) => {
   mocks.state = { ...mocks.state, phase, error };

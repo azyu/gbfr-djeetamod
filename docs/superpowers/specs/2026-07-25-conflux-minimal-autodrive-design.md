@@ -1,90 +1,78 @@
-# Conflux Minimal Autodrive Design
+# Conflux Minimal Automation Design
 
 **Date:** 2026-07-25
+**Revised:** 2026-07-26
 
 ## Decision
 
-Djeeta MOD will leave all in-run choices and acknowledgements to Granblue
-Fantasy: Relink's `극돈공소 무조작 시 설정`. The mod owns only three gaps:
+Granblue Fantasy: Relink's `극돈공소 무조작 시 설정` owns all in-run route,
+Power, monk, and single-OK progression. Djeeta MOD owns only:
 
-1. reduce the Conflux inactivity auto-progress delay from 60 seconds to 2
-   seconds while automatic execution is enabled;
-2. select the configured final reward;
-3. return to Tredame Palace and re-enter the currently selected depth.
+1. shortening the game's unattended-selection delay while the user enables it;
+2. later, selecting the configured final reward;
+3. later, returning to Tredame Palace and re-entering Conflux.
 
-The earlier route, Power, monk, and dialog-specific automation design remains a
-follow-up reference only. It is not part of this implementation.
+This implementation delivers item 1. Items 2 and 3 remain explicit TODOs.
 
-## Product Behavior
+## Current Product Behavior
 
-The existing `극돈공소` page keeps:
-
-- an `자동 실행` switch;
-- a non-clearable floor-five reward dropdown.
-
-Automatic execution starts OFF for every game process. Enabling it applies the
-2-second inactivity delay and 1-second notice delay, then arms final-reward and
-re-entry handling. Disabling it, losing the control connection, or failing a
-version/capability check restores the original game timer values immediately.
-The timer setting is not persisted.
-
-The game option `극돈공소 무조작 시 설정` must be ON. The mod does not toggle
-that option and does not choose routes, Power, monk purchases, or generic OK
-dialogs.
-
-On floor five, the reward handler selects the first selectable row matching the
-persisted internal reward ID. If it is absent, it selects the first selectable
-row. Floor three is validation-only and always selects the first selectable
-row. Other floor reward catalogs remain TODO.
-
-After the result flow returns to Tredame Palace, the re-entry handler activates
-the Conflux gate, keeps the current party, and confirms the depth already
-focused by the game. It does not synthesize keyboard, mouse, or player movement.
-
-## Independent Implementation Boundary
-
-The downloaded `GBFR Fast Conflux` archive is used only as behavior
-documentation. Its public configuration states:
+The `극돈공소` page contains an OFF-by-default `자동 실행` switch. Enabling it
+changes the independently identified Conflux timer configuration from the
+verified 2.0.2 values to:
 
 - auto-progress delay: 2 seconds;
-- notice delay: 1 second;
-- fade and screen-transition timings remain unchanged;
-- the feature starts OFF.
+- notice delay: 1 second.
 
-Djeeta MOD will not load, redistribute, decompile, or copy code, signatures,
-addresses, or constants from the downloaded DLL. Timer storage and mutation
-boundaries must be found independently in the pinned 2.0.2 executable and
-validated in an offline/private session.
+Fade and screen-transition timings are untouched. Disabling the switch restores
+the verified original timer configuration. Startup, normal application exit,
+and update installation also attempt restoration. The switch is not persisted.
 
-## Safety and Validation
+The game option `극돈공소 무조작 시 설정` must be ON. Djeeta MOD does not
+toggle that option and does not issue route, Power, monk, dialog, keyboard,
+mouse, or player-movement actions.
 
-- Pin the executable SHA-256 before enabling any patch.
-- Require unique signatures and verified original values.
-- Save original timer values before the first mutation and restore them on
-  every OFF/error/disconnect path.
-- Apply timer changes only from the injected hook; the desktop app must not
-  write game memory.
-- Do not patch fade or transition timing.
-- Do not invoke a reward or re-entry callback until its active-state,
-  argument, thread, and successor boundaries are independently verified.
+## Implementation Boundary
+
+The timer is modified by the Tauri backend through a narrow external-process
+data write. It is not implemented in the injected hook and adds no protocol
+variant. Before every mutation the backend:
+
+- finds the exact game process;
+- verifies executable SHA-256
+  `63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F`;
+- resolves the independently identified timer-manager pointer;
+- verifies the complete original/shortened configuration;
+- requires Endless mode before enabling;
+- verifies the write and rolls back on failure.
+
+The downloaded `GBFR Fast Conflux` archive is behavior reference only. Djeeta
+MOD does not load, redistribute, decompile, or copy its code, addresses,
+signatures, or constants.
+
+## Safety Boundaries
+
+- Timer writes target writable manager data only; code pages, fade timing, and
+  transition timing are not modified.
+- Unknown or mixed timer values fail closed.
+- OFF and update preparation restore the original values even when the current
+  app session did not perform the earlier write.
+- Normal exit restores only when the app may have enabled the timer.
+- A process crash cannot run exit cleanup. A later Djeeta MOD startup or game
+  restart restores the safe baseline.
 - Automated tests and builds do not establish game compatibility.
 
 ## Observable Success Criteria
 
-1. With the game option ON and Djeeta MOD automation ON, ordinary Conflux
-   selections and single-OK screens advance in about two seconds without mod
-   route/Power/dialog actions.
-2. Turning automation OFF restores the normal delay without restarting the
-   game.
+1. With the game option ON and Djeeta MOD `자동 실행` ON, game-owned selections
+   and single-OK screens advance in about two seconds.
+2. Turning `자동 실행` OFF restores the original 60/30-second configuration
+   without restarting the game.
 3. Fade and screen transitions retain their original timing.
-4. The configured floor-five reward is selected, with documented fallback.
-5. A complete floor-three validation cycle returns to Tredame and re-enters
-   the depth focused by the game without manual input after enabling.
+4. No Djeeta MOD route, Power, monk, or generic dialog action is required.
 
 ## Follow-up TODOs
 
-- per-floor reward catalogs and preferences outside floor five;
-- explicit route or Power policies;
-- monk CP-spending policy;
-- allowlisted dialog-specific acceleration;
-- explicit re-entry depth selection if the game does not preserve focus.
+- final-reward catalog and configured selection with first-selectable fallback;
+- TOTAL RESULTS acknowledgement and Tredame return;
+- gate interaction, current-party confirmation, and depth re-entry;
+- floor-three full-cycle validation after those boundaries are implemented.

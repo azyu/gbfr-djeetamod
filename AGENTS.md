@@ -35,6 +35,15 @@
 - 1920x1080 reset geometry is 330x145 at x45/y470.
 - The compact meter stays always-on-top, is omitted from the taskbar, and starts with click-through disabled so its header can be dragged.
 
+## Conflux automation contract
+
+- The game's unattended setting owns in-run route, Power, monk, and ordinary single-OK progression.
+- Djeeta MOD owns only transition-time reduction, configured final-reward selection, TOTAL RESULTS advancement, Tredame return, and re-entry.
+- Keep the timer as a Tauri-owned reversible data patch and reward/re-entry actions as an optional injected-hook capability.
+- The automation master switch starts OFF and is not persisted. Enable the hook before shortening the timer; on failure, disable hook actions and restore the original timer configuration.
+- Pin reward catalogs to the exact game build and floor. Do not reuse one floor's observed rows for another; if the configured selectable reward is absent, choose the first selectable row.
+- Promote a native action only after a unique static signature and offline/private positive, hidden/stale negative, ABI, accept/cancel, and successor evidence all pass. Optional capability failure must not disable the core meter.
+
 ## Toolchain
 
 - Node.js 20

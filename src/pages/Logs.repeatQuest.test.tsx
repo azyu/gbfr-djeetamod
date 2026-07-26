@@ -54,6 +54,7 @@ vi.mock("react-i18next", () => ({
         "ui.equipment-analysis.title": "진 특성 상한 분석",
         "ui.item-analysis.title": "아이템 분석",
         "ui.game-features.repeat-quest.label": "무한 퀘스트 반복",
+        "ui.game-features.conflux.title": "극돈공소",
         "ui.game-features.repeat-quest.reason.gameNotRunning": "게임이 실행 중이 아닙니다.",
         "ui.game-features.repeat-quest.reason.accessDenied": "현재 권한으로 게임 코드를 변경할 수 없습니다.",
       })[key] ?? key,
@@ -108,6 +109,12 @@ it("shows a repeat icon beside the repeat-quest label", () => {
 
   const repeatNavLink = screen.getByText("무한 퀘스트 반복").closest(".mantine-NavLink-root");
   expect(repeatNavLink?.querySelector("svg")).toBeTruthy();
+});
+
+it("links to the dedicated Conflux page", () => {
+  renderLayout();
+
+  expect(screen.getByRole("link", { name: "극돈공소" }).getAttribute("href")).toBe("/logs/conflux");
 });
 
 it("changes repeat quest only through its switch", () => {
