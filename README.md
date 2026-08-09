@@ -1,8 +1,8 @@
 # Djeeta MOD
 
-Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Windows x64 파티 데미지 미터 테스트 빌드입니다. 캐릭터별 누적 피해, 상대 비율 바와 DPS를 한국어 소형 오버레이로 표시합니다.
+Granblue Fantasy: Relink Endless Ragnarok 2.0.4를 대상으로 개발 중인 Windows x64 파티 데미지 미터 테스트 빌드입니다. 캐릭터별 누적 피해, 상대 비율 바와 DPS를 한국어 소형 오버레이로 표시합니다.
 
-> 현재 자동 테스트와 NSIS 패키징은 완료됐지만, 실제 게임 2.0.2 플레이 체크리스트는 아직 검증되지 않았습니다. 아래 설치 프로그램을 호환성이 확정된 정식 릴리스로 간주하지 마십시오.
+> 현재 자동 테스트와 NSIS 패키징은 완료됐지만, 실제 게임 2.0.4 플레이 체크리스트는 아직 검증되지 않았습니다. 아래 설치 프로그램을 호환성이 확정된 정식 릴리스로 간주하지 마십시오.
 
 ## 설치와 실행
 
@@ -21,7 +21,7 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 - 1920x1080 기준 크기는 330x145이며 화면 왼쪽의 파티 HUD 아래쪽에 배치됩니다.
 - 전투 첫 피해부터 캐릭터별 누적 피해와 DPS를 표시합니다.
 - 수치는 해당 전투의 보상 화면이 열리기 직전까지 유지됩니다.
-- 게임 2.0.2용 필수 훅을 찾지 못하면 설정 화면에 연결 오류를 표시합니다.
+- 게임 2.0.4용 필수 훅을 찾지 못하면 설정 화면에 연결 오류를 표시합니다.
 
 ## 사용자 가이드 (한국어)
 
@@ -43,7 +43,7 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 - `현재 / 최대`는 장착 진에서 합산한 현재 스킬 레벨과 확인된 상한을 뜻합니다.
 - `정상`은 상한 미만, `최대`는 상한 도달, `N 초과`는 상한보다 N레벨 높다는 뜻입니다. 예를 들어 데미지 상한이 `70 / 65`이면 5레벨이 초과된 상태입니다.
 - `최대치 미확인`은 해당 특성의 상한 데이터가 아직 검증되지 않았다는 뜻이며, 상한이 없다는 의미가 아닙니다.
-- 이름이 확인된 특성은 게임 2.0.2에서 추출한 공식 한국어 이름으로 표시합니다. 공식 이름 행이 없는 특성은 추측하지 않고 `알 수 없는 특성 (0x1234abcd)`처럼 8자리 ID를 표시하므로 문제를 보고할 때 함께 알려주십시오.
+- 이름이 확인된 특성은 게임 2.0.4에서 추출한 공식 한국어 이름으로 표시합니다. 공식 이름 행이 없는 특성은 추측하지 않고 `알 수 없는 특성 (0x1234abcd)`처럼 8자리 ID를 표시하므로 문제를 보고할 때 함께 알려주십시오.
 - `기여 진`을 펼치면 합계에 포함된 각 진의 주·보조 특성 레벨을 확인할 수 있습니다.
 - 현재 합계는 장착 진 12개만 대상으로 합니다. 장착 무기와 가호석, 최대 4개의 소환석, 마스터 특성에서 추가되는 레벨은 아직 포함하지 않으므로 해당 구성이 있는 빌드의 최종 합계로 간주하지 마십시오.
 
@@ -52,7 +52,7 @@ Granblue Fantasy: Relink Endless Ragnarok 2.0.2를 대상으로 개발 중인 Wi
 - 관리 창이 보이지 않으면 작업 표시줄 또는 시스템 트레이에서 Djeeta MOD를 확인하고, 계속 보이지 않으면 앱을 다시 실행합니다.
 - 데미지 미터가 보이지 않으면 왼쪽 메뉴의 **데미지 미터** 스위치를 켭니다.
 - `게임 연결 대기 중`이면 게임을 먼저 실행했는지 확인합니다.
-- `게임 2.0.2 훅을 찾을 수 없습니다`가 표시되면 게임 버전이 2.0.2인지 확인하고, 백신이 `hook.dll`을 격리하지 않았는지 확인한 뒤 앱을 다시 설치합니다.
+- `게임 2.0.4 훅을 찾을 수 없습니다`가 표시되면 게임 버전이 2.0.4인지 확인하고, 백신이 `hook.dll`을 격리하지 않았는지 확인한 뒤 앱을 다시 설치합니다.
 - 진 정보가 갱신되지 않으면 게임의 장비 편성 화면에서 확인할 캐릭터의 장비를 열거나 캐릭터를 다시 선택합니다.
 
 ### 업데이트
@@ -85,7 +85,7 @@ Djeeta MOD는 관리 창을 시작할 때 GitHub Releases를 한 번 확인하�
 - `Current / Max` is the total current skill level from equipped sigils and the verified cap.
 - `Normal` means below the cap, `Max` means the cap is reached, and `N over` means the total exceeds the cap by N levels. For example, Damage Cap at `70 / 65` is 5 levels over the cap.
 - `Maximum unverified` means the cap data for that trait has not been verified yet; it does not mean the trait has no cap.
-- Recognized traits use official English names extracted from game version 2.0.2. When no official localization row exists, the app does not guess a name and instead shows an eight-digit ID such as `Unknown trait (0x1234abcd)`; include that ID when reporting the trait.
+- Recognized traits use official English names extracted from game version 2.0.4. When no official localization row exists, the app does not guess a name and instead shows an eight-digit ID such as `Unknown trait (0x1234abcd)`; include that ID when reporting the trait.
 - Expand `Contributing sigils` to see the primary and secondary trait levels included in the total.
 - Current totals cover only the 12 equipped sigils. Levels contributed by the equipped weapon and wrightstone, up to four summons, and master traits are not included yet, so do not treat builds using those sources as complete totals.
 
@@ -94,7 +94,7 @@ Djeeta MOD는 관리 창을 시작할 때 GitHub Releases를 한 번 확인하�
 - If the management window is missing, check the taskbar or system tray for Djeeta MOD. Restart the app if it still does not appear.
 - If the damage meter is hidden, enable the **Damage Meter** switch in the left menu.
 - If the app says `Waiting for the game`, confirm that the game was started first.
-- If the app says `The game 2.0.2 hook was not found`, confirm that the game is version 2.0.2, check whether antivirus software quarantined `hook.dll`, and then reinstall the app.
+- If the app says `The game 2.0.4 hook was not found`, confirm that the game is version 2.0.4, check whether antivirus software quarantined `hook.dll`, and then reinstall the app.
 - If sigil information does not update, open the equipment screen for that character in the game or select the character again.
 
 ### Updates
@@ -115,7 +115,7 @@ Djeeta MOD는 게임의 그래픽 설정이나 렌더링 품질을 변경하지 
 
 백신 프로그램이 동작 방식 때문에 파일을 오탐할 수 있습니다. 출처와 아래 SHA-256 값을 직접 확인한 뒤 설치 여부를 판단하십시오.
 
-## 0.1.4 빌드 해시
+## 0.1.5 빌드 해시
 
 - NSIS installer: `90A96C8D6A9249318FDA8681212CE6E618C989D139BA0976F99A99F1B7E72663`
 - `hook.dll`: `0D1E2E7F2BA68F99F24C4F484274C8194276C59777BEC6039E0CD518239F8920`
@@ -146,7 +146,7 @@ cargo test --workspace --all-targets --locked
 npm run tauri build -- --bundles nsis
 ```
 
-실제 게임 검증 항목은 [`docs/testing/game-2.0.2-smoke-test.md`](docs/testing/game-2.0.2-smoke-test.md)를 따릅니다.
+실제 게임 검증 항목은 [`docs/testing/game-2.0.2-smoke-test.md`](docs/testing/game-2.0.2-smoke-test.md)의 2.0.4 관찰 부록을 따릅니다.
 
 ## 크레딧과 라이선스
 
