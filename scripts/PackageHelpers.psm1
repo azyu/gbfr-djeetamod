@@ -1,5 +1,152 @@
 Set-StrictMode -Version Latest
 
+if ($null -eq ('DjeetaMod.StoredZipWriter' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Text;
+
+namespace DjeetaMod
+{
+    public static class StoredZipWriter
+    {
+        private static readonly uint[] CrcTable = CreateCrcTable();
+
+        public static void Create(string sourcePath, string destinationPath)
+        {
+            var source = new FileInfo(sourcePath);
+            if (source.Length > UInt32.MaxValue)
+            {
+                throw new InvalidOperationException("Updater installer is too large for a non-Zip64 archive.");
+            }
+
+            byte[] name = Encoding.UTF8.GetBytes(source.Name);
+            if (name.Length > UInt16.MaxValue)
+            {
+                throw new InvalidOperationException("Updater installer filename is too long.");
+            }
+
+            uint size = (uint)source.Length;
+            uint crc = ComputeCrc32(source.FullName);
+            DateTime timestamp = source.LastWriteTime;
+            ushort dosTime = GetDosTime(timestamp);
+            ushort dosDate = GetDosDate(timestamp);
+
+            using (var output = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var writer = new BinaryWriter(output, Encoding.UTF8, true))
+            {
+                writer.Write(0x04034B50u);
+                writer.Write((ushort)20);
+                writer.Write((ushort)0x0800);
+                writer.Write((ushort)0);
+                writer.Write(dosTime);
+                writer.Write(dosDate);
+                writer.Write(crc);
+                writer.Write(size);
+                writer.Write(size);
+                writer.Write((ushort)name.Length);
+                writer.Write((ushort)0);
+                writer.Write(name);
+
+                using (var input = source.OpenRead())
+                {
+                    input.CopyTo(output);
+                }
+
+                uint centralOffset = checked((uint)output.Position);
+                writer.Write(0x02014B50u);
+                writer.Write((ushort)20);
+                writer.Write((ushort)20);
+                writer.Write((ushort)0x0800);
+                writer.Write((ushort)0);
+                writer.Write(dosTime);
+                writer.Write(dosDate);
+                writer.Write(crc);
+                writer.Write(size);
+                writer.Write(size);
+                writer.Write((ushort)name.Length);
+                writer.Write((ushort)0);
+                writer.Write((ushort)0);
+                writer.Write((ushort)0);
+                writer.Write((ushort)0);
+                writer.Write(0u);
+                writer.Write(0u);
+                writer.Write(name);
+
+                uint centralSize = checked((uint)output.Position - centralOffset);
+                writer.Write(0x06054B50u);
+                writer.Write((ushort)0);
+                writer.Write((ushort)0);
+                writer.Write((ushort)1);
+                writer.Write((ushort)1);
+                writer.Write(centralSize);
+                writer.Write(centralOffset);
+                writer.Write((ushort)0);
+            }
+        }
+
+        private static uint ComputeCrc32(string path)
+        {
+            uint crc = UInt32.MaxValue;
+            byte[] buffer = new byte[64 * 1024];
+            using (var input = File.OpenRead(path))
+            {
+                int read;
+                while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    for (int index = 0; index < read; index++)
+                    {
+                        crc = CrcTable[(crc ^ buffer[index]) & 0xFF] ^ (crc >> 8);
+                    }
+                }
+            }
+            return crc ^ UInt32.MaxValue;
+        }
+
+        private static uint[] CreateCrcTable()
+        {
+            var table = new uint[256];
+            for (uint value = 0; value < table.Length; value++)
+            {
+                uint crc = value;
+                for (int bit = 0; bit < 8; bit++)
+                {
+                    crc = (crc & 1) == 1 ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
+                }
+                table[value] = crc;
+            }
+            return table;
+        }
+
+        private static DateTime ClampZipTimestamp(DateTime value)
+        {
+            if (value.Year < 1980)
+            {
+                return new DateTime(1980, 1, 1, 0, 0, 0);
+            }
+            if (value.Year > 2107)
+            {
+                return new DateTime(2107, 12, 31, 23, 59, 58);
+            }
+            return value;
+        }
+
+        private static ushort GetDosTime(DateTime value)
+        {
+            value = ClampZipTimestamp(value);
+            return (ushort)((value.Hour << 11) | (value.Minute << 5) | (value.Second / 2));
+        }
+
+        private static ushort GetDosDate(DateTime value)
+        {
+            value = ClampZipTimestamp(value);
+            return (ushort)(((value.Year - 1980) << 9) | (value.Month << 5) | value.Day);
+        }
+    }
+}
+'@
+}
+
 function Get-NodeMajorVersion {
     param([Parameter(Mandatory)][string]$Version)
 
@@ -188,40 +335,13 @@ function New-NsisUpdaterArchive {
         [Parameter(Mandatory)][string]$DestinationPath
     )
 
-    Add-Type -AssemblyName System.IO.Compression
     $destination = [IO.Path]::GetFullPath($DestinationPath)
     $parent = Split-Path -Parent $destination
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
         throw "Updater archive directory is missing: $parent"
     }
 
-    $fileStream = [IO.File]::Open($destination, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    try {
-        $archive = [IO.Compression.ZipArchive]::new(
-            $fileStream,
-            [IO.Compression.ZipArchiveMode]::Create,
-            $false
-        )
-        try {
-            $entry = $archive.CreateEntry($Installer.Name, [IO.Compression.CompressionLevel]::NoCompression)
-            $input = $Installer.OpenRead()
-            $output = $entry.Open()
-            try {
-                $input.CopyTo($output)
-            }
-            finally {
-                $output.Dispose()
-                $input.Dispose()
-            }
-        }
-        finally {
-            $archive.Dispose()
-        }
-    }
-    finally {
-        $fileStream.Dispose()
-    }
-
+    [DjeetaMod.StoredZipWriter]::Create($Installer.FullName, $destination)
     return Get-Item -LiteralPath $destination
 }
 

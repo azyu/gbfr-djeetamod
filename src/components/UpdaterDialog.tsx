@@ -1,4 +1,4 @@
-import { Button, Group, Modal, Progress, Stack, Text } from "@mantine/core";
+import { Button, Code, Group, Modal, Progress, Stack, Text } from "@mantine/core";
 import { open } from "@tauri-apps/api/shell";
 import { useTranslation } from "react-i18next";
 
@@ -44,6 +44,16 @@ export const UpdaterDialog = () => {
     >
       <Stack>
         {message && <Text size="sm">{message}</Text>}
+        {state.phase === "error" && state.error === "installFailed" && state.errorDetail && (
+          <Stack gap={4}>
+            <Text fw={600} size="xs">
+              {t("ui.updater.error-detail")}
+            </Text>
+            <Code block style={{ overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+              {state.errorDetail}
+            </Code>
+          </Stack>
+        )}
         {state.phase === "installing" && progress !== null && (
           <Stack gap={4}>
             <Progress value={progress} aria-label={t("ui.updater.download-progress-label")} />

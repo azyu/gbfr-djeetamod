@@ -57,6 +57,7 @@ describe("UpdaterProvider", () => {
       currentVersion: "0.1.1",
       manifest: null,
       error: null,
+      errorDetail: null,
       downloadProgress: null,
     });
     expect(warning).toHaveBeenCalledTimes(1);
@@ -249,7 +250,7 @@ describe("UpdaterProvider", () => {
       shouldUpdate: true,
       manifest: { version: "0.1.2", date: "2026-07-22T00:00:00Z", body: "Signed update" },
     });
-    mocks.invoke.mockResolvedValueOnce("ready").mockRejectedValueOnce(new Error("request timed out"));
+    mocks.invoke.mockResolvedValueOnce("ready").mockRejectedValueOnce("request timed out");
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { result } = renderHook(() => useUpdater(), { wrapper });
     await waitFor(() => expect(result.current.state.phase).toBe("available"));
@@ -258,6 +259,7 @@ describe("UpdaterProvider", () => {
 
     expect(result.current.state.phase).toBe("error");
     expect(result.current.state.error).toBe("installFailed");
+    expect(result.current.state.errorDetail).toBe("request timed out");
     expect(result.current.state.manifest?.version).toBe("0.1.2");
   });
 
@@ -305,6 +307,7 @@ describe("UpdaterProvider", () => {
       currentVersion: "0.1.1",
       manifest: null,
       error: null,
+      errorDetail: null,
       downloadProgress: null,
     });
   });

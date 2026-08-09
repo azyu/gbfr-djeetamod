@@ -104,6 +104,7 @@ const expectedEnglishUpdater = {
   "conflux-timer-restore-failed":
     "The update was stopped because the Conflux auto-progress timer could not be restored.",
   "install-failed": "Could not install the update.",
+  "error-detail": "Error details",
   retry: "Try again",
   "manual-install": "Manual install",
 };
@@ -127,6 +128,7 @@ const expectedKoreanUpdater = {
   "repeat-quest-restore-failed": "무한 퀘스트 반복 설정을 복구하지 못해 업데이트를 중단했습니다.",
   "conflux-timer-restore-failed": "극돈공소 자동 진행 대기 시간을 복구하지 못해 업데이트를 중단했습니다.",
   "install-failed": "업데이트를 설치하지 못했습니다.",
+  "error-detail": "오류 상세",
   retry: "다시 시도",
   "manual-install": "수동 설치",
 };

@@ -24,6 +24,7 @@ export type UpdaterState = {
   currentVersion: string;
   manifest: UpdateManifest | null;
   error: UpdaterError | null;
+  errorDetail: string | null;
   downloadProgress: DownloadProgress | null;
 };
 
@@ -39,6 +40,16 @@ export type UpdaterController = {
 
 const UpdaterContext = createContext<UpdaterController | null>(null);
 
+const describeUpdaterError = (error: unknown): string => {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+};
+
 export const useUpdater = () => {
   const value = useContext(UpdaterContext);
   if (!value) throw new Error("useUpdater must be used inside UpdaterProvider");
@@ -51,6 +62,7 @@ export const UpdaterProvider = ({ children }: PropsWithChildren) => {
     currentVersion: "",
     manifest: null,
     error: null,
+    errorDetail: null,
     downloadProgress: null,
   });
   const checkPromiseRef = useRef<Promise<void> | null>(null);
@@ -61,7 +73,13 @@ export const UpdaterProvider = ({ children }: PropsWithChildren) => {
     if (checkPromiseRef.current) return checkPromiseRef.current;
 
     const operation = (async () => {
-      setState((current) => ({ ...current, phase: "checking", error: null, downloadProgress: null }));
+      setState((current) => ({
+        ...current,
+        phase: "checking",
+        error: null,
+        errorDetail: null,
+        downloadProgress: null,
+      }));
       try {
         const result = await checkUpdate();
         setState((current) => ({
@@ -69,6 +87,7 @@ export const UpdaterProvider = ({ children }: PropsWithChildren) => {
           phase: result.shouldUpdate && result.manifest ? "available" : "upToDate",
           manifest: result.shouldUpdate && result.manifest ? result.manifest : null,
           error: null,
+          errorDetail: null,
           downloadProgress: null,
         }));
       } catch (error) {
@@ -79,11 +98,17 @@ export const UpdaterProvider = ({ children }: PropsWithChildren) => {
             phase: "idle",
             manifest: null,
             error: null,
+            errorDetail: null,
             downloadProgress: null,
           }));
           return;
         }
-        setState((current) => ({ ...current, phase: "error", error: "checkFailed" }));
+        setState((current) => ({
+          ...current,
+          phase: "error",
+          error: "checkFailed",
+          errorDetail: describeUpdaterError(error),
+        }));
       }
     })();
     checkPromiseRef.current = operation;
@@ -103,7 +128,13 @@ export const UpdaterProvider = ({ children }: PropsWithChildren) => {
     if (!state.manifest) return Promise.resolve();
 
     const operation = (async () => {
-      setState((current) => ({ ...current, phase: "preparing", error: null, downloadProgress: null }));
+      setState((current) => ({
+        ...current,
+        phase: "preparing",
+        error: null,
+        errorDetail: null,
+        downloadProgress: null,
+      }));
       try {
         const readiness = await invoke<UpdateInstallReadiness>("prepare_update_install");
         if (readiness === "gameRunning") {
@@ -124,12 +155,18 @@ export const UpdaterProvider = ({ children }: PropsWithChildren) => {
           ...current,
           phase: "installing",
           error: null,
+          errorDetail: null,
           downloadProgress: { downloadedBytes: 0, totalBytes: null },
         }));
         await invoke("install_available_update");
       } catch (error) {
         console.error("Update installation failed", error);
-        setState((current) => ({ ...current, phase: "error", error: "installFailed" }));
+        setState((current) => ({
+          ...current,
+          phase: "error",
+          error: "installFailed",
+          errorDetail: describeUpdaterError(error),
+        }));
       }
     })();
     installPromiseRef.current = operation;
@@ -145,7 +182,14 @@ export const UpdaterProvider = ({ children }: PropsWithChildren) => {
   }, [state.manifest]);
 
   const dismissUpdate = useCallback(() => {
-    setState((current) => ({ ...current, phase: "idle", manifest: null, error: null, downloadProgress: null }));
+    setState((current) => ({
+      ...current,
+      phase: "idle",
+      manifest: null,
+      error: null,
+      errorDetail: null,
+      downloadProgress: null,
+    }));
   }, []);
 
   useEffect(() => {

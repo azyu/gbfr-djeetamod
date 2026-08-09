@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     currentVersion: "0.1.1",
     manifest: { version: "0.1.2", date: "2026-07-22T00:00:00Z", body: "Signed update" },
     error: null,
+    errorDetail: null,
     downloadProgress: null,
   } as UpdaterState,
 }));
@@ -47,6 +48,7 @@ vi.mock("react-i18next", () => ({
         "ui.updater.conflux-timer-restore-failed":
           "극돈공소 자동 진행 대기 시간을 복구하지 못해 업데이트를 중단했습니다.",
         "ui.updater.install-failed": "업데이트를 설치하지 못했습니다.",
+        "ui.updater.error-detail": "오류 상세",
         "ui.updater.retry": "다시 시도",
         "ui.updater.manual-install": "수동 설치",
       })[key] ?? key,
@@ -62,6 +64,7 @@ beforeEach(() => {
     currentVersion: "0.1.1",
     manifest: { version: "0.1.2", date: "2026-07-22T00:00:00Z", body: "Signed update" },
     error: null,
+    errorDetail: null,
     downloadProgress: null,
   };
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -137,10 +140,17 @@ it("shows native download progress while installing", () => {
   );
 });
 
-it("offers retry and the GitHub release page after installation fails", () => {
-  mocks.state = { ...mocks.state, phase: "error", error: "installFailed" };
+it("shows the backend failure detail and offers manual installation", () => {
+  mocks.state = {
+    ...mocks.state,
+    phase: "error",
+    error: "installFailed",
+    errorDetail: "unsupported Zip archive: Compression method not supported",
+  };
   renderDialog();
 
+  expect(screen.getByText("오류 상세")).toBeTruthy();
+  expect(screen.getByText("unsupported Zip archive: Compression method not supported")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
   fireEvent.click(screen.getByRole("button", { name: "수동 설치" }));
 

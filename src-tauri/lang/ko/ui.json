@@ -22,7 +22,7 @@
     },
     "game-features": {
       "title": "게임 기능",
-        "repeat-quest": {
+      "repeat-quest": {
         "label": "무한 퀘스트 반복",
         "description": "퀘스트 반복 횟수 제한을 해제합니다.",
         "reason": {
@@ -35,30 +35,30 @@
           "accessDenied": "현재 권한으로 게임 코드를 변경할 수 없습니다.",
           "patchFailed": "무한 퀘스트 반복을 켜지 못했습니다.",
           "restoreFailed": "원본 게임 코드를 복원하지 못했습니다.",
-            "internal": "무한 퀘스트 반복 처리 중 내부 오류가 발생했습니다."
-          }
-        },
-        "conflux": {
-          "title": "극돈공소",
-          "description": "게임의 무조작 자동 진행을 사용하면서 선택 대기 시간을 단축합니다.",
-          "requirement-title": "게임 옵션 필요",
-          "requirement": "게임 설정의 '극돈공소 무조작 시 설정'을 ON으로 켜야 합니다.",
-          "auto-run": "자동 실행",
-          "timer-description": "자동 진행 대기 2초, 안내 표시 1초로 적용합니다. 앱을 종료하거나 끄면 원본 값으로 복구합니다.",
-          "todo": "최종 보상 지정과 트르담 궁 재진입 자동화는 후속 TODO입니다.",
-          "reason": {
-            "busy": "이전 변경 작업이 아직 진행 중입니다.",
-            "gameNotRunning": "게임이 실행 중이 아닙니다.",
-            "unsupportedGame": "지원하는 게임 2.0.4 실행 파일이 아닙니다.",
-            "notEndlessMode": "극돈공소에 진입한 뒤 다시 시도해 주세요.",
-            "unexpectedValues": "게임 타이머 값이 예상 상태와 달라 변경하지 않았습니다.",
-            "accessDenied": "현재 권한으로 게임 타이머를 변경할 수 없습니다.",
-            "patchFailed": "극돈공소 자동 실행을 켜지 못했습니다.",
-            "restoreFailed": "원본 게임 타이머를 복구하지 못했습니다.",
-            "internal": "극돈공소 타이머 처리 중 내부 오류가 발생했습니다."
-          }
+          "internal": "무한 퀘스트 반복 처리 중 내부 오류가 발생했습니다."
         }
       },
+      "conflux": {
+        "title": "극돈공소",
+        "description": "게임의 무조작 자동 진행을 사용하면서 선택 대기 시간을 단축합니다.",
+        "requirement-title": "게임 옵션 필요",
+        "requirement": "게임 설정의 '극돈공소 무조작 시 설정'을 ON으로 켜야 합니다.",
+        "auto-run": "자동 실행",
+        "timer-description": "자동 진행 대기 2초, 안내 표시 1초로 적용합니다. 앱을 종료하거나 끄면 원본 값으로 복구합니다.",
+        "todo": "최종 보상 지정과 트르담 궁 재진입 자동화는 후속 TODO입니다.",
+        "reason": {
+          "busy": "이전 변경 작업이 아직 진행 중입니다.",
+          "gameNotRunning": "게임이 실행 중이 아닙니다.",
+          "unsupportedGame": "지원하는 게임 2.0.4 실행 파일이 아닙니다.",
+          "notEndlessMode": "극돈공소에 진입한 뒤 다시 시도해 주세요.",
+          "unexpectedValues": "게임 타이머 값이 예상 상태와 달라 변경하지 않았습니다.",
+          "accessDenied": "현재 권한으로 게임 타이머를 변경할 수 없습니다.",
+          "patchFailed": "극돈공소 자동 실행을 켜지 못했습니다.",
+          "restoreFailed": "원본 게임 타이머를 복구하지 못했습니다.",
+          "internal": "극돈공소 타이머 처리 중 내부 오류가 발생했습니다."
+        }
+      }
+    },
     "updater": {
       "title": "업데이트",
       "current": "현재 버전 v{{version}}",
@@ -78,6 +78,7 @@
       "repeat-quest-restore-failed": "무한 퀘스트 반복 설정을 복구하지 못해 업데이트를 중단했습니다.",
       "conflux-timer-restore-failed": "극돈공소 자동 진행 대기 시간을 복구하지 못해 업데이트를 중단했습니다.",
       "install-failed": "업데이트를 설치하지 못했습니다.",
+      "error-detail": "오류 상세",
       "retry": "다시 시도",
       "manual-install": "수동 설치"
     },

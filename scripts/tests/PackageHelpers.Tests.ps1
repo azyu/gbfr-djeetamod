@@ -169,6 +169,12 @@ try {
     $archivePath = Join-Path $archiveTestRoot 'Djeeta MOD_0.1.2_x64-setup.nsis.zip'
     $created = New-NsisUpdaterArchive -Installer (Get-Item -LiteralPath $installerPath) -DestinationPath $archivePath
 
+    $archiveBytes = [IO.File]::ReadAllBytes($created.FullName)
+    $compressionMethod = [BitConverter]::ToUInt16($archiveBytes, 8)
+    Assert-Equal $compressionMethod 0 'Updater archive must store the installer without ZIP compression.'
+    $entryCrc32 = [BitConverter]::ToUInt32($archiveBytes, 14)
+    Assert-Equal $entryCrc32 ([uint32]3057449933) 'Updater archive CRC-32 must match the installer bytes.'
+
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($created.FullName)
     try {
