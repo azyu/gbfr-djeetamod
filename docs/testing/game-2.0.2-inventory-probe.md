@@ -24,3 +24,24 @@ Do not record memory addresses, raw bytes, player names, or full sigil lists in 
 | [ ] Release rejection | Start a release build with `DJEETA_INVENTORY_PROBE=1` and confirm the capture control is absent and the backend rejects capture before process access. |  |  |  |  |  |  |
 
 Unchecked rows do not establish full inventory compatibility. Do not claim Granblue Fantasy: Relink Endless Ragnarok 2.0.2 full-inventory support until every row is completed with evidence.
+
+## Game 2.0.4 migration observation
+
+- Executable SHA-256:
+  `F827F3C13CAA90B290FAB2FE7E28165A80448FDE0A3F7A96D79DAC6B8343FF2A`
+- Session: user-confirmed offline
+- Process rights:
+  `PROCESS_QUERY_INFORMATION | PROCESS_VM_READ`
+- Stable baseline: `2,192` candidate and occupied records with digest
+  `83cbf2aab841e127`
+- Sort/filter control: the same `2,192` records and digest remained stable
+- Controlled mutation: the game UI and probe both changed by `+4`, producing
+  `2,196` records and digest `eaa851a8457fd59d`
+- Restart coverage: the logical inventory was relocated across three game
+  process lifetimes
+
+The scanner initially exceeded its ten-second safety deadline after the
+2.0.4 private-region size changed. Restricting structural validation to the
+bounded large-region candidates restored a stable result without adding write
+rights. This is a read-only inventory-probe `PASS`, not full inventory or game
+compatibility.

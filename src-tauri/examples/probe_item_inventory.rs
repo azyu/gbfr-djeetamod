@@ -24,7 +24,7 @@ use locator::{locate_from_globals, resolve_roots};
 use memory::{MemoryReader, MemoryRegion, RemoteProcess};
 
 const GAME_PROCESS_NAME: &str = "granblue_fantasy_relink.exe";
-const PINNED_GAME_SHA256: &str = "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F";
+const PINNED_GAME_SHA256: &str = "F827F3C13CAA90B290FAB2FE7E28165A80448FDE0A3F7A96D79DAC6B8343FF2A";
 const SCAN_CHUNK_BYTES: usize = 8 * 1024 * 1024;
 const OVERLAP_BYTES: usize = 0x80;
 const MAX_RELATIVE_OFFSET: isize = 0x40;

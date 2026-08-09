@@ -12,6 +12,7 @@ use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 use equipment_core::{
     decode_inventory_record, InventoryCatalog, InventoryDecodeError, INVENTORY_RECORD_BYTES,
 };
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 use super::memory::{MemoryReadError, MemoryReader, MemoryRegion};
@@ -19,6 +20,10 @@ use super::memory::{MemoryReadError, MemoryReader, MemoryRegion};
 use super::{memory::RemoteProcess, GAME_PROCESS_NAME, PINNED_GAME_SHA256};
 
 pub(crate) const INVENTORY_SCAN_CHUNK_BYTES: usize = 8 * 1024 * 1024;
+const INVENTORY_REGION_MIN_BYTES: usize = 160 * 1024 * 1024;
+const INVENTORY_REGION_MAX_BYTES: usize = 256 * 1024 * 1024;
+const INVENTORY_REGION_BYTES: usize = 192_937_984;
+const INVENTORY_CATALOG_GAME_VERSION: &str = "2.0.4";
 const SIGIL_PATTERN_OVERLAP: usize = std::mem::size_of::<u32>() - 1;
 const MIN_RECORDS: usize = 13;
 const MIN_OCCUPIED: usize = 6;
@@ -103,6 +108,29 @@ fn current_probe_enabled() -> bool {
     inventory_probe_enabled(cfg!(debug_assertions), env_value.as_deref())
 }
 
+fn preferred_inventory_regions(regions: &[MemoryRegion]) -> Vec<MemoryRegion> {
+    let preferred = regions
+        .iter()
+        .copied()
+        .filter(|region| region.size == INVENTORY_REGION_BYTES)
+        .collect::<Vec<_>>();
+    if preferred.len() == 1 {
+        return preferred;
+    }
+    let bounded = regions
+        .iter()
+        .copied()
+        .filter(|region| {
+            (INVENTORY_REGION_MIN_BYTES..=INVENTORY_REGION_MAX_BYTES).contains(&region.size)
+        })
+        .collect::<Vec<_>>();
+    if bounded.is_empty() {
+        regions.to_vec()
+    } else {
+        bounded
+    }
+}
+
 #[tauri::command]
 pub(crate) fn inventory_probe_available() -> bool {
     current_probe_enabled()
@@ -167,9 +195,10 @@ fn capture_once() -> Result<(), InventoryProbeCode> {
     let regions = process
         .readable_private_regions()
         .map_err(|_| log_internal("region-enumeration"))?;
+    let scan_regions = preferred_inventory_regions(&regions);
     let (outcome, metrics) = scan_inventory(
         &process,
-        &regions,
+        &scan_regions,
         &catalog,
         ScanDeadline::new(INVENTORY_SCAN_DEADLINE),
     )
@@ -210,8 +239,7 @@ fn capture_once() -> Result<(), InventoryProbeCode> {
     })?;
 
     log::warn!(
-        "INVENTORY PROBE candidate address={:#x} records={} occupied={} digest={}",
-        candidate.base_address,
+        "INVENTORY PROBE candidate records={} occupied={} digest={}",
         candidate.record_count,
         candidate.occupied_count,
         snapshot_digest_prefix(&first)
@@ -281,6 +309,15 @@ impl ScanMetrics {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SigilIdCatalog {
+    game_version: String,
+    game_exe_sha256: String,
+    sigil_ids: Vec<String>,
+    trait_ids: Vec<String>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum InventoryProbeError {
     #[error(transparent)]
@@ -295,26 +332,52 @@ pub(crate) enum InventoryProbeError {
     DeadlineExceeded,
     #[error("invalid inventory catalog key {0}")]
     InvalidCatalogKey(String),
+    #[error("inventory catalog metadata does not match the pinned game")]
+    CatalogMetadata,
     #[error("inventory address range overflow")]
     AddressOverflow,
     #[error("inventory changed between stable reads")]
     Unstable,
 }
 
-fn parse_catalog_keys(source: &str) -> Result<HashSet<u32>, InventoryProbeError> {
-    let rows: std::collections::HashMap<String, serde_json::Value> = serde_json::from_str(source)?;
-    rows.into_keys()
+fn parse_id_list(
+    keys: Vec<String>,
+    label: &str,
+) -> Result<HashSet<u32>, InventoryProbeError> {
+    let expected_count = keys.len();
+    let ids = keys
+        .into_iter()
         .map(|key| {
             u32::from_str_radix(&key, 16).map_err(|_| InventoryProbeError::InvalidCatalogKey(key))
         })
-        .collect()
+        .collect::<Result<HashSet<_>, _>>()?;
+    if ids.len() != expected_count {
+        return Err(InventoryProbeError::InvalidCatalogKey(format!(
+            "duplicate {label} ID"
+        )));
+    }
+    Ok(ids)
+}
+
+fn parse_inventory_ids(
+    source: &str,
+) -> Result<(HashSet<u32>, HashSet<u32>), InventoryProbeError> {
+    let catalog: SigilIdCatalog = serde_json::from_str(source)?;
+    if catalog.game_version != INVENTORY_CATALOG_GAME_VERSION
+        || catalog.game_exe_sha256 != PINNED_GAME_SHA256
+    {
+        return Err(InventoryProbeError::CatalogMetadata);
+    }
+    Ok((
+        parse_id_list(catalog.sigil_ids, "sigil")?,
+        parse_id_list(catalog.trait_ids, "trait")?,
+    ))
 }
 
 pub(crate) fn load_inventory_catalog() -> Result<InventoryCatalog, InventoryProbeError> {
-    Ok(InventoryCatalog::new(
-        parse_catalog_keys(include_str!("../../lang/en/sigils.json"))?,
-        parse_catalog_keys(include_str!("../../lang/en/traits.json"))?,
-    ))
+    let (sigil_ids, trait_ids) =
+        parse_inventory_ids(include_str!("../../data/sigil-ids-2.0.4.json"))?;
+    Ok(InventoryCatalog::new(sigil_ids, trait_ids))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -715,6 +778,7 @@ pub(crate) fn scan_inventory<R: MemoryReader>(
         return Ok((InventoryScanOutcome::LimitExceeded, metrics));
     }
 
+
     let outcome = match candidates.as_slice() {
         [] => InventoryScanOutcome::Unavailable,
         [candidate] => InventoryScanOutcome::Unique(*candidate),
@@ -784,10 +848,11 @@ mod tests {
 
     use super::{
         build_sigil_matcher, discover_inventory_anchors, find_inventory_anchors,
-        inventory_probe_enabled, load_inventory_catalog, map_candidate_read_error, read_candidate,
-        read_candidate_bytes, scan_inventory, snapshot_digest_prefix, verify_candidate_snapshots,
-        InventoryCandidate, InventoryProbeCode, InventoryProbeError, InventoryProbeState,
-        InventoryScanOutcome, ScanDeadline, ScanMetrics, INVENTORY_SCAN_CHUNK_BYTES,
+        inventory_probe_enabled, load_inventory_catalog, map_candidate_read_error,
+        preferred_inventory_regions, read_candidate, read_candidate_bytes, scan_inventory,
+        snapshot_digest_prefix, verify_candidate_snapshots, InventoryCandidate, InventoryProbeCode,
+        InventoryProbeError, InventoryProbeState, InventoryScanOutcome, ScanDeadline, ScanMetrics,
+        INVENTORY_REGION_MIN_BYTES, INVENTORY_SCAN_CHUNK_BYTES, INVENTORY_REGION_BYTES,
     };
     use crate::equipment_probe::memory::{MemoryReadError, MemoryReader, MemoryRegion};
 
@@ -1004,6 +1069,7 @@ mod tests {
             &memory.regions,
             &matcher,
             started,
+
             deadline,
             &mut metrics,
         )
@@ -1027,6 +1093,47 @@ mod tests {
         assert!(!deadline.exceeded(Duration::from_secs(10)));
         assert!(deadline.exceeded(Duration::from_secs(10) + Duration::from_nanos(1)));
     }
+
+    #[test]
+    fn bundled_sigil_catalog_is_complete_and_version_pinned() {
+        let catalog = load_inventory_catalog().unwrap();
+        let ids = catalog.known_non_empty_sigil_ids().collect::<Vec<_>>();
+
+        assert_eq!(ids.len(), 1_034);
+        assert!(ids.contains(&0x02C1_D304));
+        assert!(ids.contains(&SIGIL_ID));
+    }
+
+    #[test]
+    fn prefers_the_unique_pinned_sigil_region_then_bounded_large_regions() {
+        let ordinary = MemoryRegion {
+            base_address: BASE,
+            size: 0x1000,
+        };
+        let save = MemoryRegion {
+            base_address: SECOND_BASE,
+            size: INVENTORY_REGION_BYTES,
+        };
+        let alternate = MemoryRegion {
+            base_address: SECOND_BASE + INVENTORY_REGION_BYTES,
+            size: INVENTORY_REGION_MIN_BYTES,
+        };
+
+        assert_eq!(
+            preferred_inventory_regions(&[ordinary, alternate, save]),
+            vec![save]
+        );
+        assert_eq!(
+            preferred_inventory_regions(&[ordinary, alternate]),
+            vec![alternate]
+        );
+        assert_eq!(
+            preferred_inventory_regions(&[ordinary, save, save]),
+            vec![save, save]
+        );
+        assert_eq!(preferred_inventory_regions(&[ordinary]), vec![ordinary]);
+    }
+
 
     #[test]
     fn validates_records_only_around_discovered_anchors() {

@@ -16,14 +16,14 @@ use memory::{MemoryReader, RemoteProcess};
 use sha2::{Digest, Sha256};
 
 const GAME_PROCESS_NAME: &str = "granblue_fantasy_relink.exe";
-const PINNED_GAME_SHA256: &str = "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F";
+const PINNED_GAME_SHA256: &str = "F827F3C13CAA90B290FAB2FE7E28165A80448FDE0A3F7A96D79DAC6B8343FF2A";
 const PROBE_ENV: &str = "DJEETA_CONFLUX_UI_PROBE";
 const TIMER_PROBE_ENV: &str = "DJEETA_CONFLUX_TIMER_PROBE";
 const SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
+const MODULE_SCAN_CHUNK_BYTES: usize = 64 * 1024;
 const OBJECT_FINGERPRINT_BYTES: usize = 0x600;
 const TIMER_OBJECT_BYTES: usize = 0x2000;
 const TIMER_SAMPLE_DELAY: Duration = Duration::from_millis(500);
-const TIMER_MANAGER_POINTER_RVA: usize = 0x07C2_3E38;
 const TIMER_MANAGER_BYTES: usize = 0x347C;
 const TIMER_NOTICE_THRESHOLD_OFFSET: usize = 0x2DA4;
 const TIMER_DEFAULTS_OFFSET: usize = 0x2DA8;
@@ -33,6 +33,11 @@ const TIMER_FLAGS_OFFSET: usize = 0x3468;
 const TIMER_INITIAL_OFFSET: usize = 0x346C;
 const TIMER_CURRENT_OFFSET: usize = 0x3470;
 const TIMER_NOTICE_OFFSET: usize = 0x3474;
+const ORIGINAL_TIMER_CONFIG: [f32; TIMER_DEFAULT_COUNT + 1] = [
+    3.0, 60.0, 60.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 60.0, 30.0, 30.0,
+];
+const FAST_TIMER_CONFIG: [f32; TIMER_DEFAULT_COUNT + 1] =
+    [1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
 const MAX_FINGERPRINTS_PER_TARGET: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -645,6 +650,133 @@ fn parse_timer_manager(bytes: &[u8]) -> Option<TimerManagerSnapshot> {
     })
 }
 
+fn has_original_timer_config(snapshot: &TimerManagerSnapshot) -> bool {
+    snapshot.notice_threshold_seconds == ORIGINAL_TIMER_CONFIG[0]
+        && snapshot.defaults == ORIGINAL_TIMER_CONFIG[1..]
+}
+
+fn has_known_timer_config(snapshot: &TimerManagerSnapshot) -> bool {
+    has_original_timer_config(snapshot)
+        || (snapshot.notice_threshold_seconds == FAST_TIMER_CONFIG[0]
+            && snapshot.defaults == FAST_TIMER_CONFIG[1..])
+}
+
+fn encode_timer_config(
+    config: [f32; TIMER_DEFAULT_COUNT + 1],
+) -> [u8; (TIMER_DEFAULT_COUNT + 1) * 4] {
+    let mut bytes = [0u8; (TIMER_DEFAULT_COUNT + 1) * 4];
+    for (index, value) in config.into_iter().enumerate() {
+        bytes[index * 4..index * 4 + 4].copy_from_slice(&value.to_le_bytes());
+    }
+    bytes
+}
+
+fn encode_original_timer_config() -> [u8; (TIMER_DEFAULT_COUNT + 1) * 4] {
+    encode_timer_config(ORIGINAL_TIMER_CONFIG)
+}
+
+fn find_pattern_offsets(bytes: &[u8], pattern: &[u8]) -> Vec<usize> {
+    if pattern.is_empty() || bytes.len() < pattern.len() {
+        return Vec::new();
+    }
+    bytes
+        .windows(pattern.len())
+        .enumerate()
+        .filter_map(|(offset, window)| (window == pattern).then_some(offset))
+        .collect()
+}
+
+fn read_timer_manager_at(
+    process: &RemoteProcess,
+    manager_address: usize,
+) -> anyhow::Result<TimerManagerSnapshot> {
+    let mut manager_bytes = vec![0u8; TIMER_MANAGER_BYTES];
+    process.read_exact(manager_address, &mut manager_bytes)?;
+    parse_timer_manager(&manager_bytes)
+        .ok_or_else(|| anyhow::anyhow!("timer manager snapshot is truncated"))
+}
+
+fn locate_timer_manager(
+    process: &RemoteProcess,
+    regions: &[memory::MemoryRegion],
+) -> anyhow::Result<(usize, Vec<usize>)> {
+    let configs = [
+        encode_original_timer_config(),
+        encode_timer_config(FAST_TIMER_CONFIG),
+    ];
+    let overlap = configs[0].len() - 1;
+    let mut managers = Vec::new();
+
+    for region in regions {
+        let mut region_offset = 0usize;
+        while region_offset < region.size {
+            let remaining = region.size - region_offset;
+            let advance = remaining.min(SCAN_CHUNK_BYTES);
+            let read_len = remaining.min(SCAN_CHUNK_BYTES + overlap);
+            let Some(address) = region.base_address.checked_add(region_offset) else {
+                break;
+            };
+            let mut bytes = vec![0u8; read_len];
+            if process.read_exact(address, &mut bytes).is_ok() {
+                for config in &configs {
+                    for offset in find_pattern_offsets(&bytes, config) {
+                        let Some(config_address) = address.checked_add(offset) else {
+                            continue;
+                        };
+                        let Some(manager_address) =
+                            config_address.checked_sub(TIMER_NOTICE_THRESHOLD_OFFSET)
+                        else {
+                            continue;
+                        };
+                        if read_timer_manager_at(process, manager_address)
+                            .is_ok_and(|snapshot| has_known_timer_config(&snapshot))
+                        {
+                            managers.push(manager_address);
+                        }
+                    }
+                }
+            }
+            region_offset += advance;
+        }
+    }
+    managers.sort_unstable();
+    managers.dedup();
+    if managers.len() != 1 {
+        anyhow::bail!(
+            "timer manager candidate count was {}; expected one",
+            managers.len()
+        );
+    }
+
+    let manager_address = managers[0];
+    let pointer = manager_address.to_le_bytes();
+    let mut pointer_rvas = Vec::new();
+    let mut module_offset = 0usize;
+    while module_offset < process.module_size {
+        let remaining = process.module_size - module_offset;
+        let advance = remaining.min(MODULE_SCAN_CHUNK_BYTES);
+        let read_len = remaining.min(MODULE_SCAN_CHUNK_BYTES + pointer.len() - 1);
+        let Some(address) = process.module_base.checked_add(module_offset) else {
+            break;
+        };
+        let mut bytes = vec![0u8; read_len];
+        if process.read_exact(address, &mut bytes).is_ok() {
+            for offset in find_pattern_offsets(&bytes, &pointer) {
+                let Some(rva) = module_offset.checked_add(offset) else {
+                    continue;
+                };
+                if rva % std::mem::size_of::<usize>() == 0 {
+                    pointer_rvas.push(rva);
+                }
+            }
+        }
+        module_offset += advance;
+    }
+    pointer_rvas.sort_unstable();
+    pointer_rvas.dedup();
+    Ok((manager_address, pointer_rvas))
+}
+
 fn format_sha256(hash: &[u8; 32]) -> String {
     hash.iter().map(|byte| format!("{byte:02X}")).collect()
 }
@@ -676,32 +808,25 @@ fn validate_function_metadata(
     Ok(function_rva)
 }
 
-fn read_timer_manager(process: &RemoteProcess) -> anyhow::Result<TimerManagerSnapshot> {
-    let pointer_address = process
-        .module_base
-        .checked_add(TIMER_MANAGER_POINTER_RVA)
-        .ok_or_else(|| anyhow::anyhow!("timer manager pointer address overflow"))?;
-    let mut pointer_bytes = [0u8; 8];
-    process.read_exact(pointer_address, &mut pointer_bytes)?;
-    let manager_address = usize::from_le_bytes(pointer_bytes);
-    if manager_address == 0 {
-        anyhow::bail!("timer manager is unavailable");
-    }
-    let mut manager_bytes = vec![0u8; TIMER_MANAGER_BYTES];
-    process.read_exact(manager_address, &mut manager_bytes)?;
-    parse_timer_manager(&manager_bytes)
-        .ok_or_else(|| anyhow::anyhow!("timer manager snapshot is truncated"))
-}
-
 fn run_timer_probe(
     process: &RemoteProcess,
     regions: &[memory::MemoryRegion],
 ) -> anyhow::Result<()> {
-    let manager_before = read_timer_manager(process)?;
+    let (manager_address, pointer_rvas) = locate_timer_manager(process, regions)?;
+    let formatted_pointer_rvas = pointer_rvas
+        .iter()
+        .map(|rva| format!("0x{rva:08X}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    println!(
+        "CONFLUX TIMER PROBE locator manager_candidates=1 pointer_rvas=[{formatted_pointer_rvas}]"
+    );
+
+    let manager_before = read_timer_manager_at(process, manager_address)?;
     let manager_started = Instant::now();
     thread::sleep(TIMER_SAMPLE_DELAY);
     let manager_elapsed = manager_started.elapsed().as_secs_f32();
-    let manager_after = read_timer_manager(process)?;
+    let manager_after = read_timer_manager_at(process, manager_address)?;
     println!(
         "CONFLUX TIMER PROBE manager mode={} threshold={:.3} flags={:02X?}->{:02X?} initial={:.3}->{:.3} current={:.3}->{:.3} notice={:.3}->{:.3} elapsed={manager_elapsed:.3}s",
         manager_before.mode,
@@ -783,6 +908,7 @@ fn run_timer_probe(
     );
     Ok(())
 }
+
 
 fn main() -> anyhow::Result<()> {
     if !cfg!(debug_assertions) {
@@ -881,11 +1007,13 @@ fn main() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        count_vtable_refs, find_decreasing_timer_fields, find_vtable_object_locations,
-        fingerprint_vtable_objects, parse_timer_manager, validate_function_metadata,
-        FunctionMetadataError, TimerFieldKind, VtableTarget, TIMER_CURRENT_OFFSET,
-        TIMER_DEFAULTS_OFFSET, TIMER_INITIAL_OFFSET, TIMER_MANAGER_BYTES, TIMER_MODE_OFFSET,
-        TIMER_NOTICE_OFFSET, TIMER_NOTICE_THRESHOLD_OFFSET,
+        count_vtable_refs, encode_original_timer_config, encode_timer_config,
+        find_decreasing_timer_fields, find_pattern_offsets, find_vtable_object_locations,
+        fingerprint_vtable_objects, has_known_timer_config, has_original_timer_config,
+        parse_timer_manager, validate_function_metadata, FunctionMetadataError, TimerFieldKind,
+        VtableTarget, FAST_TIMER_CONFIG, TIMER_CURRENT_OFFSET, TIMER_DEFAULTS_OFFSET,
+        TIMER_INITIAL_OFFSET, TIMER_MANAGER_BYTES, TIMER_MODE_OFFSET, TIMER_NOTICE_OFFSET,
+        TIMER_NOTICE_THRESHOLD_OFFSET,
     };
 
     const TARGETS: [VtableTarget; 2] = [
@@ -1059,5 +1187,30 @@ mod tests {
         assert_eq!(snapshot.current_seconds, 59.5);
         assert_eq!(snapshot.notice_seconds, 1.0);
         assert!(parse_timer_manager(&bytes[..TIMER_MANAGER_BYTES - 1]).is_none());
+    }
+
+    #[test]
+    fn finds_original_timer_config_without_exposing_manager_addresses() {
+        let pattern = encode_original_timer_config();
+        let mut bytes = vec![0xCC; pattern.len() * 2 + 3];
+        bytes[1..1 + pattern.len()].copy_from_slice(&pattern);
+        let second = pattern.len() + 3;
+        bytes[second..second + pattern.len()].copy_from_slice(&pattern);
+
+        assert_eq!(find_pattern_offsets(&bytes, &pattern), vec![1, second]);
+
+        let mut manager = vec![0u8; TIMER_MANAGER_BYTES];
+        manager[TIMER_NOTICE_THRESHOLD_OFFSET
+            ..TIMER_NOTICE_THRESHOLD_OFFSET + pattern.len()]
+            .copy_from_slice(&pattern);
+        let snapshot = parse_timer_manager(&manager).expect("complete manager");
+        assert!(has_original_timer_config(&snapshot));
+
+        let fast = encode_timer_config(FAST_TIMER_CONFIG);
+        manager[TIMER_NOTICE_THRESHOLD_OFFSET
+            ..TIMER_NOTICE_THRESHOLD_OFFSET + fast.len()]
+            .copy_from_slice(&fast);
+        let fast_snapshot = parse_timer_manager(&manager).expect("complete patched manager");
+        assert!(has_known_timer_config(&fast_snapshot));
     }
 }

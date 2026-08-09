@@ -28,7 +28,7 @@
         "reason": {
           "busy": "The previous change is still in progress.",
           "gameNotRunning": "The game is not running.",
-          "unsupportedGame": "This is not the supported game 2.0.2 executable.",
+          "unsupportedGame": "This is not the supported game 2.0.4 executable.",
           "signatureMissing": "The unlimited repeat quest code was not found.",
           "signatureAmbiguous": "Multiple unlimited repeat quest code candidates were found.",
           "unexpectedBytes": "The game code was not changed because it was in an unexpected state.",
@@ -49,7 +49,7 @@
           "reason": {
             "busy": "The previous change is still in progress.",
             "gameNotRunning": "The game is not running.",
-            "unsupportedGame": "This is not the supported game 2.0.2 executable.",
+            "unsupportedGame": "This is not the supported game 2.0.4 executable.",
             "notEndlessMode": "Enter Extreme Conflux and try again.",
             "unexpectedValues": "The timer was not changed because its values were unexpected.",
             "accessDenied": "The game timer cannot be changed with the current permissions.",

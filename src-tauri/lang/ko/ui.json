@@ -28,7 +28,7 @@
         "reason": {
           "busy": "이전 변경 작업이 아직 진행 중입니다.",
           "gameNotRunning": "게임이 실행 중이 아닙니다.",
-          "unsupportedGame": "지원하는 게임 2.0.2 실행 파일이 아닙니다.",
+          "unsupportedGame": "지원하는 게임 2.0.4 실행 파일이 아닙니다.",
           "signatureMissing": "무한 퀘스트 반복 코드를 찾지 못했습니다.",
           "signatureAmbiguous": "무한 퀘스트 반복 코드 후보가 여러 개입니다.",
           "unexpectedBytes": "게임 코드가 예상 상태와 달라 변경하지 않았습니다.",
@@ -49,7 +49,7 @@
           "reason": {
             "busy": "이전 변경 작업이 아직 진행 중입니다.",
             "gameNotRunning": "게임이 실행 중이 아닙니다.",
-            "unsupportedGame": "지원하는 게임 2.0.2 실행 파일이 아닙니다.",
+            "unsupportedGame": "지원하는 게임 2.0.4 실행 파일이 아닙니다.",
             "notEndlessMode": "극돈공소에 진입한 뒤 다시 시도해 주세요.",
             "unexpectedValues": "게임 타이머 값이 예상 상태와 달라 변경하지 않았습니다.",
             "accessDenied": "현재 권한으로 게임 타이머를 변경할 수 없습니다.",

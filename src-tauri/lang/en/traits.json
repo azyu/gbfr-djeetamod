@@ -678,5 +678,97 @@
   "fff8cf64": {
     "key": "SKILL_312_00",
     "text": "DMG Cap Sage"
+  },
+  "06719232": {
+    "key": "SKILL_178_00",
+    "text": "The Black's Mark"
+  },
+  "0de887a0": {
+    "key": "SKILL_320_00",
+    "text": "Celestial Nyx"
+  },
+  "1de14c65": {
+    "key": "SKILL_173_00",
+    "text": "Gladiator's Frenzy"
+  },
+  "36e3848d": {
+    "key": "SKILL_323_00",
+    "text": "Celestial Incendo"
+  },
+  "3eb345d7": {
+    "key": "SKILL_176_00",
+    "text": "Thunderwolf's Recharge"
+  },
+  "46ee3116": {
+    "key": "SKILL_302_00",
+    "text": "In a Pinch"
+  },
+  "47384248": {
+    "key": "SKILL_177_00",
+    "text": "Enchantress's Blessing"
+  },
+  "5559232f": {
+    "key": "SKILL_178_00",
+    "text": "The Black's Mark"
+  },
+  "73220725": {
+    "key": "SKILL_326_00",
+    "text": "Celestial Ventus"
+  },
+  "79266456": {
+    "key": "SKILL_174_00",
+    "text": "Bladequeen's Serenade"
+  },
+  "7b5b081d": {
+    "key": "SKILL_174_00",
+    "text": "Bladequeen's Serenade"
+  },
+  "7d75d904": {
+    "key": "SKILL_176_00",
+    "text": "Thunderwolf's Recharge"
+  },
+  "807b6684": {
+    "key": "SKILL_177_00",
+    "text": "Enchantress's Blessing"
+  },
+  "89c66acb": {
+    "key": "SKILL_303_00",
+    "text": "Sumo Force"
+  },
+  "9232dc17": {
+    "key": "SKILL_322_00",
+    "text": "Celestial Terra"
+  },
+  "a7726190": {
+    "key": "SKILL_321_00",
+    "text": "Celestial Lumen"
+  },
+  "a898e283": {
+    "key": "SKILL_324_00",
+    "text": "Celestial Aqua"
+  },
+  "b953cc1e": {
+    "key": "SKILL_175_00",
+    "text": "Ultramarine's Flash"
+  },
+  "bf78fbfc": {
+    "key": "SKILL_301_00",
+    "text": "Immortal Shell"
+  },
+  "d029fe08": {
+    "key": "SKILL_325_00",
+    "text": "Fatebreaker"
+  },
+  "d176d262": {
+    "key": "SKILL_175_00",
+    "text": "Ultramarine's Flash"
+  },
+  "dba19768": {
+    "key": "SKILL_173_00",
+    "text": "Gladiator's Frenzy"
+  },
+  "f26baea5": {
+    "key": "SKILL_327_00",
+    "text": "Divergence"
   }
 }

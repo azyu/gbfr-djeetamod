@@ -9,8 +9,33 @@ use rusqlite::{types::ValueRef, Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 
 const EMPTY_TRAIT_ID: u32 = 0x887A_E0B0;
-const GAME_VERSION: &str = "2.0.2";
-const GAME_EXE_SHA256: &str = "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F";
+const GAME_VERSION: &str = "2.0.4";
+const GAME_EXE_SHA256: &str = "F827F3C13CAA90B290FAB2FE7E28165A80448FDE0A3F7A96D79DAC6B8343FF2A";
+const RAW_TRAIT_NAMES: &[(u32, &str)] = &[
+    (0x0671_9232, "SKILL_178_00"),
+    (0x0DE8_87A0, "SKILL_320_00"),
+    (0x1DE1_4C65, "SKILL_173_00"),
+    (0x36E3_848D, "SKILL_323_00"),
+    (0x3EB3_45D7, "SKILL_176_00"),
+    (0x46EE_3116, "SKILL_302_00"),
+    (0x4738_4248, "SKILL_177_00"),
+    (0x5559_232F, "SKILL_178_00"),
+    (0x7322_0725, "SKILL_326_00"),
+    (0x7926_6456, "SKILL_174_00"),
+    (0x7B5B_081D, "SKILL_174_00"),
+    (0x7D75_D904, "SKILL_176_00"),
+    (0x807B_6684, "SKILL_177_00"),
+    (0x89C6_6ACB, "SKILL_303_00"),
+    (0x9232_DC17, "SKILL_322_00"),
+    (0xA772_6190, "SKILL_321_00"),
+    (0xA898_E283, "SKILL_324_00"),
+    (0xB953_CC1E, "SKILL_175_00"),
+    (0xBF78_FBFC, "SKILL_301_00"),
+    (0xD029_FE08, "SKILL_325_00"),
+    (0xD176_D262, "SKILL_175_00"),
+    (0xDBA1_9768, "SKILL_173_00"),
+    (0xF26B_AEA5, "SKILL_327_00"),
+];
 const PRIME32_1: u32 = 0x9E37_79B1;
 const PRIME32_2: u32 = 0x85EB_CA77;
 const PRIME32_3: u32 = 0xC2B2_AE3D;
@@ -212,15 +237,24 @@ fn build_name_catalog(
     let mut catalog = BTreeMap::new();
 
     for definition in definitions {
-        let TraitKey::Symbolic(key) = &definition.key else {
-            continue;
+        let key = match &definition.key {
+            TraitKey::Symbolic(key) => key.as_str(),
+            TraitKey::RawHash => {
+                let Some((_, key)) = RAW_TRAIT_NAMES
+                    .iter()
+                    .find(|(trait_id, _)| *trait_id == definition.trait_id)
+                else {
+                    continue;
+                };
+                key
+            }
         };
         let Some(text) = names.get(key) else {
             continue;
         };
         let hash = format!("{:08x}", definition.trait_id);
         let record = TraitNameRecord {
-            key: key.clone(),
+            key: key.to_owned(),
             text: text.clone(),
         };
         if let Some(previous) = catalog.insert(hash.clone(), record.clone()) {
@@ -305,7 +339,7 @@ fn normalized_sha256(value: &str) -> Result<String> {
 fn validated_game_sha256(value: &str) -> Result<String> {
     let normalized = normalized_sha256(value)?;
     if normalized != GAME_EXE_SHA256 {
-        bail!("game executable SHA-256 does not match Granblue Fantasy: Relink 2.0.2");
+        bail!("game executable SHA-256 does not match Granblue Fantasy: Relink 2.0.4");
     }
     Ok(normalized)
 }
@@ -449,7 +483,7 @@ mod tests {
         build_cap_records, build_name_catalog, custom_xxhash32, generate_catalogs,
         load_definitions, normalized_sha256, parse_message_names, validated_game_sha256,
         write_prepared_outputs, TraitCapCatalog, TraitCapRecord, TraitDefinition, TraitNameCatalog,
-        GAME_EXE_SHA256,
+        GAME_EXE_SHA256, GAME_VERSION,
     };
     use rusqlite::Connection;
 
@@ -523,19 +557,25 @@ mod tests {
     }
 
     #[test]
-    fn joins_only_symbolic_trait_keys_with_localized_names() {
+    fn joins_symbolic_and_pinned_raw_trait_keys_with_localized_names() {
         let definitions = vec![
             TraitDefinition::symbolic("SKILL_020_00", custom_xxhash32(b"SKILL_020_00"), 65),
-            TraitDefinition::raw(0x0151_cf9e, 30),
+            TraitDefinition::raw(0xA772_6190, 15),
+            TraitDefinition::raw(0x0151_CF9E, 30),
         ];
-        let names = BTreeMap::from([("SKILL_020_00".to_owned(), "Damage Cap".to_owned())]);
+        let names = BTreeMap::from([
+            ("SKILL_020_00".to_owned(), "Damage Cap".to_owned()),
+            ("SKILL_321_00".to_owned(), "Celestial Lumen".to_owned()),
+        ]);
 
         let catalog = build_name_catalog(&definitions, &names, "English").unwrap();
         let damage_cap_hash = format!("{:08x}", custom_xxhash32(b"SKILL_020_00"));
 
-        assert_eq!(catalog.len(), 1);
+        assert_eq!(catalog.len(), 2);
         assert_eq!(catalog[&damage_cap_hash].key, "SKILL_020_00");
         assert_eq!(catalog[&damage_cap_hash].text, "Damage Cap");
+        assert_eq!(catalog["a7726190"].key, "SKILL_321_00");
+        assert_eq!(catalog["a7726190"].text, "Celestial Lumen");
         assert!(!catalog.contains_key("0151cf9e"));
     }
 
@@ -636,7 +676,7 @@ mod tests {
         assert!(validated_game_sha256(&"AB".repeat(32))
             .unwrap_err()
             .to_string()
-            .contains("2.0.2"));
+            .contains("2.0.4"));
     }
 
     #[test]
@@ -662,7 +702,7 @@ mod tests {
     }
 
     #[test]
-    fn bundled_2_0_2_catalogs_cover_every_verified_localized_trait() {
+    fn bundled_2_0_4_catalogs_cover_every_verified_localized_trait() {
         let caps: TraitCapCatalog =
             serde_json::from_str(include_str!("../assets/trait-caps.json")).unwrap();
         let ko: TraitNameCatalog =
@@ -670,11 +710,13 @@ mod tests {
         let en: TraitNameCatalog =
             serde_json::from_str(include_str!("../lang/en/traits.json")).unwrap();
 
+        assert_eq!(caps.game_version, GAME_VERSION);
+        assert_eq!(caps.game_exe_sha256, GAME_EXE_SHA256);
         assert_eq!(caps.records.len(), 261);
-        assert_eq!(ko.len(), 170);
-        assert_eq!(en.len(), 170);
+        assert_eq!(ko.len(), 193);
+        assert_eq!(en.len(), 193);
         assert_eq!(ko.keys().collect::<Vec<_>>(), en.keys().collect::<Vec<_>>());
-        assert_eq!(caps.records.len() - ko.len(), 91);
+        assert_eq!(caps.records.len() - ko.len(), 68);
         assert!(ko.values().all(|record| !record.text.trim().is_empty()));
         assert!(en.values().all(|record| !record.text.trim().is_empty()));
         assert!(ko.iter().all(|(hash, ko_record)| {
@@ -690,7 +732,7 @@ mod tests {
     }
 
     #[test]
-    fn bundled_2_0_2_catalog_contains_endless_ragnarok_trait() {
+    fn bundled_2_0_4_catalog_contains_endless_ragnarok_trait() {
         let ko: TraitNameCatalog =
             serde_json::from_str(include_str!("../lang/ko/traits.json")).unwrap();
         let en: TraitNameCatalog =

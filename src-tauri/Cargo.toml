@@ -1,6 +1,6 @@
 [package]
 name = "gbfr-logs"
-version = "0.1.4"
+version = "0.1.5"
 autobins = false
 default-run = "gbfr-logs"
 description = "Djeeta MOD for Granblue Fantasy: Relink"
@@ -18,6 +18,10 @@ path = "examples/build_trait_caps.rs"
 [[example]]
 name = "build_item_catalog"
 path = "examples/build_item_catalog.rs"
+
+[[example]]
+name = "build_sigil_id_catalog"
+path = "examples/build_sigil_id_catalog.rs"
 
 [[example]]
 name = "probe_item_inventory"

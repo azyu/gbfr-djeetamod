@@ -20,7 +20,11 @@ use crate::equipment_probe::{
 };
 
 pub(crate) const INVENTORY_REGION_BYTES: usize = 243_269_632;
+pub(crate) const TOWN_INVENTORY_REGION_BYTES: usize = 239_075_328;
 const STABILITY_DELAY: Duration = Duration::from_millis(50);
+const ORDINARY_ITEM_CATALOG_VERSION: &str = "2.0.2";
+const ORDINARY_ITEM_CATALOG_SOURCE_SHA256: &str =
+    "63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ItemAnalysisCode {
@@ -111,7 +115,9 @@ pub(crate) fn bundled_ordinary_item_ids() -> Result<HashSet<u32>, ItemAnalysisCo
     let catalog: OrdinaryItemCatalog =
         serde_json::from_str(include_str!("../data/ordinary-items-2.0.2.json"))
             .map_err(|_| ItemAnalysisCode::Internal)?;
-    if catalog.game_version != "2.0.2" || catalog.game_exe_sha256 != PINNED_GAME_SHA256 {
+    if catalog.game_version != ORDINARY_ITEM_CATALOG_VERSION
+        || catalog.game_exe_sha256 != ORDINARY_ITEM_CATALOG_SOURCE_SHA256
+    {
         return Err(ItemAnalysisCode::Internal);
     }
 
@@ -129,15 +135,20 @@ pub(crate) fn bundled_ordinary_item_ids() -> Result<HashSet<u32>, ItemAnalysisCo
 pub(crate) fn select_inventory_region(
     regions: &[MemoryRegion],
 ) -> Result<MemoryRegion, ItemAnalysisCode> {
-    let matches = regions
-        .iter()
-        .copied()
-        .filter(|region| region.size == INVENTORY_REGION_BYTES)
-        .collect::<Vec<_>>();
-    match matches.as_slice() {
-        [region] => Ok(*region),
-        _ => Err(ItemAnalysisCode::Unavailable),
+    for size in [INVENTORY_REGION_BYTES, TOWN_INVENTORY_REGION_BYTES] {
+        let mut matches = regions
+            .iter()
+            .copied()
+            .filter(|region| region.size == size);
+        let Some(region) = matches.next() else {
+            continue;
+        };
+        if matches.next().is_some() {
+            return Err(ItemAnalysisCode::Unavailable);
+        }
+        return Ok(region);
     }
+    Err(ItemAnalysisCode::Unavailable)
 }
 
 fn decode_snapshot(
@@ -254,7 +265,7 @@ mod tests {
     use super::{
         analyze_snapshots, bundled_ordinary_item_ids, select_inventory_region,
         stable_inventory_snapshot, ItemAnalysisCode, ItemAnalysisResponse, ItemAnalysisState,
-        ItemInventorySnapshotResponse, INVENTORY_REGION_BYTES,
+        ItemInventorySnapshotResponse, INVENTORY_REGION_BYTES, TOWN_INVENTORY_REGION_BYTES,
     };
     use crate::equipment_probe::memory::MemoryRegion;
 
@@ -375,6 +386,12 @@ mod tests {
             ]),
             Ok(expected)
         );
+        let town = MemoryRegion {
+            base_address: 0x3000_0000,
+            size: TOWN_INVENTORY_REGION_BYTES,
+        };
+        assert_eq!(select_inventory_region(&[town]), Ok(town));
+        assert_eq!(select_inventory_region(&[expected, town]), Ok(expected));
         assert_eq!(
             select_inventory_region(&[]),
             Err(ItemAnalysisCode::Unavailable)

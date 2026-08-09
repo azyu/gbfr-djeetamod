@@ -1,6 +1,6 @@
 use crate::equipment_probe::{
     memory::{MemoryReadError, MemoryReader, RemoteProcess},
-    GAME_PROCESS_NAME, PINNED_GAME_SHA256,
+    GAME_PROCESS_NAME,
 };
 use serde::Serialize;
 use std::sync::{
@@ -22,7 +22,10 @@ use windows::Win32::{
     },
 };
 
-const TIMER_MANAGER_POINTER_RVA: usize = 0x07C2_3E38;
+const PINNED_CONFLUX_TIMER_SHA256: &str =
+    "F827F3C13CAA90B290FAB2FE7E28165A80448FDE0A3F7A96D79DAC6B8343FF2A";
+
+const TIMER_MANAGER_POINTER_RVA: usize = 0x07C2_2078;
 const TIMER_NOTICE_THRESHOLD_OFFSET: usize = 0x2DA4;
 const TIMER_DEFAULTS_OFFSET: usize = 0x2DA8;
 const TIMER_MODE_OFFSET: usize = 0x2DE0;
@@ -100,7 +103,7 @@ fn parse_sha256(value: &str) -> Result<[u8; 32], ConfluxTimerError> {
 }
 
 fn verify_game_hash(actual: &[u8; 32]) -> Result<(), ConfluxTimerError> {
-    if *actual == parse_sha256(PINNED_GAME_SHA256)? {
+    if *actual == parse_sha256(PINNED_CONFLUX_TIMER_SHA256)? {
         Ok(())
     } else {
         Err(ConfluxTimerError::UnsupportedGame)
@@ -861,6 +864,16 @@ mod tests {
         drop(guard);
         assert_eq!(state.set_enabled(true).state, ConfluxTimerStatusKind::On);
         assert_eq!(backend.enables.load(AtomicOrdering::Relaxed), 1);
+    }
+
+    #[test]
+    fn accepts_only_the_pinned_game_hash() {
+        let pinned = parse_sha256(PINNED_CONFLUX_TIMER_SHA256).unwrap();
+        assert_eq!(verify_game_hash(&pinned), Ok(()));
+        assert_eq!(
+            verify_game_hash(&[0; 32]),
+            Err(ConfluxTimerError::UnsupportedGame)
+        );
     }
 
     #[test]

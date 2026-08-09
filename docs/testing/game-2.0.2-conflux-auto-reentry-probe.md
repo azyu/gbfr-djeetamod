@@ -154,3 +154,32 @@ numeric kinds, and bounded values. Raw object addresses are prohibited.
 | Reversible 1/2-second data patch | 2026-07-26 | one global manager | exact original -> fast -> original configuration with readback; waiting screen advanced to the floor-four battle | PASS | Explicit offline/private ignored test; post-transition read-only probe showed original notice/default configuration; code and transition timing were not patched |
 | Management-page switch round trip | 2026-07-26 | one global manager | page OFF: notice `3.000`, original defaults; page ON: notice `1.000`, eleven `2.000` defaults; page OFF again: notice `3.000`, original defaults `[60,60,30,30,30,30,30,30,60,30,30]` | PASS | Verified against the live pinned game process after repairing debug startup and opening the built management page; the manager `mode` field was not used as the Djeeta switch state |
 | Automation OFF restores original delay | 2026-07-26 | one global manager | shortened active screen advanced; next unattended screen reported `initial=60.000`, `current=47.333 -> 46.833`, and original defaults `[60,60,30,30,30,30,30,30,60,30,30]` | PASS | Confirmed by both the backend live round trip and the built management-page ON/OFF cycle |
+
+## Game 2.0.4 Memory-Writer Migration Addendum
+
+This addendum records only the two Tauri-owned memory writers against the
+updated executable. It does not change the 2.0.2 evidence above and does not
+establish hook, meter, equipment, inventory, or full product compatibility.
+
+| Property | Observed value |
+| --- | --- |
+| Date | `2026-08-09` |
+| Game version | `2.0.4` |
+| Architecture | Windows x64 |
+| File size | `123,512,288` bytes |
+| SHA-256 | `F827F3C13CAA90B290FAB2FE7E28165A80448FDE0A3F7A96D79DAC6B8343FF2A` |
+| Session | User-confirmed offline |
+| Restart count | `0` |
+
+| Writer/scenario | Read-only baseline | Write/read-back | Restoration | Result |
+| --- | --- | --- | --- | --- |
+| Unlimited Repeat Quest code patch | Existing reset and getter signatures each matched exactly once in `.text`; target bytes remained the pinned original instructions | Explicit ignored live test observed `Off -> On` after both three-byte writes | The same test observed `On -> Off` and original-byte read-back | PASS |
+| Conflux manager relocation | Original 2.0.2 global RVA had no references; one live manager and one module pointer at RVA `0x07C22078` matched the pinned timer layout | Explicit ignored live test observed original configuration, patched `1/2` configuration, and active countdown clamped to at most two seconds | Original notice/default configuration `[3,60,60,30,30,30,30,30,30,60,30,30]` was read back after the test | PASS |
+| Unattended choice progression | Mode `1`; initial `60.000`; current `26.700 -> 26.200`; original defaults | Active countdown was clamped to two seconds | Original configuration was read back after transition | PASS; user observed progression within about two seconds |
+| Sequential single-OK result dialogs | First dialog: mode `1`, initial `60.000`, current `38.767 -> 38.267`; successor dialog: initial `30.000`, current `26.033 -> 25.533` | Each explicit timer round trip advanced one unattended result boundary | Original configuration was read back after each round trip | PASS; the first same-looking successor was distinguished by the new timer state, and a fresh game-window capture after the second round trip showed the dialog closed and story dialogue active |
+| Unlimited Repeat Quest product limit | Switch started OFF; enabling returned backend-observed ON after both sites were read back | The same short offline quest remained retryable after the normal ten-run limit and through run eleven | Switching OFF returned backend-observed OFF; the next result no longer offered retry | PASS |
+| Game exit with repeat patch ON | Switch returned backend-observed ON before exit | The game process exited normally without an app or game crash | The backend reported game-not-found and disabled the repeat switch; no process address survived | PASS |
+
+Both task-specific opt-ins were scoped to their individual debug processes and
+were absent after process exit. No raw memory dump, absolute address, player
+identity, inventory, or save data was recorded.

@@ -59,3 +59,16 @@ until every controlled comparison above agrees. Do not record a reusable absolut
 - [ ] Restart validation 3/3: resolve the same logical inventory.
 - [ ] After the manual evidence is complete, rerun the required frontend and Rust
   verification suite and record the final result.
+
+## Game 2.0.4 migration observation
+
+The user-confirmed offline session used executable SHA-256
+`F827F3C13CAA90B290FAB2FE7E28165A80448FDE0A3F7A96D79DAC6B8343FF2A`.
+The relocated read-only region produced repeated `ITEM ANALYSIS MATCH` results
+with `197` decoded ordinary-item records. Game-UI comparisons covered baseline
+quantities, a controlled increase and decrease, and the warning boundary while
+sort/filter presentation changes left the logical snapshot stable.
+
+No owned ordinary item reached the configured `900` warning threshold after
+the controlled changes, so the live Windows notification row remains
+unverified. The reader retained query-information and VM-read rights only.

@@ -1,6 +1,6 @@
 use crate::equipment_probe::{
     memory::{MemoryReadError, MemoryReader, RemoteProcess},
-    GAME_PROCESS_NAME, PINNED_GAME_SHA256,
+    GAME_PROCESS_NAME,
 };
 use serde::Serialize;
 use std::sync::{
@@ -22,6 +22,9 @@ use windows::Win32::{
         },
     },
 };
+
+const PINNED_REPEAT_QUEST_SHA256: &str =
+    "F827F3C13CAA90B290FAB2FE7E28165A80448FDE0A3F7A96D79DAC6B8343FF2A";
 
 const RESET_PREFIX: &[u8] = &[
     0x48, 0x83, 0xB8, 0x08, 0xC1, 0x01, 0x00, 0x00, 0xC7, 0x80, 0x24, 0xC1, 0x01, 0x00, 0x00, 0x00,
@@ -100,7 +103,7 @@ fn parse_sha256(value: &str) -> Result<[u8; 32], RepeatQuestError> {
 }
 
 fn verify_game_hash(actual: &[u8; 32]) -> Result<(), RepeatQuestError> {
-    if *actual == parse_sha256(PINNED_GAME_SHA256)? {
+    if *actual == parse_sha256(PINNED_REPEAT_QUEST_SHA256)? {
         Ok(())
     } else {
         Err(RepeatQuestError::UnsupportedGame)
@@ -1261,14 +1264,36 @@ mod tests {
 
     #[test]
     fn accepts_only_the_pinned_game_hash() {
-        let pinned =
-            super::parse_sha256("63340832BCF731FBC97796F686B05C988418E83D451D4A49B2244A85D00E297F")
-                .unwrap();
+        let pinned = super::parse_sha256(super::PINNED_REPEAT_QUEST_SHA256).unwrap();
         assert_eq!(super::verify_game_hash(&pinned), Ok(()));
         assert_eq!(
             super::verify_game_hash(&[0; 32]),
             Err(super::RepeatQuestError::UnsupportedGame)
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "writes only the pinned repeat-quest instructions in an offline/private live session"]
+    fn live_repeat_quest_patch_round_trip() {
+        assert_eq!(
+            std::env::var("DJEETA_REPEAT_QUEST_WRITE_TEST")
+                .ok()
+                .as_deref(),
+            Some("1"),
+            "explicit live-write opt-in is required"
+        );
+
+        let result = (|| {
+            assert_eq!(super::restore_current()?, super::ObservedPatchState::Off);
+            assert_eq!(super::enable_current()?, super::ObservedPatchState::On);
+            assert_eq!(super::observe_current()?, super::ObservedPatchState::On);
+            Ok::<_, super::RepeatQuestError>(())
+        })();
+
+        let restore = super::restore_current();
+        assert_eq!(restore, Ok(super::ObservedPatchState::Off));
+        result.expect("live repeat-quest patch must apply and read back");
     }
 
     #[test]

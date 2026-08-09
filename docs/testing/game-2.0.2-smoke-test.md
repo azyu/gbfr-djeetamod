@@ -19,7 +19,7 @@ $npmVersion = (Get-Content -Raw package.json | ConvertFrom-Json).version
 $tauriVersion = (Get-Content -Raw src-tauri/tauri.conf.json | ConvertFrom-Json).package.version
 $cargoVersion = (Select-String '^version = "(.+)"' src-tauri/Cargo.toml).Matches[0].Groups[1].Value
 $versions = @(@($npmVersion, $tauriVersion, $cargoVersion) | Select-Object -Unique)
-if ($versions.Count -ne 1 -or $versions[0] -ne '0.1.4') { throw 'Version mismatch or unexpected release version' }
+if ($versions.Count -ne 1 -or $versions[0] -ne '0.1.5') { throw 'Version mismatch or unexpected release version' }
 ```
 
 ## 자동 업데이트 검증
@@ -65,3 +65,27 @@ if ($versions.Count -ne 1 -or $versions[0] -ne '0.1.4') { throw 'Version mismatc
 | [ ] | 재도전 | 새 전투가 누적 피해 0에서 시작한다 | |
 
 모든 필수 항목에 실제 결과와 통과 여부를 기록하기 전에는 NSIS 설치 프로그램을 게임 2.0.2 호환으로 확정하지 않습니다.
+
+## Game 2.0.4 디버그 빌드 관찰 부록
+
+- 검증일: 2026-08-09
+- 실행 파일 SHA-256:
+  `F827F3C13CAA90B290FAB2FE7E28165A80448FDE0A3F7A96D79DAC6B8343FF2A`
+- 세션: 사용자 확인 오프라인
+- 게임 프로세스 수명: 3회(재시작 2회)
+- 앱: `0.1.4` 개발 빌드
+
+| 결과 | 시나리오 | 실제 관찰 |
+| --- | --- | --- |
+| PASS | Hook 주입과 핸드셰이크 | 세 프로세스에서 새 PID를 찾고 Hook 신원과 연결 상태를 다시 수립했다 |
+| PASS | 전투 누계와 경계 | 첫 타격, 추가 피해·DoT·SBA·링크 어택, 다중 대상, 보상 직전 초기화, 재도전 초기화를 확인했다 |
+| PASS | 장비 분석 | 네 캐릭터의 변경 전·후 스냅샷이 `MATCH`였고 장착 진 12개 범위와 2.0.4 raw-hash 특성명을 확인했다 |
+| PASS | 인벤토리와 일반 아이템 | `2,192 -> 2,196` 통제 변경, 정렬·필터 안정성, `197`개 일반 아이템 디코딩을 확인했다 |
+| PASS | 무한 퀘스트 반복 | ON에서 정상 열 번 제한을 넘어 열한 번째 이후도 재도전됐고, OFF 후 다음 결과에서 정상 제한이 복구됐다 |
+| PASS | 미터 창 정책 | 330x145 최대 4행, OFF/ON, 헤더 이동, 항상 위, 작업표시줄 제외를 확인했다 |
+| PASS | 게임 종료 | 무한 반복 ON 상태에서 게임이 정상 종료됐고 앱은 게임-not-found와 비활성 스위치로 전환됐다 |
+
+동일 캐릭터 두 명의 행 분리와 900개 이상 일반 아이템 Windows 알림은
+해당 통제 조건이 없어 실행하지 않았다. 이 부록은 개발 빌드의 관찰
+증거이며 NSIS 패키지나 Granblue Fantasy: Relink 2.0.4 전체 호환성을
+확정하지 않는다.

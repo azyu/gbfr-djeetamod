@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import enTraits from "../src-tauri/lang/en/traits.json";
 import enUi from "../src-tauri/lang/en/ui.json";
+import koTraits from "../src-tauri/lang/ko/traits.json";
 import koUi from "../src-tauri/lang/ko/ui.json";
 
 const i18nextMocks = vi.hoisted(() => ({
@@ -50,5 +52,14 @@ describe("utils", () => {
   it("defines ID-bearing unknown-trait fallbacks in both languages", () => {
     expect(koUi.ui["equipment-analysis"]["unknown-trait"]).toBe("알 수 없는 특성 (0x{{id}})");
     expect(enUi.ui["equipment-analysis"]["unknown-trait"]).toBe("Unknown trait (0x{{id}})");
+  });
+
+  it("defines the 2.0.4 raw-hash trait names shown by equipment analysis", () => {
+    expect(koTraits["a7726190"].text).toBe("천성의 황");
+    expect(koTraits["d029fe08"].text).toBe("천상무뢰");
+    expect(koTraits["36e3848d"].text).toBe("천성의 염");
+    expect(enTraits["a7726190"].text).toBe("Celestial Lumen");
+    expect(enTraits["d029fe08"].text).toBe("Fatebreaker");
+    expect(enTraits["36e3848d"].text).toBe("Celestial Incendo");
   });
 });
