@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 const repositoryPath = (path: string) => resolve(process.cwd(), path);
 const readRepositoryFile = (path: string) => readFileSync(repositoryPath(path), "utf8");
 
-it("declares Node.js 24 and npm 11 as the supported JavaScript toolchain", () => {
+it("declares Node.js 26 and npm 11 as the supported JavaScript toolchain", () => {
   const nvmrcPath = repositoryPath(".nvmrc");
   expect(existsSync(nvmrcPath)).toBe(true);
   if (!existsSync(nvmrcPath)) return;
@@ -15,19 +15,19 @@ it("declares Node.js 24 and npm 11 as the supported JavaScript toolchain", () =>
     packageManager?: string;
   };
 
-  expect(readFileSync(nvmrcPath, "utf8").trim()).toBe("24");
-  expect(packageJson.engines).toEqual({ node: ">=24.0.0 <25" });
+  expect(readFileSync(nvmrcPath, "utf8").trim()).toBe("26");
+  expect(packageJson.engines).toEqual({ node: ">=26.0.0 <27" });
   expect(packageJson.packageManager).toBe("npm@11.13.0");
-  expect(readRepositoryFile("scripts/PackageHelpers.psm1")).toContain("Node.js 24 is required");
-  expect(readRepositoryFile("README.md")).toContain("Node.js 24");
+  expect(readRepositoryFile("scripts/PackageHelpers.psm1")).toContain("Node.js 26 is required");
+  expect(readRepositoryFile("README.md")).toContain("Node.js 26");
 });
 
-it("uses Node.js 24 and immutable third-party actions in CI", () => {
+it("uses Node.js 26 and immutable third-party actions in CI", () => {
   const ci = readRepositoryFile(".github/workflows/ci.yaml");
   const release = readRepositoryFile(".github/workflows/release.yaml");
 
-  expect(ci.match(/node-version: 24/g) ?? []).toHaveLength(4);
-  expect(release).toContain("node-version: 24");
+  expect(ci.match(/node-version: 26/g) ?? []).toHaveLength(4);
+  expect(release).toContain("node-version: 26");
   expect(ci).not.toMatch(/uses:\s+actions\/checkout@v\d+/);
   expect(ci).not.toMatch(/uses:\s+actions\/setup-node@v\d+/);
   expect(ci).not.toMatch(/uses:\s+Swatinem\/rust-cache@v\d+/);
