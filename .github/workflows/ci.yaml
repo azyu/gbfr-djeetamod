@@ -50,8 +50,6 @@ jobs:
           node-version: 26
       - run: npm ci
       - name: Vitest
-        env:
-          NODE_OPTIONS: --localstorage-file=${{ runner.temp }}/gbfr-djeetamod-localstorage
         run: npm test
   cargo_test:
     name: Rust - Cargo Test
