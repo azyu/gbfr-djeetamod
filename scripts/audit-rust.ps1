@@ -15,7 +15,19 @@ try {
     $archivePath = Join-Path $temporaryRoot $archiveName
     Invoke-WebRequest -UseBasicParsing -Uri $archiveUrl -OutFile $archivePath
 
-    $actualArchiveHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archivePath).Hash.ToLowerInvariant()
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $archiveStream = [System.IO.File]::OpenRead($archivePath)
+        try {
+            $actualArchiveHash = [System.BitConverter]::ToString($sha256.ComputeHash($archiveStream)).Replace('-', '').ToLowerInvariant()
+        }
+        finally {
+            $archiveStream.Dispose()
+        }
+    }
+    finally {
+        $sha256.Dispose()
+    }
     if ($actualArchiveHash -cne $expectedArchiveHash) {
         throw "cargo-audit archive hash mismatch. Expected $expectedArchiveHash, found $actualArchiveHash."
     }

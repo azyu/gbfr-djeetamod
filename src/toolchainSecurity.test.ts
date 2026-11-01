@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 const repositoryPath = (path: string) => resolve(process.cwd(), path);
 const readRepositoryFile = (path: string) => readFileSync(repositoryPath(path), "utf8");
 
-it("declares Node.js 24 and npm 11 as the supported JavaScript toolchain", () => {
+it("declares Node.js 26 and npm 11 as the supported JavaScript toolchain", () => {
   const nvmrcPath = repositoryPath(".nvmrc");
   expect(existsSync(nvmrcPath)).toBe(true);
   if (!existsSync(nvmrcPath)) return;
@@ -15,19 +15,19 @@ it("declares Node.js 24 and npm 11 as the supported JavaScript toolchain", () =>
     packageManager?: string;
   };
 
-  expect(readFileSync(nvmrcPath, "utf8").trim()).toBe("24");
-  expect(packageJson.engines).toEqual({ node: ">=24.0.0 <25" });
+  expect(readFileSync(nvmrcPath, "utf8").trim()).toBe("26");
+  expect(packageJson.engines).toEqual({ node: ">=26.0.0 <27" });
   expect(packageJson.packageManager).toBe("npm@11.13.0");
-  expect(readRepositoryFile("scripts/PackageHelpers.psm1")).toContain("Node.js 24 is required");
-  expect(readRepositoryFile("README.md")).toContain("Node.js 24");
+  expect(readRepositoryFile("scripts/PackageHelpers.psm1")).toContain("Node.js 26 is required");
+  expect(readRepositoryFile("README.md")).toContain("Node.js 26");
 });
 
-it("uses Node.js 24 and immutable third-party actions in CI", () => {
+it("uses Node.js 26 and immutable third-party actions in CI", () => {
   const ci = readRepositoryFile(".github/workflows/ci.yaml");
   const release = readRepositoryFile(".github/workflows/release.yaml");
 
-  expect(ci.match(/node-version: 24/g) ?? []).toHaveLength(4);
-  expect(release).toContain("node-version: 24");
+  expect(ci.match(/node-version: 26/g) ?? []).toHaveLength(4);
+  expect(release).toContain("node-version: 26");
   expect(ci).not.toMatch(/uses:\s+actions\/checkout@v\d+/);
   expect(ci).not.toMatch(/uses:\s+actions\/setup-node@v\d+/);
   expect(ci).not.toMatch(/uses:\s+Swatinem\/rust-cache@v\d+/);
@@ -47,7 +47,7 @@ it("uses patched Vite and Vitest versions and audits them in CI", () => {
 
   expect(packageJson.scripts["audit:npm"]).toBe("npm audit");
   expect(packageJson.devDependencies).toMatchObject({
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.6",
     "@vitejs/plugin-react": "^4.7.0",
     vite: "^6.4.2",
     vitest: "^4.1.10",
@@ -73,7 +73,7 @@ it("pins a Rust 1.88-capable nightly and audits both lockfiles", () => {
   const auditScript = readFileSync(auditScriptPath, "utf8");
   expect(auditScript).toContain("cargo-audit-x86_64-pc-windows-msvc-v0.22.2.zip");
   expect(auditScript).toContain("0a7316540862c13d954f648917ceacca593747baed6eec180fafa590be2710ab");
-  expect(auditScript).toContain("Get-FileHash");
+  expect(auditScript).toContain("[System.Security.Cryptography.SHA256]::Create()");
   expect(auditScript).toContain("Cargo.lock");
   expect(auditScript).toContain("protocol\\Cargo.lock");
   expect(auditScript).toContain("audit --no-fetch --file 'protocol\\Cargo.lock'");

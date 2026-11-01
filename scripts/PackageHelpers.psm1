@@ -160,8 +160,8 @@ function Assert-SupportedNodeVersion {
     param([Parameter(Mandatory)][string]$Version)
 
     $major = Get-NodeMajorVersion -Version $Version
-    if ($major -ne 24) {
-        throw "Node.js 24 is required; found $Version."
+    if ($major -ne 26) {
+        throw "Node.js 26 is required; found $Version."
     }
 }
 

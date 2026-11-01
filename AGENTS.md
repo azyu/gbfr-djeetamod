@@ -46,7 +46,7 @@
 
 ## Toolchain
 
-- Node.js 20
+- Node.js 26
 - Visual Studio 2022 C++ Build Tools and Windows SDK
 - rustup toolchain from `rust-toolchain.toml` (`nightly-2024-05-04`)
 - WebView2 and NSIS as used by Tauri 1
@@ -67,7 +67,7 @@ Before packaging, check for an exact `Djeeta MOD` process and stop it only when 
 
 After packaging, independently verify that the NSIS installer exists, SHA-256 hashes of `target/release/hook.dll` and `src-tauri/hook.dll` are equal, and the installer and hook hashes appear in both `README.md` and `docs/testing/game-2.0.2-smoke-test.md`. Commit those two generated hash-document changes together.
 
-Node.js 20 is the supported toolchain. If packaging succeeds on another Node.js version, report it as a non-standard environment rather than implying that version is supported.
+Node.js 26 is the supported toolchain. If packaging succeeds on another Node.js version, report it as a non-standard environment rather than implying that version is supported.
 
 ## Release and updater operations
 
@@ -82,7 +82,7 @@ Node.js 20 is the supported toolchain. If packaging succeeds on another Node.js 
 - Independently verify every release after the workflow: it remains a Draft unless publication was requested, exactly four assets exist, every available remote digest matches a fresh download, and `latest.json` contains the uploaded updater archive URL and the exact `.sig` contents.
 - Distinguish an ordinary local frontend/Rust build from the canonical signed NSIS package. Do not report local signed packaging as successful unless `npm.cmd run package:nsis` completed with the updater key and password; a successful unsigned Tauri or frontend build is not equivalent.
 - Publish a Draft Release only on an explicit user request. After publishing, verify that it is no longer a draft, has a publication timestamp, remains the latest release, and still has four uploaded assets.
-- GitHub Actions may force action runtimes onto Node.js 24 even when the workflow configures Node.js 20. Treat and report that as a non-standard environment warning while separately reporting the actual build result.
+- GitHub Actions may force action runtimes onto Node.js 24 even when the workflow configures Node.js 26. Treat and report that as a non-standard environment warning while separately reporting the actual build result.
 
 ## Change discipline
 
