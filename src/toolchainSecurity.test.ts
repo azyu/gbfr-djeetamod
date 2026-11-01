@@ -47,7 +47,7 @@ it("uses patched Vite and Vitest versions and audits them in CI", () => {
 
   expect(packageJson.scripts["audit:npm"]).toBe("npm audit");
   expect(packageJson.devDependencies).toMatchObject({
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.6",
     "@vitejs/plugin-react": "^4.7.0",
     vite: "^6.4.2",
     vitest: "^4.1.10",
@@ -73,7 +73,7 @@ it("pins a Rust 1.88-capable nightly and audits both lockfiles", () => {
   const auditScript = readFileSync(auditScriptPath, "utf8");
   expect(auditScript).toContain("cargo-audit-x86_64-pc-windows-msvc-v0.22.2.zip");
   expect(auditScript).toContain("0a7316540862c13d954f648917ceacca593747baed6eec180fafa590be2710ab");
-  expect(auditScript).toContain("Get-FileHash");
+  expect(auditScript).toContain("[System.Security.Cryptography.SHA256]::Create()");
   expect(auditScript).toContain("Cargo.lock");
   expect(auditScript).toContain("protocol\\Cargo.lock");
   expect(auditScript).toContain("audit --no-fetch --file 'protocol\\Cargo.lock'");
